@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 
 import { supabase } from '../lib/supabase'
 import { copyTournamentLink } from '../lib/shareLink'
+import { getSportConfig } from '../lib/sportConfig'
 import { useAuthStore } from '../stores/auth'
 
 const { t } = useI18n()
@@ -28,7 +29,7 @@ const hasCounterOnlyTournaments = computed(() =>
 )
 
 const canCreateTournament = computed(
-  () => !hasCounterOnlyTournaments.value && (auth.clubStatus === 'active' || hasManagerTournament.value),
+  () => !hasCounterOnlyTournaments.value,
 )
 
 const pageTitle = computed(() =>
@@ -70,6 +71,8 @@ async function loadTournaments() {
         id,
         name,
         slug,
+        sport,
+        format,
         category,
         status,
         set_format,
@@ -164,7 +167,6 @@ watch(
 
 onMounted(async () => {
   await auth.init()
-  await auth.checkClubStatus()
   await loadTournaments()
 })
 </script>
@@ -230,7 +232,9 @@ onMounted(async () => {
             <span class="badge" :class="statusBadgeClass(item.status)">
               {{ t(`tournament.${item.status}`) }}
             </span>
-            <span class="badge badge--neutral">{{ t(`tournament.${item.category}`) }}</span>
+            <span v-if="item.sport" class="badge badge--neutral">{{ t(`sport.${item.sport}`) }}</span>
+            <span v-if="item.format" class="badge badge--neutral">{{ t(`tournamentFormat.${item.format}`) }}</span>
+            <span v-if="getSportConfig(item.sport).supportsCategory" class="badge badge--neutral">{{ t(`tournament.${item.category}`) }}</span>
             <span v-if="item.currentRole" class="badge badge--neutral">{{ t(`admin.${item.currentRole}`) }}</span>
             <span class="muted" style="font-size: 0.8125rem">{{ formatDate(item.created_at) }}</span>
           </div>

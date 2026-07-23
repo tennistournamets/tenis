@@ -3,9 +3,13 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import BracketBoard from '../components/BracketBoard.vue'
+import StandingsTable from '../components/StandingsTable.vue'
+import GroupStageBoard from '../components/GroupStageBoard.vue'
+import DoubleElimBoard from '../components/DoubleElimBoard.vue'
 import LiveScoreViewerModal from '../components/LiveScoreViewerModal.vue'
 import RegistrationForm from '../components/RegistrationForm.vue'
 import { entryMemberNames } from '../lib/entryDisplay'
+import { getSportConfig } from '../lib/sportConfig'
 import { supabase } from '../lib/supabase'
 
 const props = defineProps({
@@ -20,6 +24,47 @@ const { t } = useI18n()
 const tournament = ref(null)
 const entries = ref([])
 const matches = ref([])
+const standings = ref([])
+const isRoundRobin = computed(() => tournament.value?.format === 'round_robin')
+const isGroupsPlayoff = computed(() => tournament.value?.format === 'groups_playoff')
+const isDoubleElim = computed(() => tournament.value?.format === 'double_elimination')
+const sportCfg = computed(() => getSportConfig(tournament.value?.sport || 'tennis'))
+const groups = ref([])
+const groupStandings = ref({})
+const groupMatches = computed(() => matches.value.filter((m) => m.stage === 'group'))
+const playoffMatches = computed(() =>
+  matches.value.filter((m) => ['winners', 'grand_final', 'third_place'].includes(m.stage)),
+)
+const groupsView = computed(() =>
+  [...groups.value]
+    .sort((a, b) => a.group_index - b.group_index)
+    .map((g) => {
+      const gMatches = groupMatches.value
+        .filter((m) => m.group_id === g.id)
+        .sort((a, b) => a.round_number - b.round_number || a.match_number - b.match_number)
+      const rounds = new Map()
+      for (const m of gMatches) {
+        if (!rounds.has(m.round_number)) rounds.set(m.round_number, [])
+        rounds.get(m.round_number).push(m)
+      }
+      return {
+        id: g.id,
+        name: g.name,
+        standings: groupStandings.value[g.id] || [],
+        rounds: [...rounds.entries()].sort((a, b) => a[0] - b[0]).map(([round, list]) => ({ round, list })),
+      }
+    }),
+)
+const fixturesByRound = computed(() => {
+  const rounds = new Map()
+  for (const m of matches.value) {
+    if (!rounds.has(m.round_number)) rounds.set(m.round_number, [])
+    rounds.get(m.round_number).push(m)
+  }
+  return [...rounds.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([round, list]) => ({ round, list: list.sort((a, b) => a.match_number - b.match_number) }))
+})
 const matchSets = ref([])
 const liveScores = ref([])
 const selectedLiveMatchId = ref(null)
@@ -177,7 +222,7 @@ async function loadEntriesAndMatches(tournamentId, expectedVersion = loadVersion
       .order('created_at', { ascending: true }),
     supabase
       .from('matches')
-      .select('id, tournament_id, round_number, match_number, side_a_entry_id, side_b_entry_id, winner_entry_id, status, next_match_id, next_slot')
+      .select('id, tournament_id, stage, group_id, round_number, match_number, side_a_entry_id, side_b_entry_id, winner_entry_id, side_a_score, side_b_score, side_a_pens, side_b_pens, status, next_match_id, next_slot, loser_next_match_id, loser_next_slot')
       .eq('tournament_id', tournamentId)
       .order('round_number', { ascending: true })
       .order('match_number', { ascending: true }),
@@ -220,6 +265,44 @@ async function loadEntriesAndMatches(tournamentId, expectedVersion = loadVersion
 
   entries.value = sortEntries(entryRows)
   matches.value = sortMatches(matchesData || [])
+
+  if (isRoundRobin.value) {
+    const { data: standingsData } = await supabase.rpc('get_standings', {
+      p_tournament_id: tournamentId,
+      p_group_id: null,
+    })
+    if (expectedVersion === loadVersion) {
+      standings.value = standingsData ?? []
+    }
+  } else {
+    standings.value = []
+  }
+
+  if (isGroupsPlayoff.value) {
+    const { data: groupRows } = await supabase
+      .from('groups')
+      .select('id, name, group_index')
+      .eq('tournament_id', tournamentId)
+      .order('group_index', { ascending: true })
+    const rows = groupRows ?? []
+    const map = {}
+    await Promise.all(
+      rows.map(async (g) => {
+        const { data } = await supabase.rpc('get_standings', {
+          p_tournament_id: tournamentId,
+          p_group_id: g.id,
+        })
+        map[g.id] = data ?? []
+      }),
+    )
+    if (expectedVersion === loadVersion) {
+      groups.value = rows
+      groupStandings.value = map
+    }
+  } else {
+    groups.value = []
+    groupStandings.value = {}
+  }
 
   if (!matches.value.length) {
     matchSets.value = []
@@ -269,7 +352,7 @@ async function initialLoad() {
   try {
     const { data, error } = await supabase
       .from('tournaments')
-      .select('id, name, slug, description, category, status, set_format, doubles_pairing_mode')
+      .select('id, name, slug, description, sport, format, category, status, set_format, doubles_pairing_mode, format_config, scoring_config')
       .eq('slug', props.slug)
       .maybeSingle()
 
@@ -503,8 +586,10 @@ onBeforeUnmount(() => {
           <span class="badge" :class="statusBadgeClass(tournament.status)">
             {{ t(`tournament.${tournament.status}`) }}
           </span>
-          <span class="badge badge--neutral">{{ t(`tournament.${tournament.category}`) }}</span>
-          <span class="badge badge--neutral">{{ t(`format.${tournament.set_format}`) }}</span>
+          <span v-if="tournament.sport" class="badge badge--neutral">{{ t(`sport.${tournament.sport}`) }}</span>
+          <span v-if="tournament.format" class="badge badge--neutral">{{ t(`tournamentFormat.${tournament.format}`) }}</span>
+          <span v-if="sportCfg.supportsCategory" class="badge badge--neutral">{{ t(`tournament.${tournament.category}`) }}</span>
+          <span v-if="sportCfg.supportsSetFormat && tournament.set_format" class="badge badge--neutral">{{ t(`format.${tournament.set_format}`) }}</span>
         </div>
       </section>
 
@@ -557,6 +642,57 @@ onBeforeUnmount(() => {
           </div>
         </div>
       </template>
+
+      <template v-else-if="isRoundRobin">
+        <div v-if="standings.length" class="card">
+          <h3 class="section-title">{{ t('standings.title') }}</h3>
+          <StandingsTable :rows="standings" />
+        </div>
+        <div v-if="matches.length" class="card" style="margin-top: var(--space-4)">
+          <h3 class="section-title">{{ t('standings.fixtures') }}</h3>
+          <div v-for="grp in fixturesByRound" :key="grp.round" class="rr-round">
+            <h4 class="muted" style="margin: 12px 0 4px">{{ t('tournament.round') }} {{ grp.round }}</h4>
+            <ul class="rr-fixtures">
+              <li v-for="m in grp.list" :key="m.id" class="rr-fixture">
+                <span class="rr-fixture__side">{{ entriesMap[m.side_a_entry_id]?.display_name || '—' }}</span>
+                <span class="rr-fixture__score">
+                  <template v-if="m.status === 'finished'">{{ m.side_a_score }} : {{ m.side_b_score }}</template>
+                  <template v-else>vs</template>
+                </span>
+                <span class="rr-fixture__side rr-fixture__side--right">{{ entriesMap[m.side_b_entry_id]?.display_name || '—' }}</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </template>
+
+      <template v-else-if="isGroupsPlayoff">
+        <div v-if="groups.length" class="card">
+          <h3 class="section-title">{{ t('admin.groupStage') }}</h3>
+          <GroupStageBoard :groups="groupsView" :entries-map="entriesMap" />
+        </div>
+        <div v-if="playoffMatches.length" class="card" style="margin-top: var(--space-4)">
+          <h3 class="section-title">{{ t('admin.playoff') }}</h3>
+          <BracketBoard
+            :matches="playoffMatches"
+            :sets-by-match="setsByMatch"
+            :entries-map="entriesMap"
+            :live-scores-by-match="liveScoresByMatch"
+            @view-live="selectedLiveMatchId = $event.id"
+          />
+        </div>
+      </template>
+
+      <div v-else-if="isDoubleElim" class="card">
+        <h3 class="section-title">{{ t('tournament.bracket') }}</h3>
+        <DoubleElimBoard
+          :matches="matches"
+          :sets-by-match="setsByMatch"
+          :entries-map="entriesMap"
+          :live-scores-by-match="liveScoresByMatch"
+          @view-live="selectedLiveMatchId = $event.id"
+        />
+      </div>
 
       <div v-else class="card">
         <h3 class="section-title">{{ t('tournament.bracket') }}</h3>

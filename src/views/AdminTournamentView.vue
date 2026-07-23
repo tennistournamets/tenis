@@ -4,6 +4,11 @@ import { RouterLink, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 
 import BracketBoard from '../components/BracketBoard.vue'
+import StandingsTable from '../components/StandingsTable.vue'
+import FootballScoreEditor from '../components/FootballScoreEditor.vue'
+import GroupStageBoard from '../components/GroupStageBoard.vue'
+import DoubleElimBoard from '../components/DoubleElimBoard.vue'
+import { scoringFamily, getSportConfig } from '../lib/sportConfig'
 import LiveScoringModal from '../components/LiveScoringModal.vue'
 import ScoreEditor from '../components/ScoreEditor.vue'
 import { entryMemberNames } from '../lib/entryDisplay'
@@ -25,6 +30,10 @@ const auth = useAuthStore()
 const tournament = ref(null)
 const entries = ref([])
 const matches = ref([])
+const standings = ref([])
+const groups = ref([])
+const groupStandings = ref({}) // group_id -> standings rows
+const groupCount = ref(2)
 const matchSets = ref([])
 const liveScores = ref([])
 const admins = ref([])
@@ -199,7 +208,9 @@ const hasTournamentSettingsChanges = computed(() => {
   )
 })
 
-const canStartTournament = computed(() => tournament.value?.status === 'registration_closed')
+const canStartTournament = computed(
+  () => tournament.value?.status === 'registration_closed' && matches.value.length > 0,
+)
 const isTournamentActive = computed(() => tournament.value?.status === 'in_progress')
 const isTournamentFinished = computed(() => tournament.value?.status === 'completed')
 const canManageTournament = computed(() => currentUserRole.value === 'owner' || currentUserRole.value === 'editor')
@@ -302,7 +313,7 @@ async function assertAccess() {
 async function loadTournament() {
   const { data, error } = await supabase
     .from('tournaments')
-    .select('id, name, slug, description, category, status, set_format, is_public, doubles_pairing_mode')
+    .select('id, name, slug, description, sport, format, category, status, set_format, is_public, doubles_pairing_mode, format_config, scoring_config')
     .eq('id', props.id)
     .maybeSingle()
 
@@ -371,7 +382,7 @@ async function loadMatchesAndSets() {
   const { data: matchesData, error: matchesError } = await supabase
     .from('matches')
     .select(
-      'id, tournament_id, round_number, match_number, side_a_entry_id, side_b_entry_id, winner_entry_id, status, next_match_id, next_slot',
+      'id, tournament_id, stage, group_id, round_number, match_number, side_a_entry_id, side_b_entry_id, winner_entry_id, side_a_score, side_b_score, side_a_pens, side_b_pens, status, next_match_id, next_slot, loser_next_match_id, loser_next_slot',
     )
     .eq('tournament_id', props.id)
     .order('round_number', { ascending: true })
@@ -443,6 +454,8 @@ async function loadAll() {
     await Promise.all([
       loadEntries(),
       loadMatchesAndSets(),
+      isRoundRobin.value ? loadStandings() : Promise.resolve((standings.value = [])),
+      isGroupsPlayoff.value ? loadGroups() : Promise.resolve((groups.value = [])),
       canManageTournament.value ? loadAdmins() : Promise.resolve((admins.value = [])),
     ])
     setupRealtime()
@@ -722,6 +735,54 @@ async function saveTournamentSettings() {
 }
 
 const hasBracket = computed(() => matches.value.length > 0)
+const tournamentFormat = computed(() => tournament.value?.format || 'single_elimination')
+const isRoundRobin = computed(() => tournamentFormat.value === 'round_robin')
+const isGroupsPlayoff = computed(() => tournamentFormat.value === 'groups_playoff')
+const isDoubleElim = computed(() => tournamentFormat.value === 'double_elimination')
+const tournamentScoringFamily = computed(() => scoringFamily(tournament.value?.sport || 'tennis'))
+const isGoalsSport = computed(() => tournamentScoringFamily.value === 'goals')
+const sportCfg = computed(() => getSportConfig(tournament.value?.sport || 'tennis'))
+
+const groupMatches = computed(() => matches.value.filter((m) => m.stage === 'group'))
+const playoffMatches = computed(() =>
+  matches.value.filter((m) => ['winners', 'grand_final', 'third_place'].includes(m.stage)),
+)
+const hasGroups = computed(() => groups.value.length > 0)
+const hasPlayoff = computed(() => playoffMatches.value.length > 0)
+const allGroupMatchesFinished = computed(
+  () => groupMatches.value.length > 0 && groupMatches.value.every((m) => m.status === 'finished'),
+)
+const groupsView = computed(() =>
+  [...groups.value]
+    .sort((a, b) => a.group_index - b.group_index)
+    .map((g) => {
+      const gMatches = groupMatches.value
+        .filter((m) => m.group_id === g.id)
+        .sort((a, b) => a.round_number - b.round_number || a.match_number - b.match_number)
+      const rounds = new Map()
+      for (const m of gMatches) {
+        if (!rounds.has(m.round_number)) rounds.set(m.round_number, [])
+        rounds.get(m.round_number).push(m)
+      }
+      return {
+        id: g.id,
+        name: g.name,
+        standings: groupStandings.value[g.id] || [],
+        rounds: [...rounds.entries()].sort((a, b) => a[0] - b[0]).map(([round, list]) => ({ round, list })),
+      }
+    }),
+)
+const fixturesByRound = computed(() => {
+  const rounds = new Map()
+  for (const m of matches.value) {
+    const r = m.round_number
+    if (!rounds.has(r)) rounds.set(r, [])
+    rounds.get(r).push(m)
+  }
+  return [...rounds.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([round, list]) => ({ round, list: list.sort((a, b) => a.match_number - b.match_number) }))
+})
 
 async function formRandomPairs() {
   if (unpairedCount.value % 2 !== 0) {
@@ -951,6 +1012,18 @@ function openEditPairing() {
   })
 }
 
+async function loadStandings() {
+  const { data, error } = await supabase.rpc('get_standings', {
+    p_tournament_id: props.id,
+    p_group_id: null,
+  })
+  if (error) {
+    standings.value = []
+    return
+  }
+  standings.value = data ?? []
+}
+
 async function generateBracket() {
   const fn = hasBracket.value ? 'rebuild_bracket' : 'generate_bracket'
 
@@ -965,6 +1038,81 @@ async function generateBracket() {
     p_tournament_id: props.id,
     p_mode: drawMode.value,
     p_manual_order: null,
+  })
+
+  actionLoading.value = false
+
+  if (error) {
+    errorText.value = error.message
+    return
+  }
+
+  await loadAll()
+}
+
+async function loadGroups() {
+  const { data: groupRows } = await supabase
+    .from('groups')
+    .select('id, name, group_index')
+    .eq('tournament_id', props.id)
+    .order('group_index', { ascending: true })
+  groups.value = groupRows ?? []
+
+  const map = {}
+  await Promise.all(
+    groups.value.map(async (g) => {
+      const { data } = await supabase.rpc('get_standings', {
+        p_tournament_id: props.id,
+        p_group_id: g.id,
+      })
+      map[g.id] = data ?? []
+    }),
+  )
+  groupStandings.value = map
+}
+
+async function generateGroups() {
+  if (hasGroups.value && !window.confirm(t('admin.rebuildConfirm'))) {
+    return
+  }
+  actionLoading.value = true
+  errorText.value = ''
+  const { error } = await supabase.rpc('generate_groups', {
+    p_tournament_id: props.id,
+    p_group_count: Number(groupCount.value) || 2,
+  })
+  actionLoading.value = false
+  if (error) {
+    errorText.value = error.message
+    return
+  }
+  await loadAll()
+}
+
+async function startPlayoff() {
+  actionLoading.value = true
+  errorText.value = ''
+  const { error } = await supabase.rpc('generate_group_playoff', {
+    p_tournament_id: props.id,
+  })
+  actionLoading.value = false
+  if (error) {
+    errorText.value = error.message
+    return
+  }
+  await loadAll()
+}
+
+async function generateSchedule() {
+  if (hasBracket.value && !window.confirm(t('admin.rebuildConfirm'))) {
+    return
+  }
+
+  actionLoading.value = true
+  errorText.value = ''
+
+  const { error } = await supabase.rpc('generate_round_robin', {
+    p_tournament_id: props.id,
   })
 
   actionLoading.value = false
@@ -1308,8 +1456,10 @@ onBeforeUnmount(() => {
               <span class="badge" :class="statusBadgeClass(tournament.status)">
                 {{ t(`tournament.${tournament.status}`) }}
               </span>
-              <span class="badge badge--neutral">{{ t(`tournament.${tournament.category}`) }}</span>
-              <span class="badge badge--neutral">{{ t(`format.${tournament.set_format}`) }}</span>
+              <span v-if="tournament.sport" class="badge badge--neutral">{{ t(`sport.${tournament.sport}`) }}</span>
+              <span v-if="tournament.format" class="badge badge--neutral">{{ t(`tournamentFormat.${tournament.format}`) }}</span>
+              <span v-if="sportCfg.supportsCategory" class="badge badge--neutral">{{ t(`tournament.${tournament.category}`) }}</span>
+              <span v-if="sportCfg.supportsSetFormat && tournament.set_format" class="badge badge--neutral">{{ t(`format.${tournament.set_format}`) }}</span>
             </div>
             <p v-if="tournament.description" class="muted">{{ tournament.description }}</p>
           </div>
@@ -1852,7 +2002,91 @@ onBeforeUnmount(() => {
         class="tab-panel"
         :class="{ 'tab-panel--active': activeTab === 'bracket' }"
       >
-        <section v-if="canManageTournament && !isTournamentActive" class="card stack stack--sm">
+        <!-- Round-robin: schedule + standings + fixtures -->
+        <template v-if="isRoundRobin">
+          <section v-if="canManageTournament && !isTournamentActive" class="card stack stack--sm">
+            <h2 class="section-title">{{ t('standings.title') }}</h2>
+            <button
+              class="btn btn--primary btn--sm"
+              type="button"
+              :disabled="actionLoading"
+              @click="generateSchedule"
+            >
+              {{ hasBracket ? t('standings.regenerateSchedule') : t('standings.generateSchedule') }}
+            </button>
+          </section>
+
+          <section v-if="standings.length" class="card stack stack--sm" style="margin-top: var(--space-4)">
+            <h2 class="section-title">{{ t('standings.title') }}</h2>
+            <StandingsTable :rows="standings" />
+          </section>
+
+          <section v-if="matches.length" class="card stack stack--sm" style="margin-top: var(--space-4)">
+            <h2 class="section-title">{{ t('standings.fixtures') }}</h2>
+            <div v-for="grp in fixturesByRound" :key="grp.round" class="rr-round">
+              <h3 class="muted" style="margin: 12px 0 4px">{{ t('tournament.round') }} {{ grp.round }}</h3>
+              <ul class="rr-fixtures">
+                <li v-for="m in grp.list" :key="m.id" class="rr-fixture">
+                  <span class="rr-fixture__side">{{ entriesMap[m.side_a_entry_id]?.display_name || '—' }}</span>
+                  <span class="rr-fixture__score">
+                    <template v-if="m.status === 'finished'">{{ m.side_a_score }} : {{ m.side_b_score }}</template>
+                    <template v-else>vs</template>
+                  </span>
+                  <span class="rr-fixture__side rr-fixture__side--right">{{ entriesMap[m.side_b_entry_id]?.display_name || '—' }}</span>
+                </li>
+              </ul>
+            </div>
+          </section>
+        </template>
+
+        <!-- Groups + playoff -->
+        <template v-else-if="isGroupsPlayoff">
+          <section v-if="canManageTournament && !isTournamentActive" class="card stack stack--sm">
+            <h2 class="section-title">{{ t('admin.groupStage') }}</h2>
+            <div v-if="!hasGroups" class="form-field" style="max-width: 200px">
+              <label for="grp-count">{{ t('admin.groupCount') }}</label>
+              <input id="grp-count" v-model.number="groupCount" class="input" type="number" min="2" />
+            </div>
+            <div class="inline-actions">
+              <button
+                class="btn btn--primary btn--sm"
+                type="button"
+                :disabled="actionLoading"
+                @click="generateGroups"
+              >
+                {{ hasGroups ? t('admin.regenerateGroups') : t('admin.generateGroups') }}
+              </button>
+              <button
+                v-if="hasGroups && allGroupMatchesFinished && !hasPlayoff"
+                class="btn btn--primary btn--sm"
+                type="button"
+                :disabled="actionLoading"
+                @click="startPlayoff"
+              >
+                {{ t('admin.startPlayoff') }}
+              </button>
+            </div>
+          </section>
+
+          <section v-if="hasGroups" class="card stack stack--sm" style="margin-top: var(--space-4)">
+            <h2 class="section-title">{{ t('admin.groupStage') }}</h2>
+            <GroupStageBoard :groups="groupsView" :entries-map="entriesMap" />
+          </section>
+
+          <section v-if="hasPlayoff" class="card stack stack--sm" style="margin-top: var(--space-4)">
+            <h2 class="section-title">{{ t('admin.playoff') }}</h2>
+            <BracketBoard
+              :matches="playoffMatches"
+              :sets-by-match="setsByMatch"
+              :entries-map="entriesMap"
+              :live-scores-by-match="liveScoresByMatch"
+              :can-live-score="canEditScores"
+              @view-live="openLiveScoring"
+            />
+          </section>
+        </template>
+
+        <section v-if="!isRoundRobin && !isGroupsPlayoff && canManageTournament && !isTournamentActive" class="card stack stack--sm">
           <h2 class="section-title">{{ t('tournament.bracket') }} — {{ t('admin.drawSection') }}</h2>
 
           <div class="form-field" style="max-width: 280px">
@@ -1898,8 +2132,18 @@ onBeforeUnmount(() => {
           </template>
         </section>
 
-        <section class="card stack stack--sm" style="margin-top: var(--space-4)">
+        <section v-if="!isRoundRobin && !isGroupsPlayoff" class="card stack stack--sm" style="margin-top: var(--space-4)">
+          <DoubleElimBoard
+            v-if="isDoubleElim"
+            :matches="displayMatches"
+            :sets-by-match="setsByMatch"
+            :entries-map="entriesMap"
+            :live-scores-by-match="liveScoresByMatch"
+            :can-live-score="canEditScores"
+            @view-live="openLiveScoring"
+          />
           <BracketBoard
+            v-else
             :matches="displayMatches"
           :sets-by-match="setsByMatch"
           :entries-map="entriesMap"
@@ -1937,7 +2181,15 @@ onBeforeUnmount(() => {
         class="tab-panel"
         :class="{ 'tab-panel--active': activeTab === 'scores' }"
       >
+        <FootballScoreEditor
+          v-if="isGoalsSport"
+          :matches="matches"
+          :entries-map="entriesMap"
+          :disabled="!canEditFinalScores"
+          @saved="loadAll"
+        />
         <ScoreEditor
+          v-else
           :matches="matches"
           :sets-by-match="setsByMatch"
           :entries-map="entriesMap"
@@ -1989,8 +2241,12 @@ onBeforeUnmount(() => {
             />
           </div>
 
-          <div class="grid-2">
-            <div class="form-field">
+          <p class="muted" style="font-size: var(--font-sm)">
+            {{ t('sport.' + (tournament.sport || 'tennis')) }} · {{ t('tournamentFormat.' + (tournament.format || 'single_elimination')) }}
+          </p>
+
+          <div v-if="sportCfg.supportsCategory || sportCfg.supportsSetFormat" class="grid-2">
+            <div v-if="sportCfg.supportsCategory" class="form-field">
               <label for="adm-cat">{{ t('admin.category') }}</label>
               <select id="adm-cat" v-model="settingsForm.category" class="input" :disabled="isSettingsDropdownDisabled">
                 <option value="singles">{{ t('tournament.singles') }}</option>
@@ -1998,7 +2254,7 @@ onBeforeUnmount(() => {
               </select>
             </div>
 
-            <div class="form-field">
+            <div v-if="sportCfg.supportsSetFormat" class="form-field">
               <label for="adm-format">{{ t('admin.setFormat') }}</label>
               <select id="adm-format" v-model="settingsForm.set_format" class="input" :disabled="isSettingsDropdownDisabled">
                 <option value="best_of_3">{{ t('format.best_of_3') }}</option>
@@ -2007,7 +2263,7 @@ onBeforeUnmount(() => {
             </div>
           </div>
 
-          <label v-if="settingsForm.category === 'doubles'" class="checkbox-row">
+          <label v-if="sportCfg.supportsDoublesPairing && settingsForm.category === 'doubles'" class="checkbox-row">
             <input
               v-model="settingsForm.doubles_pairing_mode"
               type="checkbox"
@@ -2119,3 +2375,39 @@ onBeforeUnmount(() => {
     </template>
   </div>
 </template>
+
+<style scoped>
+.rr-fixtures {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.rr-fixture {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: var(--radius, 8px);
+}
+.rr-fixture__side {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rr-fixture__side--right {
+  text-align: right;
+}
+.rr-fixture__score {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--text-muted, #6b7280);
+  min-width: 3rem;
+  text-align: center;
+}
+</style>

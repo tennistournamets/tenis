@@ -199,7 +199,20 @@ function rowClass(side, entryId, winner) {
       <span v-else class="match-card__name">{{ memberLines(match.side_b_entry_id)[0] }}</span>
     </div>
     <div class="match-card__meta">
-      {{ t('tournament.sets') }}: <span class="match-card__score">{{ setSummary(match.id) }}</span>
+      <template v-if="(setsByMatch[match.id] || []).length">
+        {{ t('tournament.sets') }}: <span class="match-card__score">{{ setSummary(match.id) }}</span>
+      </template>
+      <template v-else-if="match.side_a_score != null && match.side_b_score != null">
+        <span class="match-card__score">
+          {{ match.side_a_score }} : {{ match.side_b_score }}
+          <template v-if="match.side_a_pens != null && match.side_b_pens != null">
+            ({{ match.side_a_pens }}:{{ match.side_b_pens }} {{ t('football.pens') }})
+          </template>
+        </span>
+      </template>
+      <template v-else>
+        <span class="match-card__score">—</span>
+      </template>
       <button
         v-if="hasLiveScore()"
         class="match-card__live"

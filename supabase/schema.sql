@@ -8,7 +8,19 @@ exception
 end $$;
 
 do $$ begin
-  create type bracket_format as enum ('single_elimination');
+  create type sport as enum ('tennis', 'padel', 'football');
+exception
+  when duplicate_object then null;
+end $$;
+
+do $$ begin
+  create type tournament_format as enum ('single_elimination', 'round_robin', 'groups_playoff', 'double_elimination');
+exception
+  when duplicate_object then null;
+end $$;
+
+do $$ begin
+  create type match_stage as enum ('main', 'group', 'winners', 'losers', 'grand_final', 'third_place');
 exception
   when duplicate_object then null;
 end $$;
@@ -49,60 +61,6 @@ exception
   when duplicate_object then null;
 end $$;
 
-do $$ begin
-  create type org_type as enum ('club', 'coach');
-exception
-  when duplicate_object then null;
-end $$;
-
-do $$ begin
-  create type membership_role as enum ('member', 'student', 'admin', 'external');
-exception
-  when duplicate_object then null;
-end $$;
-
-do $$ begin
-  create type membership_status as enum ('pending', 'active', 'inactive', 'banned', 'rejected', 'expired', 'pending_payment');
-exception
-  when duplicate_object then null;
-end $$;
-
-do $$ begin
-  create type membership_visibility as enum ('full', 'stats_only', 'hidden');
-exception
-  when duplicate_object then null;
-end $$;
-
-do $$ begin
-  create type organization_status as enum ('pending', 'active', 'rejected');
-exception
-  when duplicate_object then null;
-end $$;
-
-create table if not exists organizations (
-  id uuid primary key default gen_random_uuid(),
-  slug text unique,
-  type org_type not null,
-  name text not null,
-  description text,
-  logo_url text,
-  city text,
-  country text,
-  address text,
-  contact_email text,
-  contact_phone text,
-  owner_user_id uuid references auth.users (id) on delete restrict,
-  plan text default 'free',
-  auto_approve_members boolean not null default true,
-  status organization_status not null default 'active',
-  is_active boolean not null default true,
-  rejection_reason text,
-  reviewed_by uuid references auth.users (id),
-  reviewed_at timestamptz,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-
 create table if not exists players (
   id uuid primary key default gen_random_uuid(),
   user_id uuid unique references auth.users (id) on delete set null,
@@ -122,54 +80,20 @@ create unique index if not exists idx_players_contact
   on players (contact_hash)
   where contact_hash is not null and is_deleted = false;
 
-create table if not exists org_memberships (
-  id uuid primary key default gen_random_uuid(),
-  org_id uuid not null references organizations (id) on delete cascade,
-  player_id uuid not null references players (id) on delete cascade,
-  role membership_role not null default 'member',
-  status membership_status not null default 'pending',
-  visibility membership_visibility not null default 'full',
-  is_primary boolean not null default false,
-  invited_by uuid references auth.users (id),
-  review_note text,
-  joined_at timestamptz,
-  expires_at timestamptz,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  unique (org_id, player_id)
-);
-
-create table if not exists org_invites (
-  id uuid primary key default gen_random_uuid(),
-  org_id uuid not null references organizations (id) on delete cascade,
-  token text unique not null
-    default replace(translate(encode(gen_random_bytes(24), 'base64'), '+/', '-_'), '=', ''),
-  contact_email text,
-  contact_phone text,
-  contact_hash text not null,
-  player_id uuid references players (id),
-  role membership_role not null default 'member',
-  message text,
-  invited_by uuid not null references auth.users (id),
-  status text not null default 'pending'
-    check (status in ('pending', 'accepted', 'rejected', 'expired', 'revoked')),
-  expires_at timestamptz not null default (now() + interval '30 days'),
-  accepted_at timestamptz,
-  created_at timestamptz not null default now()
-);
-
 create table if not exists tournaments (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   slug text not null unique,
   description text,
+  sport sport not null default 'tennis',
+  format tournament_format not null default 'single_elimination',
   category tournament_category not null,
-  bracket_format bracket_format not null default 'single_elimination',
-  set_format set_format not null default 'best_of_3',
+  set_format set_format,
   status tournament_status not null default 'draft',
   is_public boolean not null default true,
   doubles_pairing_mode doubles_pairing_mode,
-  org_id uuid references organizations (id) on delete restrict,
+  format_config jsonb not null default '{}'::jsonb,
+  scoring_config jsonb not null default '{}'::jsonb,
   created_by uuid not null references auth.users (id) on delete restrict,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -179,7 +103,7 @@ create table if not exists tournament_admins (
   id uuid primary key default gen_random_uuid(),
   tournament_id uuid not null references tournaments (id) on delete cascade,
   user_id uuid not null references auth.users (id) on delete cascade,
-  role text not null check (role in ('owner', 'editor')),
+  role text not null check (role in ('owner', 'editor', 'counter')),
   created_at timestamptz not null default now(),
   unique (tournament_id, user_id)
 );
@@ -210,40 +134,46 @@ create table if not exists entry_members (
   unique (entry_id, member_order)
 );
 
-do $$
-begin
-  if not exists (
-    select 1 from information_schema.columns
-    where table_name = 'tournaments' and column_name = 'org_id'
-  ) then
-    alter table tournaments add column org_id uuid references organizations(id) on delete restrict;
-  end if;
-end $$;
+create table if not exists groups (
+  id uuid primary key default gen_random_uuid(),
+  tournament_id uuid not null references tournaments (id) on delete cascade,
+  name text not null,
+  group_index integer not null check (group_index >= 0),
+  created_at timestamptz not null default now(),
+  unique (tournament_id, group_index)
+);
 
-do $$
-begin
-  if not exists (
-    select 1 from information_schema.columns
-    where table_name = 'entry_members' and column_name = 'player_id'
-  ) then
-    alter table entry_members add column player_id uuid references players(id) on delete set null;
-  end if;
-end $$;
+create table if not exists group_entries (
+  id uuid primary key default gen_random_uuid(),
+  group_id uuid not null references groups (id) on delete cascade,
+  entry_id uuid not null references entries (id) on delete cascade,
+  seed integer,
+  created_at timestamptz not null default now(),
+  unique (group_id, entry_id)
+);
 
 create table if not exists matches (
   id uuid primary key default gen_random_uuid(),
   tournament_id uuid not null references tournaments (id) on delete cascade,
+  stage match_stage not null default 'main',
+  group_id uuid references groups (id) on delete cascade,
   round_number integer not null check (round_number > 0),
   match_number integer not null check (match_number > 0),
   side_a_entry_id uuid references entries (id) on delete set null,
   side_b_entry_id uuid references entries (id) on delete set null,
   winner_entry_id uuid references entries (id) on delete set null,
+  side_a_score integer,
+  side_b_score integer,
+  side_a_pens integer,
+  side_b_pens integer,
   status match_status not null default 'pending',
   next_match_id uuid references matches (id) on delete set null,
   next_slot text check (next_slot in ('A', 'B')),
+  loser_next_match_id uuid references matches (id) on delete set null,
+  loser_next_slot text check (loser_next_slot in ('A', 'B')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  unique (tournament_id, round_number, match_number)
+  unique (tournament_id, stage, round_number, match_number)
 );
 
 create table if not exists match_sets (
@@ -265,24 +195,16 @@ create table if not exists bracket_versions (
 );
 
 create index if not exists idx_bracket_versions_tournament on bracket_versions (tournament_id);
-create index if not exists idx_org_owner on organizations (owner_user_id);
-create index if not exists idx_org_type on organizations (type);
-create index if not exists idx_organizations_status on organizations (status);
 create index if not exists idx_players_user on players (user_id);
-create index if not exists idx_memberships_org on org_memberships (org_id);
-create index if not exists idx_memberships_player on org_memberships (player_id);
-create index if not exists idx_memberships_status on org_memberships (status);
-create unique index if not exists idx_memberships_primary
-  on org_memberships (player_id) where is_primary = true;
-create index if not exists idx_invites_token on org_invites (token);
-create index if not exists idx_invites_org on org_invites (org_id);
-create index if not exists idx_invites_contact on org_invites (contact_hash);
-create index if not exists idx_tournaments_org on tournaments (org_id);
 create index if not exists idx_entry_members_player on entry_members (player_id);
 create index if not exists idx_tournament_admins_user on tournament_admins (user_id);
 create index if not exists idx_entries_tournament on entries (tournament_id, status);
-create index if not exists idx_matches_tournament on matches (tournament_id, round_number, match_number);
+create index if not exists idx_matches_tournament on matches (tournament_id, stage, round_number, match_number);
+create index if not exists idx_matches_group on matches (group_id);
 create index if not exists idx_match_sets_match on match_sets (match_id);
+create index if not exists idx_groups_tournament on groups (tournament_id, group_index);
+create index if not exists idx_group_entries_group on group_entries (group_id);
+create index if not exists idx_created_by on tournaments (created_by);
 
 create or replace function set_updated_at()
 returns trigger
@@ -300,21 +222,9 @@ before update on tournaments
 for each row
 execute function set_updated_at();
 
-drop trigger if exists trg_organizations_updated_at on organizations;
-create trigger trg_organizations_updated_at
-before update on organizations
-for each row
-execute function set_updated_at();
-
 drop trigger if exists trg_players_updated_at on players;
 create trigger trg_players_updated_at
 before update on players
-for each row
-execute function set_updated_at();
-
-drop trigger if exists trg_memberships_updated_at on org_memberships;
-create trigger trg_memberships_updated_at
-before update on org_memberships
 for each row
 execute function set_updated_at();
 
@@ -371,29 +281,6 @@ as $$
   end;
 $$;
 
-create or replace function is_org_admin(p_org_id uuid)
-returns boolean
-language sql
-stable
-security definer
-set search_path = public
-as $$
-  select exists (
-    select 1
-    from organizations o
-    where o.id = p_org_id
-      and o.owner_user_id = auth.uid()
-  ) or exists (
-    select 1
-    from org_memberships m
-    join players p on p.id = m.player_id
-    where m.org_id = p_org_id
-      and m.role = 'admin'
-      and m.status = 'active'
-      and p.user_id = auth.uid()
-  );
-$$;
-
 create or replace function propagate_winner(p_match_id uuid, p_winner_id uuid)
 returns void
 language plpgsql
@@ -403,6 +290,11 @@ as $$
 declare
   v_next_match_id uuid;
   v_next_slot text;
+  v_loser_next_id uuid;
+  v_loser_next_slot text;
+  v_match_side_a uuid;
+  v_match_side_b uuid;
+  v_loser uuid;
   v_side_a uuid;
   v_side_b uuid;
 begin
@@ -410,37 +302,51 @@ begin
     return;
   end if;
 
-  select next_match_id, next_slot
-    into v_next_match_id, v_next_slot
+  select next_match_id, next_slot, loser_next_match_id, loser_next_slot,
+         side_a_entry_id, side_b_entry_id
+    into v_next_match_id, v_next_slot, v_loser_next_id, v_loser_next_slot,
+         v_match_side_a, v_match_side_b
   from matches
   where id = p_match_id;
 
-  if v_next_match_id is null then
-    return;
+  -- Double elimination: route the loser to the losers bracket.
+  if v_loser_next_id is not null then
+    v_loser := case when p_winner_id = v_match_side_a then v_match_side_b else v_match_side_a end;
+    if v_loser is not null then
+      if v_loser_next_slot = 'A' then
+        update matches set side_a_entry_id = v_loser where id = v_loser_next_id;
+      else
+        update matches set side_b_entry_id = v_loser where id = v_loser_next_id;
+      end if;
+      select side_a_entry_id, side_b_entry_id into v_side_a, v_side_b
+      from matches where id = v_loser_next_id;
+      update matches
+        set status = case
+          when v_side_a is not null and v_side_b is not null then 'ready'::match_status
+          else 'pending'::match_status
+        end
+      where id = v_loser_next_id and status <> 'finished'::match_status;
+    end if;
   end if;
 
-  if v_next_slot = 'A' then
+  -- Route the winner to the next match.
+  if v_next_match_id is not null then
+    if v_next_slot = 'A' then
+      update matches set side_a_entry_id = p_winner_id where id = v_next_match_id;
+    else
+      update matches set side_b_entry_id = p_winner_id where id = v_next_match_id;
+    end if;
+
+    select side_a_entry_id, side_b_entry_id into v_side_a, v_side_b
+    from matches where id = v_next_match_id;
+
     update matches
-      set side_a_entry_id = p_winner_id
-    where id = v_next_match_id;
-  else
-    update matches
-      set side_b_entry_id = p_winner_id
-    where id = v_next_match_id;
+      set status = case
+        when v_side_a is not null and v_side_b is not null then 'ready'::match_status
+        else 'pending'::match_status
+      end
+    where id = v_next_match_id and status <> 'finished'::match_status;
   end if;
-
-  select side_a_entry_id, side_b_entry_id
-    into v_side_a, v_side_b
-  from matches
-  where id = v_next_match_id;
-
-  update matches
-    set status = case
-      when v_side_a is not null and v_side_b is not null then 'ready'::match_status
-      else 'pending'::match_status
-    end
-  where id = v_next_match_id
-    and status <> 'finished'::match_status;
 end;
 $$;
 
@@ -621,15 +527,29 @@ drop function if exists create_tournament(
   doubles_pairing_mode
 );
 
+drop function if exists create_tournament(
+  text,
+  text,
+  text,
+  tournament_category,
+  set_format,
+  boolean,
+  doubles_pairing_mode,
+  uuid
+);
+
 create or replace function create_tournament(
   p_name text,
   p_slug text,
   p_description text default null,
+  p_sport sport default 'tennis',
+  p_format tournament_format default 'single_elimination',
   p_category tournament_category default 'singles',
   p_set_format set_format default 'best_of_3',
   p_is_public boolean default true,
   p_doubles_pairing_mode doubles_pairing_mode default null,
-  p_org_id uuid default null
+  p_format_config jsonb default '{}'::jsonb,
+  p_scoring_config jsonb default '{}'::jsonb
 )
 returns uuid
 language plpgsql
@@ -639,55 +559,46 @@ as $$
 declare
   v_id uuid;
   v_uid uuid := auth.uid();
-  v_org_id uuid := p_org_id;
-  v_profile_name text;
+  v_category tournament_category := p_category;
+  v_set_format set_format;
 begin
   if v_uid is null then
     raise exception 'Authentication required';
   end if;
 
-  if v_org_id is null then
-    select id into v_org_id
-    from organizations
-    where owner_user_id = v_uid
-    order by created_at asc
-    limit 1;
+  -- Sport-forced categories: padel is always doubles;
+  -- football sides are single team entities (one entry per side)
+  if p_sport = 'padel' then
+    v_category := 'doubles';
+  elsif p_sport = 'football' then
+    v_category := 'singles';
+  end if;
+
+  -- set_format only meaningful for sets-family sports (tennis/padel)
+  if p_sport in ('tennis', 'padel') then
+    v_set_format := coalesce(p_set_format, 'best_of_3');
   else
-    if not is_org_admin(v_org_id) then
-      raise exception 'Forbidden for this organization';
-    end if;
+    v_set_format := null;
   end if;
 
-  if v_org_id is null then
-    select nullif(btrim(concat_ws(' ', first_name, last_name)), '')
-      into v_profile_name
-    from user_profiles
-    where id = v_uid;
-
-    insert into organizations (slug, type, name, owner_user_id)
-    values (
-      'coach-' || substring(v_uid::text, 1, 8),
-      'coach',
-      coalesce(v_profile_name, 'Coach') || ' (coach)',
-      v_uid
-    )
-    on conflict (slug) do update
-      set name = excluded.name
-    returning id into v_org_id;
-  end if;
-
-  insert into tournaments (name, slug, description, category, set_format, status, is_public, doubles_pairing_mode, created_by, org_id)
+  insert into tournaments (
+    name, slug, description, sport, format, category, set_format, status,
+    is_public, doubles_pairing_mode, format_config, scoring_config, created_by
+  )
   values (
     p_name,
     p_slug,
     p_description,
-    p_category,
-    p_set_format,
+    p_sport,
+    p_format,
+    v_category,
+    v_set_format,
     'registration_open',
     p_is_public,
-    case when p_category = 'doubles' then coalesce(p_doubles_pairing_mode, 'pre_agreed') else null end,
-    v_uid,
-    v_org_id
+    case when v_category = 'doubles' then coalesce(p_doubles_pairing_mode, 'pre_agreed') else null end,
+    coalesce(p_format_config, '{}'::jsonb),
+    coalesce(p_scoring_config, '{}'::jsonb),
+    v_uid
   )
   returning id into v_id;
 
@@ -759,6 +670,12 @@ begin
     from entries e
     where e.tournament_id = p_tournament_id
       and e.status = 'approved';
+  end if;
+
+  -- Double elimination is built by a dedicated generator.
+  if (select format from tournaments where id = p_tournament_id) = 'double_elimination' then
+    perform generate_double_elim(p_tournament_id, v_ordered_ids);
+    return;
   end if;
 
   while v_bracket_size < v_count loop
@@ -910,6 +827,807 @@ begin
   perform generate_bracket(p_tournament_id, p_mode, p_manual_order);
 end;
 $$;
+
+-- =============================================
+-- ROUND ROBIN + STANDINGS
+-- =============================================
+
+-- Reusable circle-method scheduler. Creates all-play-all matches for the given
+-- ordered entry set. Reused by round_robin (stage 'main') and group stage.
+-- p_round_offset lets group stage keep round numbers collision-free across groups.
+create or replace function generate_round_robin_matches(
+  p_tournament_id uuid,
+  p_entries uuid[],
+  p_stage match_stage,
+  p_group_id uuid,
+  p_round_offset integer
+)
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_arr uuid[];
+  v_slots integer;
+  v_rounds integer;
+  v_round integer;
+  v_i integer;
+  v_home uuid;
+  v_away uuid;
+  v_match_no integer;
+begin
+  if coalesce(array_length(p_entries, 1), 0) < 2 then
+    raise exception 'At least 2 entries required';
+  end if;
+
+  v_arr := p_entries;
+  if array_length(v_arr, 1) % 2 = 1 then
+    v_arr := v_arr || null::uuid;  -- bye placeholder for odd counts
+  end if;
+  v_slots := array_length(v_arr, 1);
+  v_rounds := v_slots - 1;
+
+  for v_round in 1..v_rounds loop
+    v_match_no := 0;
+    for v_i in 1..(v_slots / 2) loop
+      v_home := v_arr[v_i];
+      v_away := v_arr[v_slots - v_i + 1];
+      if v_home is not null and v_away is not null then
+        v_match_no := v_match_no + 1;
+        insert into matches (
+          tournament_id, stage, group_id, round_number, match_number,
+          side_a_entry_id, side_b_entry_id, status
+        ) values (
+          p_tournament_id, p_stage, p_group_id, p_round_offset + v_round, v_match_no,
+          v_home, v_away, 'ready'::match_status
+        );
+      end if;
+    end loop;
+    -- circle rotation: first element fixed, rotate the rest
+    v_arr := array[v_arr[1]] || array[v_arr[v_slots]] || v_arr[2:v_slots - 1];
+  end loop;
+
+  return v_rounds;
+end;
+$$;
+
+create or replace function generate_round_robin(p_tournament_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_entries uuid[];
+begin
+  if not is_tournament_admin(p_tournament_id) then
+    raise exception 'Not allowed';
+  end if;
+
+  select array_agg(e.id order by coalesce(e.seed_order, 999999), e.created_at)
+    into v_entries
+  from entries e
+  where e.tournament_id = p_tournament_id
+    and e.status = 'approved';
+
+  if coalesce(array_length(v_entries, 1), 0) < 2 then
+    raise exception 'At least 2 approved entries required';
+  end if;
+
+  delete from match_sets
+  where match_id in (select id from matches where tournament_id = p_tournament_id);
+  delete from matches where tournament_id = p_tournament_id;
+
+  perform generate_round_robin_matches(p_tournament_id, v_entries, 'main', null, 0);
+end;
+$$;
+
+-- Standings computed from the canonical per-match aggregate (side_a_score/side_b_score
+-- + winner_entry_id). Works for any sport. p_group_id null => whole tournament (round_robin);
+-- non-null => that group only.
+create or replace function get_standings(
+  p_tournament_id uuid,
+  p_group_id uuid default null
+)
+returns table (
+  entry_id uuid,
+  display_name text,
+  played integer,
+  won integer,
+  drawn integer,
+  lost integer,
+  score_for integer,
+  score_against integer,
+  diff integer,
+  points integer,
+  rank integer
+)
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  v_sport sport;
+  v_cfg jsonb;
+  v_win integer;
+  v_draw integer;
+  v_loss integer;
+begin
+  select t.sport, coalesce(t.scoring_config, '{}'::jsonb)
+    into v_sport, v_cfg
+  from tournaments t
+  where t.id = p_tournament_id;
+
+  if v_sport is null then
+    raise exception 'Tournament not found';
+  end if;
+
+  if not (
+    exists (select 1 from tournaments t where t.id = p_tournament_id and t.is_public)
+    or is_tournament_admin(p_tournament_id)
+    or can_live_score(p_tournament_id)
+  ) then
+    raise exception 'Not allowed';
+  end if;
+
+  -- points defaults: goals sports use 3/1/0, sets sports 1/0/0; scoring_config may override
+  if v_sport in ('tennis', 'padel') then
+    v_win := coalesce((v_cfg->>'points_win')::integer, 1);
+    v_draw := coalesce((v_cfg->>'points_draw')::integer, 0);
+    v_loss := coalesce((v_cfg->>'points_loss')::integer, 0);
+  else
+    v_win := coalesce((v_cfg->>'points_win')::integer, 3);
+    v_draw := coalesce((v_cfg->>'points_draw')::integer, 1);
+    v_loss := coalesce((v_cfg->>'points_loss')::integer, 0);
+  end if;
+
+  return query
+  with participants as (
+    select e.id, e.display_name
+    from entries e
+    where e.tournament_id = p_tournament_id
+      and e.status = 'approved'
+      and (
+        p_group_id is null
+        or e.id in (select ge.entry_id from group_entries ge where ge.group_id = p_group_id)
+      )
+  ),
+  played_matches as (
+    select m.*
+    from matches m
+    where m.tournament_id = p_tournament_id
+      and m.status = 'finished'
+      and (p_group_id is null or m.group_id = p_group_id)
+      and m.side_a_entry_id is not null
+      and m.side_b_entry_id is not null
+  ),
+  sides as (
+    select side_a_entry_id as eid,
+           coalesce(side_a_score, 0) as gf,
+           coalesce(side_b_score, 0) as ga,
+           winner_entry_id
+    from played_matches
+    union all
+    select side_b_entry_id as eid,
+           coalesce(side_b_score, 0) as gf,
+           coalesce(side_a_score, 0) as ga,
+           winner_entry_id
+    from played_matches
+  ),
+  agg as (
+    select s.eid,
+           count(*)::integer as played,
+           count(*) filter (where s.winner_entry_id = s.eid)::integer as won,
+           count(*) filter (where s.winner_entry_id is null)::integer as drawn,
+           count(*) filter (where s.winner_entry_id is not null and s.winner_entry_id <> s.eid)::integer as lost,
+           coalesce(sum(s.gf), 0)::integer as score_for,
+           coalesce(sum(s.ga), 0)::integer as score_against
+    from sides s
+    group by s.eid
+  ),
+  merged as (
+    select p.id as entry_id,
+           p.display_name,
+           coalesce(a.played, 0) as played,
+           coalesce(a.won, 0) as won,
+           coalesce(a.drawn, 0) as drawn,
+           coalesce(a.lost, 0) as lost,
+           coalesce(a.score_for, 0) as score_for,
+           coalesce(a.score_against, 0) as score_against,
+           (coalesce(a.score_for, 0) - coalesce(a.score_against, 0)) as diff,
+           (coalesce(a.won, 0) * v_win + coalesce(a.drawn, 0) * v_draw + coalesce(a.lost, 0) * v_loss) as points
+    from participants p
+    left join agg a on a.eid = p.id
+  ),
+  -- Head-to-head points, counting only matches between entries tied on total points.
+  -- Breaks pairwise/group ties correctly; circular ties fall through to diff.
+  h2h as (
+    select e.entry_id, coalesce(sum(e.pts), 0) as h2h_points
+    from (
+      select pm.side_a_entry_id as entry_id,
+             case when pm.winner_entry_id = pm.side_a_entry_id then v_win
+                  when pm.winner_entry_id is null then v_draw
+                  else v_loss end as pts
+      from played_matches pm
+      join merged ma on ma.entry_id = pm.side_a_entry_id
+      join merged mb on mb.entry_id = pm.side_b_entry_id
+      where ma.points = mb.points
+      union all
+      select pm.side_b_entry_id as entry_id,
+             case when pm.winner_entry_id = pm.side_b_entry_id then v_win
+                  when pm.winner_entry_id is null then v_draw
+                  else v_loss end as pts
+      from played_matches pm
+      join merged ma on ma.entry_id = pm.side_a_entry_id
+      join merged mb on mb.entry_id = pm.side_b_entry_id
+      where ma.points = mb.points
+    ) e
+    group by e.entry_id
+  )
+  select mg.entry_id,
+         mg.display_name,
+         mg.played,
+         mg.won,
+         mg.drawn,
+         mg.lost,
+         mg.score_for,
+         mg.score_against,
+         mg.diff,
+         mg.points,
+         (row_number() over (
+            order by mg.points desc, coalesce(h.h2h_points, 0) desc,
+                     mg.diff desc, mg.score_for desc, mg.display_name asc
+         ))::integer as rank
+  from merged mg
+  left join h2h h on h.entry_id = mg.entry_id
+  order by rank;
+end;
+$$;
+
+grant execute on function generate_round_robin(uuid) to authenticated;
+grant execute on function get_standings(uuid, uuid) to anon, authenticated;
+
+-- =============================================
+-- FOOTBALL RESULT ENTRY (goals family)
+-- =============================================
+
+-- Writes a final football result: goals per side, plus optional penalty shootout
+-- for knockout ties. Draws are legal only in round_robin / group stages.
+create or replace function update_football_result(
+  p_match_id uuid,
+  p_a_goals integer,
+  p_b_goals integer,
+  p_a_pens integer default null,
+  p_b_pens integer default null
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_tournament_id uuid;
+  v_status tournament_status;
+  v_format tournament_format;
+  v_stage match_stage;
+  v_side_a uuid;
+  v_side_b uuid;
+  v_prev_winner uuid;
+  v_new_winner uuid;
+  v_draw_allowed boolean;
+begin
+  select m.tournament_id, t.status, t.format, m.stage,
+         m.side_a_entry_id, m.side_b_entry_id, m.winner_entry_id
+    into v_tournament_id, v_status, v_format, v_stage,
+         v_side_a, v_side_b, v_prev_winner
+  from matches m
+  join tournaments t on t.id = m.tournament_id
+  where m.id = p_match_id;
+
+  if v_tournament_id is null then
+    raise exception 'Match not found';
+  end if;
+  if not is_tournament_admin(v_tournament_id) then
+    raise exception 'Not allowed';
+  end if;
+  if v_status <> 'in_progress'::tournament_status then
+    raise exception 'Scores can be entered only after the tournament starts';
+  end if;
+  if v_side_a is null or v_side_b is null then
+    raise exception 'Both sides must be assigned before scoring';
+  end if;
+  if p_a_goals is null or p_b_goals is null or p_a_goals < 0 or p_b_goals < 0 then
+    raise exception 'Valid goal counts required';
+  end if;
+
+  v_draw_allowed := (v_format = 'round_robin') or (v_stage = 'group');
+
+  if p_a_goals > p_b_goals then
+    v_new_winner := v_side_a;
+  elsif p_b_goals > p_a_goals then
+    v_new_winner := v_side_b;
+  else
+    -- tie
+    if v_draw_allowed then
+      v_new_winner := null;
+    else
+      if p_a_pens is null or p_b_pens is null or p_a_pens = p_b_pens then
+        raise exception 'Penalty shootout result required to break a knockout tie';
+      end if;
+      v_new_winner := case when p_a_pens > p_b_pens then v_side_a else v_side_b end;
+    end if;
+  end if;
+
+  update matches
+  set side_a_score = p_a_goals,
+      side_b_score = p_b_goals,
+      side_a_pens = p_a_pens,
+      side_b_pens = p_b_pens,
+      winner_entry_id = v_new_winner,
+      status = 'finished'::match_status
+  where id = p_match_id;
+
+  if v_prev_winner is not null and v_prev_winner is distinct from v_new_winner then
+    perform clear_downstream(p_match_id, v_prev_winner);
+  end if;
+
+  if v_new_winner is not null then
+    perform propagate_winner(p_match_id, v_new_winner);
+  end if;
+
+  return v_new_winner;
+end;
+$$;
+
+grant execute on function update_football_result(uuid, integer, integer, integer, integer) to authenticated;
+
+-- =============================================
+-- GROUPS + PLAYOFF
+-- =============================================
+
+-- Single-elimination tree builder from an already-ordered seed array, scoped to a
+-- stage. Only touches matches of that stage (does not delete group-stage matches).
+create or replace function generate_single_elim(
+  p_tournament_id uuid,
+  p_seeds uuid[],
+  p_stage match_stage default 'main'
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_count integer;
+  v_bracket_size integer := 1;
+  v_rounds integer := 0;
+  v_round integer;
+  v_match integer;
+  v_matches_in_round integer;
+  v_match_id uuid;
+  v_next_match_id uuid;
+  v_side_a uuid;
+  v_side_b uuid;
+  v_winner uuid;
+begin
+  v_count := coalesce(array_length(p_seeds, 1), 0);
+  if v_count < 2 then
+    raise exception 'At least 2 seeds required';
+  end if;
+
+  while v_bracket_size < v_count loop
+    v_bracket_size := v_bracket_size * 2;
+  end loop;
+
+  v_matches_in_round := v_bracket_size / 2;
+  while v_matches_in_round >= 1 loop
+    v_rounds := v_rounds + 1;
+    v_matches_in_round := v_matches_in_round / 2;
+  end loop;
+
+  delete from match_sets
+  where match_id in (
+    select id from matches where tournament_id = p_tournament_id and stage = p_stage
+  );
+  delete from matches where tournament_id = p_tournament_id and stage = p_stage;
+
+  create temporary table tmp_se_ids (
+    round_number integer,
+    match_number integer,
+    match_id uuid
+  ) on commit drop;
+
+  for v_round in 1..v_rounds loop
+    v_matches_in_round := v_bracket_size / (2 ^ v_round);
+    for v_match in 1..v_matches_in_round loop
+      insert into matches (tournament_id, stage, round_number, match_number, status)
+      values (p_tournament_id, p_stage, v_round, v_match, 'pending'::match_status)
+      returning id into v_match_id;
+      insert into tmp_se_ids (round_number, match_number, match_id)
+      values (v_round, v_match, v_match_id);
+    end loop;
+  end loop;
+
+  for v_round in 1..(v_rounds - 1) loop
+    v_matches_in_round := v_bracket_size / (2 ^ v_round);
+    for v_match in 1..v_matches_in_round loop
+      select match_id into v_match_id from tmp_se_ids
+        where round_number = v_round and match_number = v_match;
+      select match_id into v_next_match_id from tmp_se_ids
+        where round_number = v_round + 1 and match_number = ((v_match + 1) / 2)::integer;
+      update matches
+        set next_match_id = v_next_match_id,
+            next_slot = case when mod(v_match, 2) = 1 then 'A' else 'B' end
+      where id = v_match_id;
+    end loop;
+  end loop;
+
+  v_matches_in_round := v_bracket_size / 2;
+  for v_match in 1..v_matches_in_round loop
+    v_side_a := null;
+    v_side_b := null;
+    if (2 * v_match - 1) <= v_count then v_side_a := p_seeds[2 * v_match - 1]; end if;
+    if (2 * v_match) <= v_count then v_side_b := p_seeds[2 * v_match]; end if;
+
+    select match_id into v_match_id from tmp_se_ids
+      where round_number = 1 and match_number = v_match;
+
+    v_winner := case
+      when v_side_a is null then v_side_b
+      when v_side_b is null then v_side_a
+      else null
+    end;
+
+    update matches
+      set side_a_entry_id = v_side_a,
+          side_b_entry_id = v_side_b,
+          winner_entry_id = v_winner,
+          status = case
+            when v_winner is not null then 'finished'::match_status
+            when v_side_a is not null and v_side_b is not null then 'ready'::match_status
+            else 'pending'::match_status
+          end
+    where id = v_match_id;
+
+    if v_winner is not null then
+      perform propagate_winner(v_match_id, v_winner);
+    end if;
+  end loop;
+
+  drop table if exists tmp_se_ids;
+end;
+$$;
+
+-- Snake-distribute approved entries into N groups, then round-robin within each group.
+create or replace function generate_groups(
+  p_tournament_id uuid,
+  p_group_count integer default 2
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_entries uuid[];
+  v_n integer;
+  v_g integer;
+  v_i integer;
+  v_group_ids uuid[] := '{}';
+  v_gid uuid;
+  v_target integer;
+  v_dir integer;
+  v_pos integer;
+  v_seed integer;
+  v_group_members uuid[];
+begin
+  if not is_tournament_admin(p_tournament_id) then
+    raise exception 'Not allowed';
+  end if;
+  if p_group_count < 2 then
+    raise exception 'At least 2 groups required';
+  end if;
+
+  select array_agg(e.id order by coalesce(e.seed_order, 999999), e.created_at)
+    into v_entries
+  from entries e
+  where e.tournament_id = p_tournament_id and e.status = 'approved';
+
+  v_n := coalesce(array_length(v_entries, 1), 0);
+  if v_n < p_group_count * 2 then
+    raise exception 'Need at least 2 entries per group';
+  end if;
+
+  -- wipe existing structure
+  delete from match_sets where match_id in (select id from matches where tournament_id = p_tournament_id);
+  delete from matches where tournament_id = p_tournament_id;
+  delete from groups where tournament_id = p_tournament_id;  -- cascades group_entries
+
+  -- create groups A, B, C, ...
+  for v_g in 0..(p_group_count - 1) loop
+    insert into groups (tournament_id, name, group_index)
+    values (p_tournament_id, chr(65 + v_g), v_g)
+    returning id into v_gid;
+    v_group_ids := v_group_ids || v_gid;
+  end loop;
+
+  -- snake distribution
+  for v_i in 1..v_n loop
+    v_pos := ((v_i - 1) / p_group_count);           -- row index (0-based)
+    if v_pos % 2 = 0 then
+      v_target := ((v_i - 1) % p_group_count);      -- left to right
+    else
+      v_target := p_group_count - 1 - ((v_i - 1) % p_group_count); -- right to left
+    end if;
+    insert into group_entries (group_id, entry_id, seed)
+    values (v_group_ids[v_target + 1], v_entries[v_i], v_i);
+  end loop;
+
+  -- round-robin per group; round_offset keeps round numbers unique across groups
+  for v_g in 0..(p_group_count - 1) loop
+    select array_agg(ge.entry_id order by ge.seed)
+      into v_group_members
+    from group_entries ge
+    where ge.group_id = v_group_ids[v_g + 1];
+
+    perform generate_round_robin_matches(
+      p_tournament_id, v_group_members, 'group', v_group_ids[v_g + 1], v_g * 1000
+    );
+  end loop;
+end;
+$$;
+
+-- After all group matches finish, seed a knockout bracket (stage 'winners') from the
+-- top N of each group with cross-group placement to avoid same-group early meetings.
+create or replace function generate_group_playoff(p_tournament_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_advance integer;
+  v_group record;
+  v_winners uuid[] := '{}';
+  v_runners uuid[] := '{}';
+  v_extra uuid[] := '{}';
+  v_seeds uuid[] := '{}';
+  v_qualifier uuid;
+  v_group_count integer;
+  v_i integer;
+  v_rank integer;
+begin
+  if not is_tournament_admin(p_tournament_id) then
+    raise exception 'Not allowed';
+  end if;
+
+  if exists (
+    select 1 from matches
+    where tournament_id = p_tournament_id and stage = 'group' and status <> 'finished'
+  ) then
+    raise exception 'All group matches must be finished first';
+  end if;
+
+  select coalesce((format_config->>'advance_per_group')::integer, 2)
+    into v_advance
+  from tournaments where id = p_tournament_id;
+
+  select count(*) into v_group_count from groups where tournament_id = p_tournament_id;
+  if v_group_count < 1 then
+    raise exception 'No groups found';
+  end if;
+
+  -- collect qualifiers by rank, group order
+  for v_group in
+    select id, group_index from groups where tournament_id = p_tournament_id order by group_index
+  loop
+    for v_rank in 1..v_advance loop
+      select s.entry_id into v_qualifier
+      from get_standings(p_tournament_id, v_group.id) s
+      where s.rank = v_rank;
+      if v_qualifier is not null then
+        if v_rank = 1 then
+          v_winners := v_winners || v_qualifier;
+        elsif v_rank = 2 then
+          v_runners := v_runners || v_qualifier;
+        else
+          v_extra := v_extra || v_qualifier;
+        end if;
+      end if;
+    end loop;
+  end loop;
+
+  -- build seed order: interleave winners with reversed runners-up so W_i faces R_j (j != i)
+  if v_advance = 1 then
+    v_seeds := v_winners;
+  else
+    for v_i in 1..array_length(v_winners, 1) loop
+      v_seeds := v_seeds || v_winners[v_i];
+      if array_length(v_runners, 1) >= v_i then
+        v_seeds := v_seeds || v_runners[array_length(v_runners, 1) - v_i + 1];
+      end if;
+    end loop;
+    -- any deeper qualifiers appended (best-effort for advance > 2)
+    v_seeds := v_seeds || v_extra;
+  end if;
+
+  if coalesce(array_length(v_seeds, 1), 0) < 2 then
+    raise exception 'Not enough qualifiers for a playoff';
+  end if;
+
+  perform generate_single_elim(p_tournament_id, v_seeds, 'winners');
+end;
+$$;
+
+grant execute on function generate_single_elim(uuid, uuid[], match_stage) to authenticated;
+grant execute on function generate_groups(uuid, integer) to authenticated;
+grant execute on function generate_group_playoff(uuid) to authenticated;
+
+-- =============================================
+-- DOUBLE ELIMINATION
+-- =============================================
+
+-- Builds a double-elimination bracket: winners bracket (stage 'winners'),
+-- losers bracket (stage 'losers') with WB dropdown routing via loser_next_match_id,
+-- and a single grand final (stage 'grand_final'). v1 requires a power-of-two seed
+-- count (no byes) and uses a single grand final (no bracket reset).
+create or replace function generate_double_elim(
+  p_tournament_id uuid,
+  p_seeds uuid[]
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_count integer;
+  v_b integer := 1;
+  v_k integer := 0;
+  v_tmp integer;
+  v_r integer;
+  v_m integer;
+  v_cnt integer;
+  v_j integer;
+  v_id uuid;
+  v_nid uuid;
+  v_side_a uuid;
+  v_side_b uuid;
+  v_winner uuid;
+begin
+  v_count := coalesce(array_length(p_seeds, 1), 0);
+  if v_count < 2 then
+    raise exception 'At least 2 seeds required';
+  end if;
+
+  while v_b < v_count loop
+    v_b := v_b * 2;
+  end loop;
+  if v_b <> v_count then
+    raise exception 'Double elimination v1 requires a power-of-two participant count (got %)', v_count;
+  end if;
+
+  v_tmp := v_b;
+  while v_tmp > 1 loop
+    v_k := v_k + 1;
+    v_tmp := v_tmp / 2;
+  end loop;
+
+  delete from match_sets where match_id in (
+    select id from matches where tournament_id = p_tournament_id
+      and stage in ('winners', 'losers', 'grand_final')
+  );
+  delete from matches where tournament_id = p_tournament_id
+    and stage in ('winners', 'losers', 'grand_final');
+
+  create temporary table tmp_de (br text, rnd integer, mno integer, id uuid) on commit drop;
+
+  -- Winners bracket matches
+  for v_r in 1..v_k loop
+    v_cnt := v_b / (2 ^ v_r);
+    for v_m in 1..v_cnt loop
+      insert into matches (tournament_id, stage, round_number, match_number, status)
+      values (p_tournament_id, 'winners', v_r, v_m, 'pending'::match_status)
+      returning id into v_id;
+      insert into tmp_de values ('W', v_r, v_m, v_id);
+    end loop;
+  end loop;
+
+  -- Losers bracket matches: rounds 1..(2k-2)
+  if v_k >= 2 then
+    for v_r in 1..(2 * v_k - 2) loop
+      v_j := (v_r + 1) / 2;
+      v_cnt := v_b / (2 ^ (v_j + 1));
+      for v_m in 1..v_cnt loop
+        insert into matches (tournament_id, stage, round_number, match_number, status)
+        values (p_tournament_id, 'losers', v_r, v_m, 'pending'::match_status)
+        returning id into v_id;
+        insert into tmp_de values ('L', v_r, v_m, v_id);
+      end loop;
+    end loop;
+  end if;
+
+  -- Grand final
+  insert into matches (tournament_id, stage, round_number, match_number, status)
+  values (p_tournament_id, 'grand_final', 1, 1, 'pending'::match_status)
+  returning id into v_id;
+  insert into tmp_de values ('GF', 1, 1, v_id);
+
+  -- Winners bracket internal links (winner advances)
+  for v_r in 1..(v_k - 1) loop
+    v_cnt := v_b / (2 ^ v_r);
+    for v_m in 1..v_cnt loop
+      select id into v_id from tmp_de where br = 'W' and rnd = v_r and mno = v_m;
+      select id into v_nid from tmp_de where br = 'W' and rnd = v_r + 1 and mno = ((v_m + 1) / 2);
+      update matches set next_match_id = v_nid,
+        next_slot = case when v_m % 2 = 1 then 'A' else 'B' end where id = v_id;
+    end loop;
+  end loop;
+  -- WB final winner -> grand final slot A
+  select id into v_id from tmp_de where br = 'W' and rnd = v_k and mno = 1;
+  select id into v_nid from tmp_de where br = 'GF';
+  update matches set next_match_id = v_nid, next_slot = 'A' where id = v_id;
+
+  if v_k >= 2 then
+    -- WB round 1 losers -> LB round 1 (both slots)
+    v_cnt := v_b / 2;
+    for v_m in 1..v_cnt loop
+      select id into v_id from tmp_de where br = 'W' and rnd = 1 and mno = v_m;
+      select id into v_nid from tmp_de where br = 'L' and rnd = 1 and mno = ((v_m + 1) / 2);
+      update matches set loser_next_match_id = v_nid,
+        loser_next_slot = case when v_m % 2 = 1 then 'A' else 'B' end where id = v_id;
+    end loop;
+    -- WB round i (2..k) losers -> LB minor round (2i-2), slot B, match m -> m
+    for v_r in 2..v_k loop
+      v_cnt := v_b / (2 ^ v_r);
+      for v_m in 1..v_cnt loop
+        select id into v_id from tmp_de where br = 'W' and rnd = v_r and mno = v_m;
+        select id into v_nid from tmp_de where br = 'L' and rnd = (2 * v_r - 2) and mno = v_m;
+        update matches set loser_next_match_id = v_nid, loser_next_slot = 'B' where id = v_id;
+      end loop;
+    end loop;
+
+    -- LB internal links
+    for v_r in 1..(2 * v_k - 3) loop
+      v_j := (v_r + 1) / 2;
+      v_cnt := v_b / (2 ^ (v_j + 1));
+      for v_m in 1..v_cnt loop
+        select id into v_id from tmp_de where br = 'L' and rnd = v_r and mno = v_m;
+        if v_r % 2 = 1 then
+          -- odd round (round1 / major): winner -> next round slot A, same match number
+          select id into v_nid from tmp_de where br = 'L' and rnd = v_r + 1 and mno = v_m;
+          update matches set next_match_id = v_nid, next_slot = 'A' where id = v_id;
+        else
+          -- even round (minor): winner pairs into next (major) round
+          select id into v_nid from tmp_de where br = 'L' and rnd = v_r + 1 and mno = ((v_m + 1) / 2);
+          update matches set next_match_id = v_nid,
+            next_slot = case when v_m % 2 = 1 then 'A' else 'B' end where id = v_id;
+        end if;
+      end loop;
+    end loop;
+    -- LB final winner -> grand final slot B
+    select id into v_id from tmp_de where br = 'L' and rnd = (2 * v_k - 2) and mno = 1;
+    select id into v_nid from tmp_de where br = 'GF';
+    update matches set next_match_id = v_nid, next_slot = 'B' where id = v_id;
+  end if;
+
+  -- Seed winners bracket round 1
+  v_cnt := v_b / 2;
+  for v_m in 1..v_cnt loop
+    v_side_a := p_seeds[2 * v_m - 1];
+    v_side_b := p_seeds[2 * v_m];
+    select id into v_id from tmp_de where br = 'W' and rnd = 1 and mno = v_m;
+    update matches set side_a_entry_id = v_side_a, side_b_entry_id = v_side_b,
+      status = 'ready'::match_status where id = v_id;
+  end loop;
+
+  drop table if exists tmp_de;
+end;
+$$;
+
+grant execute on function generate_double_elim(uuid, uuid[]) to authenticated;
 
 create or replace function form_random_pairs(p_tournament_id uuid)
 returns integer
@@ -1253,6 +1971,8 @@ begin
 
   update matches
   set winner_entry_id = v_new_winner,
+      side_a_score = v_a_wins,
+      side_b_score = v_b_wins,
       status = case
         when v_new_winner is null then 'ready'::match_status
         else 'finished'::match_status
@@ -1777,11 +2497,10 @@ using (
   )
 );
 
-grant execute on function create_tournament(text, text, text, tournament_category, set_format, boolean, doubles_pairing_mode, uuid) to authenticated;
+grant execute on function create_tournament(text, text, text, sport, tournament_format, tournament_category, set_format, boolean, doubles_pairing_mode, jsonb, jsonb) to authenticated;
 grant execute on function register_entry(text, tournament_category, text, text, text, text) to anon, authenticated;
 grant execute on function normalize_contact(text) to authenticated;
 grant execute on function hash_contact(text) to authenticated;
-grant execute on function is_org_admin(uuid) to authenticated;
 grant execute on function generate_bracket(uuid, draw_mode, uuid[]) to authenticated;
 grant execute on function rebuild_bracket(uuid, draw_mode, uuid[]) to authenticated;
 grant execute on function update_match_sets(uuid, jsonb) to authenticated;
@@ -1846,50 +2565,8 @@ begin
 end $$;
 
 -- =============================================
--- CLUB REGISTRATION & PLATFORM ADMIN
+-- PLATFORM ADMIN
 -- =============================================
-
--- Enum: club status
-do $$ begin
-  create type club_status as enum ('pending', 'approved', 'rejected', 'active');
-exception
-  when duplicate_object then null;
-end $$;
-
--- User profiles (extends auth.users)
-create table if not exists user_profiles (
-  id uuid primary key references auth.users(id) on delete cascade,
-  first_name text not null,
-  last_name text not null,
-  phone text,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-
-drop trigger if exists trg_user_profiles_updated_at on user_profiles;
-create trigger trg_user_profiles_updated_at
-before update on user_profiles for each row execute function set_updated_at();
-
--- Clubs
-create table if not exists clubs (
-  id uuid primary key default gen_random_uuid(),
-  name text not null,
-  city text not null,
-  address text,
-  contact_email text,
-  contact_phone text,
-  status club_status not null default 'pending',
-  owner_id uuid not null references auth.users(id) on delete restrict,
-  rejection_reason text,
-  reviewed_by uuid references auth.users(id),
-  reviewed_at timestamptz,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-
-drop trigger if exists trg_clubs_updated_at on clubs;
-create trigger trg_clubs_updated_at
-before update on clubs for each row execute function set_updated_at();
 
 -- Platform super admins
 create table if not exists platform_admins (
@@ -1897,19 +2574,6 @@ create table if not exists platform_admins (
   user_id uuid not null references auth.users(id) on delete cascade unique,
   created_at timestamptz not null default now()
 );
-
--- Add nullable club_id to tournaments
-do $$
-begin
-  if not exists (
-    select 1 from information_schema.columns
-    where table_name = 'tournaments' and column_name = 'club_id'
-  ) then
-    alter table tournaments add column club_id uuid references clubs(id) on delete set null;
-  end if;
-end $$;
-
-create index if not exists idx_tournaments_club on tournaments(club_id);
 
 -- Helper: check if current user is platform admin
 create or replace function is_platform_admin()
@@ -1924,44 +2588,6 @@ as $$
   );
 $$;
 
--- RLS: user_profiles
-alter table user_profiles enable row level security;
-
-do $$ begin
-  drop policy if exists user_profiles_select_own on user_profiles;
-  drop policy if exists user_profiles_insert_own on user_profiles;
-  drop policy if exists user_profiles_update_own on user_profiles;
-  drop policy if exists user_profiles_select_superadmin on user_profiles;
-end $$;
-
-create policy user_profiles_select_own on user_profiles
-  for select to authenticated using (id = auth.uid());
-
-create policy user_profiles_insert_own on user_profiles
-  for insert to authenticated with check (id = auth.uid());
-
-create policy user_profiles_update_own on user_profiles
-  for update to authenticated using (id = auth.uid()) with check (id = auth.uid());
-
-create policy user_profiles_select_superadmin on user_profiles
-  for select to authenticated using (is_platform_admin());
-
--- RLS: clubs
-alter table clubs enable row level security;
-
-do $$ begin
-  drop policy if exists clubs_select_own on clubs;
-  drop policy if exists clubs_select_superadmin on clubs;
-  drop policy if exists clubs_insert_authenticated on clubs;
-  drop policy if exists clubs_update_superadmin on clubs;
-end $$;
-
-create policy clubs_select_own on clubs
-  for select to authenticated using (owner_id = auth.uid());
-
-create policy clubs_select_superadmin on clubs
-  for select to authenticated using (is_platform_admin());
-
 -- RLS: platform_admins
 alter table platform_admins enable row level security;
 
@@ -1972,434 +2598,8 @@ end $$;
 create policy platform_admins_select_self on platform_admins
   for select to authenticated using (user_id = auth.uid());
 
--- RLS: organizations
-alter table organizations enable row level security;
-
-drop policy if exists organizations_public_read on organizations;
-drop policy if exists organizations_owner_write on organizations;
-drop policy if exists organizations_platform_write on organizations;
-
-create policy organizations_public_read on organizations
-  for select using (
-    (is_active = true and status = 'active')
-    or auth.uid() = owner_user_id
-    or is_platform_admin()
-  );
-
-create policy organizations_platform_write on organizations
-  for all using (is_platform_admin())
-  with check (is_platform_admin());
-
--- RPC: register organization-backed club (profile + pending organization)
-create or replace function register_organization(
-  p_first_name text,
-  p_last_name text,
-  p_phone text,
-  p_org_name text,
-  p_org_city text,
-  p_org_address text default null,
-  p_contact_email text default null,
-  p_contact_phone text default null
-)
-returns uuid
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_uid uuid := auth.uid();
-  v_org_id uuid;
-  v_slug text;
-begin
-  if v_uid is null then
-    raise exception 'Authentication required';
-  end if;
-
-  insert into user_profiles (id, first_name, last_name, phone)
-  values (v_uid, p_first_name, p_last_name, p_phone)
-  on conflict (id) do update
-  set first_name = excluded.first_name,
-      last_name = excluded.last_name,
-      phone = excluded.phone;
-
-  if exists (
-    select 1 from organizations
-    where type = 'club'
-      and lower(name) = lower(p_org_name)
-      and lower(coalesce(city, '')) = lower(coalesce(p_org_city, ''))
-      and status in ('pending', 'active')
-  ) then
-    raise exception 'CLUB_DUPLICATE';
-  end if;
-
-  if exists (
-    select 1 from organizations
-    where owner_user_id = v_uid
-      and type = 'club'
-      and status in ('pending', 'active')
-  ) then
-    raise exception 'CLUB_ALREADY_EXISTS';
-  end if;
-
-  v_slug := 'club-' || substring(replace(gen_random_uuid()::text, '-', ''), 1, 10);
-
-  insert into organizations (
-    slug, type, name, city, address, contact_email, contact_phone,
-    owner_user_id, status, is_active
-  )
-  values (
-    v_slug,
-    'club',
-    p_org_name,
-    p_org_city,
-    p_org_address,
-    coalesce(p_contact_email, (select email from auth.users where id = v_uid)),
-    p_contact_phone,
-    v_uid,
-    'pending',
-    false
-  )
-  returning id into v_org_id;
-
-  return v_org_id;
-end;
-$$;
-
--- RPC: approve organization-backed club (super admin only)
-create or replace function approve_organization(p_org_id uuid)
-returns void
-language plpgsql
-security definer
-set search_path = public
-as $$
-begin
-  if not is_platform_admin() then
-    raise exception 'Not allowed';
-  end if;
-
-  update organizations
-  set status = 'active',
-      is_active = true,
-      reviewed_by = auth.uid(),
-      reviewed_at = now(),
-      rejection_reason = null
-  where id = p_org_id
-    and type = 'club'
-    and status = 'pending';
-end;
-$$;
-
--- RPC: reject organization-backed club (super admin only)
-create or replace function reject_organization(p_org_id uuid, p_reason text default null)
-returns void
-language plpgsql
-security definer
-set search_path = public
-as $$
-begin
-  if not is_platform_admin() then
-    raise exception 'Not allowed';
-  end if;
-
-  update organizations
-  set status = 'rejected',
-      is_active = false,
-      reviewed_by = auth.uid(),
-      reviewed_at = now(),
-      rejection_reason = p_reason
-  where id = p_org_id
-    and type = 'club'
-    and status = 'pending';
-end;
-$$;
-
--- RPC: list organization-backed club registrations with owner info.
-create or replace function list_organizations_for_review()
-returns table (
-  id uuid,
-  name text,
-  city text,
-  address text,
-  contact_email text,
-  contact_phone text,
-  status organization_status,
-  rejection_reason text,
-  created_at timestamptz,
-  reviewed_at timestamptz,
-  owner_first_name text,
-  owner_last_name text,
-  owner_email text,
-  owner_phone text,
-  duplicate_count bigint
-)
-language plpgsql
-security definer
-set search_path = public
-as $$
-begin
-  if not is_platform_admin() then
-    raise exception 'Not allowed';
-  end if;
-
-  return query
-  select
-    o.id,
-    o.name,
-    o.city,
-    o.address,
-    o.contact_email,
-    o.contact_phone,
-    o.status,
-    o.rejection_reason,
-    o.created_at,
-    o.reviewed_at,
-    up.first_name::text as owner_first_name,
-    up.last_name::text as owner_last_name,
-    u.email::text as owner_email,
-    up.phone::text as owner_phone,
-    (
-      select count(*) from organizations o2
-      where o2.type = 'club'
-        and lower(o2.name) = lower(o.name)
-        and lower(coalesce(o2.city, '')) = lower(coalesce(o.city, ''))
-        and o2.id <> o.id
-        and o2.status in ('active', 'pending')
-    ) as duplicate_count
-  from organizations o
-  join auth.users u on u.id = o.owner_user_id
-  left join user_profiles up on up.id = o.owner_user_id
-  where o.type = 'club'
-  order by
-    case o.status when 'pending' then 0 when 'active' then 1 when 'rejected' then 2 else 3 end,
-    o.created_at desc;
-end;
-$$;
-
-create or replace function my_club_registration()
-returns table (
-  id uuid,
-  name text,
-  city text,
-  address text,
-  contact_email text,
-  contact_phone text,
-  status organization_status,
-  rejection_reason text,
-  created_at timestamptz,
-  reviewed_at timestamptz,
-  slug text
-)
-language sql
-stable
-security definer
-set search_path = public
-as $$
-  select
-    o.id,
-    o.name,
-    o.city,
-    o.address,
-    o.contact_email,
-    o.contact_phone,
-    o.status,
-    o.rejection_reason,
-    o.created_at,
-    o.reviewed_at,
-    o.slug
-  from organizations o
-  where o.owner_user_id = auth.uid()
-    and o.type = 'club'
-  order by o.created_at desc
-  limit 1;
-$$;
-
-create or replace function club_page_data(p_slug text)
-returns jsonb
-language plpgsql
-stable
-security definer
-set search_path = public
-as $$
-declare
-  v_org organizations%rowtype;
-  v_tournaments jsonb;
-  v_members jsonb;
-  v_member_count int;
-  v_my_membership jsonb;
-begin
-  select * into v_org
-  from organizations
-  where slug = p_slug
-    and is_active = true
-    and status = 'active';
-
-  if not found then
-    return null;
-  end if;
-
-  select coalesce(jsonb_agg(t order by t.created_at desc), '[]'::jsonb)
-  into v_tournaments
-  from (
-    select id, slug, name, category, status, created_at
-    from tournaments
-    where org_id = v_org.id
-      and is_public = true
-    order by created_at desc
-    limit 50
-  ) t;
-
-  select coalesce(jsonb_agg(m), '[]'::jsonb)
-  into v_members
-  from (
-    select p.id, p.display_name, p.avatar_url, m.role, m.joined_at
-    from org_memberships m
-    join players p on p.id = m.player_id
-    where m.org_id = v_org.id
-      and m.status = 'active'
-      and p.is_deleted = false
-    order by m.joined_at desc nulls last
-    limit 12
-  ) m;
-
-  select count(*) into v_member_count
-  from org_memberships m
-  join players p on p.id = m.player_id
-  where m.org_id = v_org.id
-    and m.status = 'active'
-    and p.is_deleted = false;
-
-  if auth.uid() is not null then
-    select to_jsonb(m) into v_my_membership
-    from org_memberships m
-    join players p on p.id = m.player_id
-    where m.org_id = v_org.id
-      and p.user_id = auth.uid()
-      and p.is_deleted = false
-    limit 1;
-  end if;
-
-  return jsonb_build_object(
-    'org', to_jsonb(v_org),
-    'tournaments', v_tournaments,
-    'members_preview', v_members,
-    'members_count', v_member_count,
-    'my_membership', coalesce(v_my_membership, 'null'::jsonb),
-    'is_owner', v_org.owner_user_id = auth.uid()
-  );
-end;
-$$;
-
--- Backwards-compatible RPC wrappers. New writes stay in organizations.
-create or replace function register_club(
-  p_first_name text,
-  p_last_name text,
-  p_phone text,
-  p_club_name text,
-  p_club_city text,
-  p_club_address text default null,
-  p_contact_email text default null,
-  p_contact_phone text default null
-)
-returns uuid
-language sql
-security definer
-set search_path = public
-as $$
-  select register_organization(
-    p_first_name,
-    p_last_name,
-    p_phone,
-    p_club_name,
-    p_club_city,
-    p_club_address,
-    p_contact_email,
-    p_contact_phone
-  );
-$$;
-
-create or replace function approve_club(p_club_id uuid)
-returns void
-language sql
-security definer
-set search_path = public
-as $$
-  select approve_organization(p_club_id);
-$$;
-
-create or replace function reject_club(p_club_id uuid, p_reason text default null)
-returns void
-language sql
-security definer
-set search_path = public
-as $$
-  select reject_organization(p_club_id, p_reason);
-$$;
-
-drop function if exists get_pending_clubs();
-create or replace function get_pending_clubs()
-returns table (
-  id uuid,
-  name text,
-  city text,
-  address text,
-  contact_email text,
-  contact_phone text,
-  status organization_status,
-  rejection_reason text,
-  created_at timestamptz,
-  reviewed_at timestamptz,
-  owner_first_name text,
-  owner_last_name text,
-  owner_email text,
-  owner_phone text,
-  duplicate_count bigint
-)
-language sql
-security definer
-set search_path = public
-as $$
-  select
-    id,
-    name,
-    city,
-    address,
-    contact_email,
-    contact_phone,
-    status,
-    rejection_reason,
-    created_at,
-    reviewed_at,
-    owner_first_name,
-    owner_last_name,
-    owner_email,
-    owner_phone,
-    duplicate_count
-  from list_organizations_for_review();
-$$;
-
--- Grant execute on new functions
-grant execute on function register_organization(text, text, text, text, text, text, text, text) to authenticated;
-grant execute on function approve_organization(uuid) to authenticated;
-grant execute on function reject_organization(uuid, text) to authenticated;
-grant execute on function list_organizations_for_review() to authenticated;
-grant execute on function my_club_registration() to authenticated;
-grant execute on function club_page_data(text) to anon, authenticated;
-grant execute on function register_club(text, text, text, text, text, text, text, text) to authenticated;
-grant execute on function approve_club(uuid) to authenticated;
-grant execute on function reject_club(uuid, text) to authenticated;
-grant execute on function get_pending_clubs() to authenticated;
 grant execute on function is_platform_admin() to authenticated;
 
--- Realtime for clubs
-do $$
-begin
-  if not exists (
-    select 1 from pg_publication_tables
-    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'clubs'
-  ) then
-    alter publication supabase_realtime add table clubs;
-  end if;
-end $$;
 
 -- =============================================
 -- LIVE SCORING & COUNTER ROLE
@@ -3083,4 +3283,50 @@ to authenticated
 using (
   user_id = auth.uid()
   or is_tournament_admin(tournament_id)
+);
+
+-- =============================================
+-- GROUPS RLS (round_robin / groups_playoff)
+-- =============================================
+
+alter table groups enable row level security;
+alter table group_entries enable row level security;
+
+drop policy if exists groups_public_or_admin_select on groups;
+create policy groups_public_or_admin_select on groups
+for select
+using (
+  exists (
+    select 1 from tournaments t
+    where t.id = groups.tournament_id
+      and (t.is_public = true or is_tournament_admin(t.id) or can_live_score(t.id))
+  )
+);
+
+drop policy if exists groups_write_admin on groups;
+create policy groups_write_admin on groups
+for all
+using (is_tournament_admin(tournament_id))
+with check (is_tournament_admin(tournament_id));
+
+drop policy if exists group_entries_public_or_admin_select on group_entries;
+create policy group_entries_public_or_admin_select on group_entries
+for select
+using (
+  exists (
+    select 1 from groups g
+    join tournaments t on t.id = g.tournament_id
+    where g.id = group_entries.group_id
+      and (t.is_public = true or is_tournament_admin(t.id) or can_live_score(t.id))
+  )
+);
+
+drop policy if exists group_entries_write_admin on group_entries;
+create policy group_entries_write_admin on group_entries
+for all
+using (
+  exists (select 1 from groups g where g.id = group_entries.group_id and is_tournament_admin(g.tournament_id))
+)
+with check (
+  exists (select 1 from groups g where g.id = group_entries.group_id and is_tournament_admin(g.tournament_id))
 );

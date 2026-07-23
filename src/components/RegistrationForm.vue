@@ -3,6 +3,7 @@ import { computed, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { supabase } from '../lib/supabase'
+import { scoringFamily } from '../lib/sportConfig'
 
 const props = defineProps({
   tournament: {
@@ -15,6 +16,13 @@ const emit = defineEmits(['submitted'])
 
 const { t } = useI18n()
 const entryType = computed(() => props.tournament.category)
+const isTeamSport = computed(() => scoringFamily(props.tournament.sport || 'tennis') === 'goals')
+const memberOneLabel = computed(() =>
+  isTeamSport.value ? t('registrationForm.teamName') : t('registrationForm.memberOne'),
+)
+const entryTypeLabel = computed(() =>
+  isTeamSport.value ? t('tournament.team') : t(`tournament.${entryType.value}`),
+)
 const pairingMode = computed(() => props.tournament.doubles_pairing_mode || 'pre_agreed')
 const showMemberTwo = computed(() => entryType.value === 'doubles' && pairingMode.value === 'pre_agreed')
 const showMemberTwoOptional = computed(() => entryType.value === 'doubles' && pairingMode.value === 'pick_random')
@@ -89,12 +97,12 @@ async function submit() {
       <h3 class="section-title">{{ t('registrationForm.title') }}</h3>
       <p class="muted">
         {{ t('registrationForm.entryType') }}:
-        <span class="badge badge--neutral">{{ t(`tournament.${entryType}`) }}</span>
+        <span class="badge badge--neutral">{{ entryTypeLabel }}</span>
       </p>
     </div>
 
     <div class="form-field">
-      <label for="reg-member-one">{{ t('registrationForm.memberOne') }}</label>
+      <label for="reg-member-one">{{ memberOneLabel }}</label>
       <input
         id="reg-member-one"
         v-model="form.memberOne"
