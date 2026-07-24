@@ -80,7 +80,8 @@ function fitToView() {
   const padding = 40
   const scaleX = (cRect.width - padding * 2) / contentW
   const scaleY = (cRect.height - padding * 2) / contentH
-  const newScale = Math.min(Math.max(Math.min(scaleX, scaleY), MIN_SCALE), MAX_SCALE)
+  // Fit shrinks to show everything but never upscales past 100%
+  const newScale = Math.max(Math.min(scaleX, scaleY, 1), MIN_SCALE)
 
   scale.value = newScale
   translateX.value = (cRect.width - contentW * newScale) / 2

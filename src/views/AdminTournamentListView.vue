@@ -123,7 +123,9 @@ function formatDate(iso) {
 }
 
 function hasPublicShareLink(status) {
-  return status === 'registration_open' || status === 'registration_closed'
+  // The public page is live for every non-draft tournament —
+  // spectators need the link most while matches are running.
+  return status !== 'draft'
 }
 
 async function onCopyLink(slug, e) {
@@ -146,12 +148,40 @@ async function onCopyLink(slug, e) {
 
 function statusBadgeClass(status) {
   if (status === 'completed') {
+    return 'badge--done'
+  }
+  if (status === 'in_progress') {
+    return 'badge--live'
+  }
+  if (status === 'registration_open') {
     return 'badge--success'
   }
-  if (status === 'in_progress' || status === 'registration_open') {
-    return 'badge--warn'
-  }
   return 'badge--neutral'
+}
+
+const SPORT_ICONS = { tennis: '🎾', padel: '🏸', football: '⚽' }
+
+function itemSubtitle(item) {
+  const parts = [t(`tournamentFormat.${item.format}`)]
+  if (getSportConfig(item.sport).supportsCategory) {
+    parts.push(t(`tournament.${item.category}`))
+  }
+  return parts.join(' · ')
+}
+
+function nextStep(item) {
+  if (item.currentRole === 'counter') return null
+  switch (item.status) {
+    case 'registration_open':
+      return { text: t('admin.listHintRegOpen'), tone: 'warn' }
+    case 'in_progress':
+      return { text: t('admin.listHintInProgress'), tone: 'live' }
+    case 'draft':
+    case 'registration_closed':
+      return { text: t('admin.listHintSetup'), tone: 'setup' }
+    default:
+      return null
+  }
 }
 
 watch(
@@ -220,34 +250,36 @@ onMounted(async () => {
       <article
         v-for="item in filteredTournaments"
         :key="item.id"
-        class="tournament-row tournament-row--clickable"
+        class="t-card"
         tabindex="0"
         role="link"
         @click="router.push(tournamentTarget(item))"
         @keydown.enter="router.push(tournamentTarget(item))"
       >
-        <div class="stack stack--sm" style="flex: 1; min-width: 0">
-          <h2 class="tournament-row__title">{{ item.name }}</h2>
-          <div class="badge-row">
-            <span class="badge" :class="statusBadgeClass(item.status)">
-              {{ t(`tournament.${item.status}`) }}
-            </span>
-            <span v-if="item.sport" class="badge badge--neutral">{{ t(`sport.${item.sport}`) }}</span>
-            <span v-if="item.format" class="badge badge--neutral">{{ t(`tournamentFormat.${item.format}`) }}</span>
-            <span v-if="getSportConfig(item.sport).supportsCategory" class="badge badge--neutral">{{ t(`tournament.${item.category}`) }}</span>
-            <span v-if="item.currentRole" class="badge badge--neutral">{{ t(`admin.${item.currentRole}`) }}</span>
-            <span class="muted" style="font-size: 0.8125rem">{{ formatDate(item.created_at) }}</span>
+        <div class="t-card__main">
+          <span class="t-card__icon">{{ SPORT_ICONS[item.sport] || '🏆' }}</span>
+          <div class="t-card__info">
+            <div class="t-card__title-row">
+              <h2 class="t-card__title">{{ item.name }}</h2>
+              <span class="badge" :class="statusBadgeClass(item.status)">
+                {{ t(`tournament.${item.status}`) }}
+              </span>
+              <span v-if="item.currentRole && item.currentRole !== 'owner'" class="badge badge--neutral">{{ t(`admin.${item.currentRole}`) }}</span>
+            </div>
+            <p class="t-card__meta">{{ itemSubtitle(item) }} · {{ formatDate(item.created_at) }}</p>
           </div>
-        </div>
-        <div class="tournament-row__actions">
           <button
             v-if="item.currentRole !== 'counter' && hasPublicShareLink(item.status)"
-            class="btn btn--ghost btn--sm"
+            class="btn btn--outline btn--sm t-card__copy"
             type="button"
             @click.stop="onCopyLink(item.slug, $event)"
           >
             {{ copyFeedback && copySlug === item.slug ? t('share.copied') : t('share.copyLink') }}
           </button>
+        </div>
+        <div v-if="nextStep(item)" class="t-card__next" :class="`t-card__next--${nextStep(item).tone}`">
+          <span class="t-card__next-text">{{ nextStep(item).text }}</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>
         </div>
       </article>
     </div>
@@ -255,8 +287,110 @@ onMounted(async () => {
     <p v-else-if="!loading && !loadError && tournaments.length && !filteredTournaments.length" class="muted">
       {{ t('admin.noTournamentsInFilter') }}
     </p>
-    <p v-else-if="!loading && !loadError && !tournaments.length" class="muted">
-      {{ t('admin.noTournaments') }}
-    </p>
+    <div v-else-if="!loading && !loadError && !tournaments.length" class="card empty-state">
+      <svg class="empty-state__icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+      <p class="empty-state__title">{{ t('admin.noTournaments') }}</p>
+      <RouterLink v-if="canCreateTournament" class="btn btn--primary" :to="{ name: 'admin-tournament-new' }">
+        {{ t('admin.createTournament') }}
+      </RouterLink>
+    </div>
   </div>
 </template>
+
+<style scoped>
+.t-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-4);
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.1s;
+}
+
+.t-card:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-md);
+}
+
+.t-card:active { transform: scale(0.995); }
+
+.t-card:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.t-card__main {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.t-card__icon {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.4rem;
+  border-radius: 12px;
+  background: var(--primary-muted);
+}
+
+.t-card__info { flex: 1; min-width: 0; }
+
+.t-card__title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.t-card__title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.05rem;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  margin: 0;
+}
+
+.t-card__meta {
+  margin: 4px 0 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.t-card__copy { flex-shrink: 0; }
+
+.t-card__next {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.t-card__next--warn {
+  color: var(--warning-text);
+  background: var(--warning-bg);
+}
+
+.t-card__next--live {
+  color: var(--accent-text);
+  background: var(--accent-bg);
+}
+
+.t-card__next--setup {
+  color: var(--primary);
+  background: var(--primary-muted);
+}
+
+@media (max-width: 560px) {
+  .t-card__copy { display: none; }
+}
+</style>

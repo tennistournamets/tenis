@@ -53,20 +53,38 @@ const { t } = useI18n()
 }
 .standings th,
 .standings td {
-  padding: 8px 10px;
+  padding: 10px 10px;
   text-align: center;
   border-bottom: 1px solid var(--border, #e5e7eb);
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 .standings th {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
   font-weight: 600;
-  color: var(--text-muted, #6b7280);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.standings tbody tr {
+  transition: background 0.12s;
+}
+.standings tbody tr:hover {
+  background: var(--surface-hover);
 }
 .standings__rank {
   width: 2rem;
+  font-family: var(--font-mono);
+  color: var(--muted);
 }
 .standings__team {
   text-align: left;
   font-weight: 600;
+  color: var(--text);
+}
+.standings td:last-child strong {
+  color: var(--primary);
+  font-family: var(--font-mono);
 }
 </style>

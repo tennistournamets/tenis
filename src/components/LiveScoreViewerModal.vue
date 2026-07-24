@@ -4,6 +4,8 @@ import { useI18n } from 'vue-i18n'
 
 import { pointLabel, scoreLine } from '../lib/useTennisScoring'
 
+import LiveRallyAnimation from './LiveRallyAnimation.vue'
+
 const props = defineProps({
   liveScore: {
     type: Object,
@@ -41,6 +43,8 @@ const statusText = computed(() => {
         </div>
         <button class="modal-close" type="button" :aria-label="t('actions.close')" @click="emit('close')">×</button>
       </div>
+
+      <LiveRallyAnimation :state="state" :team-a="teamA" :team-b="teamB" />
 
       <div class="live-scoreboard">
         <div class="live-scoreboard__row" :class="{ 'live-scoreboard__row--winner': state?.winner === 'a' }">

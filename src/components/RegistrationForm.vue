@@ -17,9 +17,13 @@ const emit = defineEmits(['submitted'])
 const { t } = useI18n()
 const entryType = computed(() => props.tournament.category)
 const isTeamSport = computed(() => scoringFamily(props.tournament.sport || 'tennis') === 'goals')
-const memberOneLabel = computed(() =>
-  isTeamSport.value ? t('registrationForm.teamName') : t('registrationForm.memberOne'),
-)
+const memberOneLabel = computed(() => {
+  if (isTeamSport.value) return t('registrationForm.teamName')
+  return entryType.value === 'doubles' ? t('registrationForm.memberOne') : t('registrationForm.member')
+})
+// «Тип участия» дублирует чипы в шапке для одиночного разряда — показываем
+// только там, где он несёт смысл (пары и командные виды).
+const showEntryType = computed(() => entryType.value === 'doubles' || isTeamSport.value)
 const entryTypeLabel = computed(() =>
   isTeamSport.value ? t('tournament.team') : t(`tournament.${entryType.value}`),
 )
@@ -95,7 +99,7 @@ async function submit() {
   <form class="card card--elevated stack stack--sm" @submit.prevent="submit">
     <div>
       <h3 class="section-title">{{ t('registrationForm.title') }}</h3>
-      <p class="muted">
+      <p v-if="showEntryType" class="muted">
         {{ t('registrationForm.entryType') }}:
         <span class="badge badge--neutral">{{ entryTypeLabel }}</span>
       </p>
@@ -140,7 +144,7 @@ async function submit() {
     </div>
 
     <div class="form-field">
-      <label for="reg-display-name">{{ t('registrationForm.displayName') }}</label>
+      <label for="reg-display-name">{{ showEntryType ? t('registrationForm.displayName') : t('registrationForm.displayNameSolo') }}</label>
       <input
         id="reg-display-name"
         v-model="form.displayName"

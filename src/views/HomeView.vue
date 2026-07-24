@@ -2,6 +2,7 @@
 import { useI18n } from 'vue-i18n'
 
 import LanguageSwitcher from '../components/LanguageSwitcher.vue'
+import ThemeToggle from '../components/ThemeToggle.vue'
 import { useAuthStore } from '../stores/auth'
 
 const { t } = useI18n()
@@ -22,15 +23,21 @@ function scrollTo(id) {
     <nav class="landing-nav">
       <div class="landing-nav__inner">
         <span class="landing-nav__brand">
-          <svg class="landing-nav__logo" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="10" />
-            <path d="M18.5 5.5c-3 3-6 5-10 7" />
-            <path d="M5.5 18.5c3-3 6-5 10-7" />
-            <path d="M2 12h20" />
+          <svg class="landing-nav__logo" width="28" height="28" viewBox="0 0 28 28" fill="none">
+            <rect width="28" height="28" rx="8" fill="var(--primary)" />
+            <path d="M11 8H9.5A1.5 1.5 0 0 0 8 9.5v9A1.5 1.5 0 0 0 9.5 20H11" stroke="#fff" stroke-width="2" stroke-linecap="round" fill="none" />
+            <path d="M17 8h1.5A1.5 1.5 0 0 1 20 9.5v9a1.5 1.5 0 0 1-1.5 1.5H17" stroke="#fff" stroke-width="2" stroke-linecap="round" fill="none" />
+            <circle cx="14" cy="14" r="2.2" fill="var(--lime)" />
           </svg>
           {{ t('app.title') }}
         </span>
+        <div class="landing-nav__links">
+          <a class="landing-nav__link" href="#how-it-works" @click.prevent="scrollTo('how-it-works')">{{ t('home.nav.howItWorks') }}</a>
+          <a class="landing-nav__link" href="#features" @click.prevent="scrollTo('features')">{{ t('home.nav.features') }}</a>
+          <a class="landing-nav__link" href="#features" @click.prevent="scrollTo('features')">{{ t('home.nav.sports') }}</a>
+        </div>
         <div class="landing-nav__actions">
+          <ThemeToggle />
           <LanguageSwitcher />
           <button class="btn btn--primary btn--sm" @click="goRegister">
             {{ t('home.admin.button') }}
@@ -42,9 +49,9 @@ function scrollTo(id) {
     <!-- Hero -->
     <section class="landing-hero">
       <div class="landing-hero__content">
-        <span class="landing-hero__badge">{{ t('home.hero.badge') }}</span>
+        <span class="landing-hero__badge"><span class="landing-hero__badge-dot"></span>{{ t('home.hero.badge') }}</span>
         <h1 class="landing-hero__title">
-          {{ t('home.hero.title') }}<br>
+          {{ t('home.hero.title') }}
           <span class="landing-hero__title-accent">{{ t('home.hero.titleAccent') }}</span>
         </h1>
         <p class="landing-hero__subtitle">{{ t('home.hero.subtitle') }}</p>
@@ -52,47 +59,55 @@ function scrollTo(id) {
           <button class="btn btn--primary btn--lg" @click="goRegister">
             {{ t('home.hero.cta') }}
           </button>
-          <button class="btn btn--ghost btn--lg" @click="scrollTo('how-it-works')">
+          <button class="btn btn--outline btn--lg" @click="scrollTo('how-it-works')">
             {{ t('home.hero.ctaSecondary') }}
           </button>
         </div>
+        <p class="landing-hero__note">{{ t('home.hero.note') }}</p>
       </div>
       <div class="landing-hero__visual">
-        <div class="landing-bracket-demo" aria-hidden="true">
-          <div class="bracket-col">
-            <div class="bracket-slot bracket-slot--active">
-              <span class="bracket-name">A. Djokovic</span>
-              <span class="bracket-score">6</span>
+        <div class="demo-card" aria-hidden="true">
+          <div class="demo-card__head">
+            <span class="demo-card__title">Летний кубок · полуфиналы</span>
+            <span class="demo-card__live"><span class="live-dot"></span>LIVE</span>
+          </div>
+          <div class="demo-card__body">
+            <div class="demo-bracket">
+              <div class="demo-pair">
+                <div class="demo-slot demo-slot--win">
+                  <span class="demo-slot__name">Петров</span>
+                  <span class="demo-slot__score">6 · 6</span>
+                </div>
+                <div class="demo-slot">
+                  <span class="demo-slot__name">Волкова</span>
+                  <span class="demo-slot__score demo-slot__score--muted">3 · 4</span>
+                </div>
+              </div>
+              <div class="demo-pair demo-pair--live">
+                <div class="demo-slot">
+                  <span class="demo-slot__name">Орлов</span>
+                  <span class="demo-slot__score">7 · 2</span>
+                </div>
+                <div class="demo-slot">
+                  <span class="demo-slot__name">Лебедева</span>
+                  <span class="demo-slot__score">5 · 3</span>
+                </div>
+              </div>
             </div>
-            <div class="bracket-slot">
-              <span class="bracket-name">R. Nadal</span>
-              <span class="bracket-score">3</span>
+            <div class="demo-connector" aria-hidden="true"></div>
+            <div class="demo-final">
+              <div class="demo-slot demo-slot--win">
+                <span class="demo-slot__name">Петров</span>
+              </div>
+              <div class="demo-slot demo-slot--empty">
+                <span class="demo-slot__name">Ждём финалиста</span>
+              </div>
+              <span class="demo-final__meta">Финал · сб 16:00</span>
             </div>
           </div>
-          <div class="bracket-connector"></div>
-          <div class="bracket-col">
-            <div class="bracket-slot bracket-slot--active bracket-slot--final">
-              <span class="bracket-name">A. Djokovic</span>
-              <span class="bracket-score bracket-score--live">
-                <span class="live-dot"></span>
-                LIVE
-              </span>
-            </div>
-            <div class="bracket-slot bracket-slot--final">
-              <span class="bracket-name">C. Alcaraz</span>
-              <span class="bracket-score">—</span>
-            </div>
-          </div>
-          <div class="bracket-connector"></div>
-          <div class="bracket-col">
-            <div class="bracket-slot bracket-slot--active">
-              <span class="bracket-name">C. Alcaraz</span>
-              <span class="bracket-score">7</span>
-            </div>
-            <div class="bracket-slot">
-              <span class="bracket-name">J. Sinner</span>
-              <span class="bracket-score">5</span>
-            </div>
+          <div class="demo-card__bar">
+            <span class="demo-card__match"><span class="live-dot"></span>Орлов — Лебедева</span>
+            <span class="demo-card__points">40 <span>—</span> 30</span>
           </div>
         </div>
       </div>
@@ -186,29 +201,17 @@ function scrollTo(id) {
       </div>
       <div class="landing-steps">
         <div class="step-card">
-          <div class="step-card__number">1</div>
+          <span class="step-card__number">01</span>
           <h3 class="step-card__title">{{ t('home.howItWorks.step1.title') }}</h3>
           <p class="step-card__text">{{ t('home.howItWorks.step1.description') }}</p>
         </div>
-        <div class="step-divider" aria-hidden="true">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M5 12h14" />
-            <path d="M12 5l7 7-7 7" />
-          </svg>
-        </div>
         <div class="step-card">
-          <div class="step-card__number">2</div>
+          <span class="step-card__number">02</span>
           <h3 class="step-card__title">{{ t('home.howItWorks.step2.title') }}</h3>
           <p class="step-card__text">{{ t('home.howItWorks.step2.description') }}</p>
         </div>
-        <div class="step-divider" aria-hidden="true">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M5 12h14" />
-            <path d="M12 5l7 7-7 7" />
-          </svg>
-        </div>
         <div class="step-card">
-          <div class="step-card__number">3</div>
+          <span class="step-card__number">03</span>
           <h3 class="step-card__title">{{ t('home.howItWorks.step3.title') }}</h3>
           <p class="step-card__text">{{ t('home.howItWorks.step3.description') }}</p>
         </div>
@@ -221,46 +224,10 @@ function scrollTo(id) {
         <h2 class="landing-cta__title">{{ t('home.cta.title') }}</h2>
         <p class="landing-cta__subtitle">{{ t('home.cta.subtitle') }}</p>
 
-        <div class="portal-cards">
-          <div class="portal-card">
-            <div class="portal-card__icon">
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" />
-                <rect x="9" y="3" width="6" height="4" rx="1" />
-                <path d="M9 12h6" />
-                <path d="M9 16h6" />
-              </svg>
-            </div>
-            <h2 class="portal-card__title">{{ t('home.admin.title') }}</h2>
-            <p class="portal-card__text">{{ t('home.admin.description') }}</p>
-            <button
-              class="btn btn--primary portal-card__btn"
-              type="button"
-              @click="goRegister"
-            >
-              {{ t('home.admin.button') }}
-            </button>
-          </div>
-
-          <div class="portal-card">
-            <div class="portal-card__icon portal-card__icon--player">
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="8" r="4" />
-                <path d="M6 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2" />
-              </svg>
-            </div>
-            <h2 class="portal-card__title">{{ t('home.player.title') }}</h2>
-            <p class="portal-card__text">{{ t('home.player.description') }}</p>
-            <button
-              class="btn btn--outline portal-card__btn"
-              type="button"
-              @click="goRegister"
-            >
-              {{ t('home.player.button') }}
-            </button>
-          </div>
-        </div>
-
+        <button class="btn btn--primary btn--lg landing-cta__btn" type="button" @click="goRegister">
+          {{ t('home.cta.button') }}
+        </button>
+        <p class="landing-hero__note">{{ t('home.hero.note') }}</p>
       </div>
     </section>
 

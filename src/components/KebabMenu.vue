@@ -89,12 +89,12 @@ onBeforeUnmount(() => {
 }
 .kebab__trigger:hover {
   color: var(--text);
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--surface-hover);
 }
 .kebab__trigger[aria-expanded="true"] {
   color: var(--text);
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.1);
+  background: var(--disabled-bg);
+  border-color: var(--border);
 }
 .kebab__pop {
   position: absolute;
@@ -102,7 +102,7 @@ onBeforeUnmount(() => {
   right: 0;
   min-width: 180px;
   background: var(--surface, #1a1a1a);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow-lg, 0 8px 24px rgba(0, 0, 0, 0.4));
   padding: 4px;
@@ -128,12 +128,12 @@ onBeforeUnmount(() => {
   white-space: nowrap;
 }
 .kebab__pop :slotted(button:hover) {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--surface-hover);
 }
 .kebab__pop :slotted(button.kebab__danger) {
   color: var(--danger, #f87171);
 }
 .kebab__pop :slotted(button.kebab__danger:hover) {
-  background: rgba(248, 113, 113, 0.1);
+  background: var(--danger-bg);
 }
 </style>

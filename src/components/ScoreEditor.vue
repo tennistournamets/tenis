@@ -172,7 +172,7 @@ async function save(match) {
   savedFlash[match.id] = true
   setTimeout(() => {
     savedFlash[match.id] = false
-  }, 1200)
+  }, 2000)
 
   emit('saved')
 }
@@ -265,6 +265,12 @@ async function save(match) {
         <button class="btn btn--primary btn--sm" type="button" :disabled="disabled || !canScore(match)" @click="save(match)">
           {{ t('admin.saveScore') }}
         </button>
+        <Transition name="saved-pop">
+          <span v-if="savedFlash[match.id]" class="score-saved-badge">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+            {{ t('actions.saved') }}
+          </span>
+        </Transition>
         <button
           v-if="canLiveScore"
           class="btn btn--ghost btn--sm"
@@ -288,3 +294,29 @@ async function save(match) {
     <p v-if="!matches.length" class="muted">{{ t('bracket.empty') }}</p>
   </section>
 </template>
+
+<style scoped>
+.score-saved-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: var(--space-2);
+  padding: 4px 11px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--success-text);
+  background: var(--success-bg);
+  border-radius: 999px;
+}
+
+.saved-pop-enter-active,
+.saved-pop-leave-active {
+  transition: opacity 0.2s, transform 0.2s;
+}
+
+.saved-pop-enter-from,
+.saved-pop-leave-to {
+  opacity: 0;
+  transform: scale(0.9);
+}
+</style>

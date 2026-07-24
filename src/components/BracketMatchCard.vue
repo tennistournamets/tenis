@@ -140,7 +140,7 @@ function onDrop(event, toSide) {
 function rowClass(side, entryId, winner) {
   const k = rowKey(side)
   return {
-    'match-card__row--winner': winner,
+    'match-card__row--winner': Boolean(entryId) && winner,
     'match-card__row--slot-editable': props.editableSlots && !matchFinished(),
     'match-card__row--drag-over': dragOverKey.value === k && props.editableSlots && !matchFinished(),
     'match-card__row--draggable': props.editableSlots && !matchFinished() && Boolean(entryId),
@@ -150,7 +150,7 @@ function rowClass(side, entryId, winner) {
 </script>
 
 <template>
-  <article class="match-card" :data-match-id="match.id">
+  <article class="match-card" :class="{ 'match-card--live': hasLiveScore() }" :data-match-id="match.id">
     <div v-if="canScoreMatch()" class="match-card__meta match-card__meta--top">
       <button
         class="match-card__score-btn"

@@ -3,27 +3,18 @@ import { computed, onMounted, ref } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 
+import ConfirmDialog from './components/ConfirmDialog.vue'
 import LanguageSwitcher from './components/LanguageSwitcher.vue'
+import ThemeToggle from './components/ThemeToggle.vue'
 import { headerTitle } from './lib/headerTitle'
 import { useAuthStore } from './stores/auth'
 
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
-const { t, locale } = useI18n()
+const { t } = useI18n()
 
 const profileOpen = ref(false)
-
-const locales = [
-  { code: 'ru', label: 'RU', name: 'Русский' },
-  { code: 'en', label: 'EN', name: 'English' },
-  { code: 'lt', label: 'LT', name: 'Lietuvių' },
-]
-
-function setLocale(code) {
-  locale.value = code
-  try { localStorage.setItem('champ_locale', code) } catch { /* ignore */ }
-}
 
 onMounted(async () => {
   await auth.init()
@@ -72,9 +63,16 @@ function goToSettings() {
   <div class="app-root" @click="closeProfile">
     <header v-if="layout === 'admin'" class="app-header">
       <RouterLink class="app-header__brand" :to="{ name: 'admin-tournaments' }">
+        <svg class="app-header__logo" width="24" height="24" viewBox="0 0 28 28" fill="none" aria-hidden="true">
+          <rect width="28" height="28" rx="8" fill="var(--primary)" />
+          <path d="M11 8H9.5A1.5 1.5 0 0 0 8 9.5v9A1.5 1.5 0 0 0 9.5 20H11" stroke="#fff" stroke-width="2" stroke-linecap="round" fill="none" />
+          <path d="M17 8h1.5A1.5 1.5 0 0 1 20 9.5v9a1.5 1.5 0 0 1-1.5 1.5H17" stroke="#fff" stroke-width="2" stroke-linecap="round" fill="none" />
+          <circle cx="14" cy="14" r="2.2" fill="var(--lime)" />
+        </svg>
         {{ t('app.title') }}
       </RouterLink>
       <div class="app-header__actions">
+        <ThemeToggle />
         <LanguageSwitcher />
         <div v-if="auth.user" class="profile-menu" @click.stop>
           <button
@@ -108,44 +106,8 @@ function goToSettings() {
     <header v-else-if="layout === 'public'" class="app-header">
       <span class="app-header__brand">{{ headerTitle || t('app.title') }}</span>
       <div class="app-header__actions">
-        <LanguageSwitcher v-if="!auth.user" />
-        <div v-else class="profile-menu" @click.stop>
-          <button
-            class="profile-menu__trigger"
-            type="button"
-            :aria-expanded="profileOpen"
-            aria-haspopup="true"
-            @click="toggleProfile"
-          >
-            <span class="profile-menu__avatar">{{ userInitial }}</span>
-          </button>
-          <div v-if="profileOpen" class="profile-menu__dropdown">
-            <div class="profile-menu__info">
-              <span class="profile-menu__name">{{ auth.user.user_metadata?.full_name || auth.user.email }}</span>
-              <span class="profile-menu__email">{{ auth.user.email }}</span>
-            </div>
-            <div class="profile-menu__divider" />
-
-            <div class="profile-menu__section-label">{{ t('app.language') }}</div>
-            <button
-              v-for="loc in locales"
-              :key="loc.code"
-              type="button"
-              class="profile-menu__item profile-menu__item--locale"
-              :class="{ 'profile-menu__item--active': locale === loc.code }"
-              @click="setLocale(loc.code)"
-            >
-              <span class="profile-menu__locale-label">{{ loc.label }}</span>
-              <span class="profile-menu__locale-name">{{ loc.name }}</span>
-            </button>
-            <div class="profile-menu__divider" />
-
-            <button class="profile-menu__item profile-menu__item--danger" type="button" @click="handleSignOut">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 14H3.33A1.33 1.33 0 0 1 2 12.67V3.33A1.33 1.33 0 0 1 3.33 2H6"/><polyline points="10.67 11.33 14 8 10.67 4.67"/><line x1="14" y1="8" x2="6" y2="8"/></svg>
-              {{ t('auth.logout') }}
-            </button>
-          </div>
-        </div>
+        <ThemeToggle />
+        <LanguageSwitcher />
       </div>
     </header>
 
@@ -158,5 +120,6 @@ function goToSettings() {
     >
       <RouterView />
     </main>
+    <ConfirmDialog />
   </div>
 </template>

@@ -19,47 +19,91 @@ const grandFinal = computed(() => props.matches.filter((m) => m.stage === 'grand
 </script>
 
 <template>
-  <div class="de-board stack stack--lg">
-    <div class="de-board__section">
-      <h3 class="section-title">{{ t('admin.winnersBracket') }}</h3>
-      <BracketBoard
-        :matches="winners"
-        :sets-by-match="setsByMatch"
-        :entries-map="entriesMap"
-        :live-scores-by-match="liveScoresByMatch"
-        :can-live-score="canLiveScore"
-        @view-live="emit('view-live', $event)"
-      />
-    </div>
+  <div class="de-board">
+    <section class="de-panel">
+      <header class="de-panel__head">
+        <h3 class="de-panel__title">{{ t('admin.winnersBracket') }}</h3>
+      </header>
+      <div class="de-panel__canvas">
+        <BracketBoard
+          :matches="winners"
+          :sets-by-match="setsByMatch"
+          :entries-map="entriesMap"
+          :live-scores-by-match="liveScoresByMatch"
+          :can-live-score="canLiveScore"
+          @view-live="emit('view-live', $event)"
+        />
+      </div>
+    </section>
 
-    <div v-if="losers.length" class="de-board__section">
-      <h3 class="section-title">{{ t('admin.losersBracket') }}</h3>
-      <BracketBoard
-        :matches="losers"
-        :sets-by-match="setsByMatch"
-        :entries-map="entriesMap"
-        :live-scores-by-match="liveScoresByMatch"
-        :can-live-score="canLiveScore"
-        @view-live="emit('view-live', $event)"
-      />
-    </div>
+    <section v-if="losers.length" class="de-panel">
+      <header class="de-panel__head">
+        <h3 class="de-panel__title">{{ t('admin.losersBracket') }}</h3>
+      </header>
+      <div class="de-panel__canvas">
+        <BracketBoard
+          :matches="losers"
+          :sets-by-match="setsByMatch"
+          :entries-map="entriesMap"
+          :live-scores-by-match="liveScoresByMatch"
+          :can-live-score="canLiveScore"
+          @view-live="emit('view-live', $event)"
+        />
+      </div>
+    </section>
 
-    <div v-if="grandFinal.length" class="de-board__section">
-      <h3 class="section-title">{{ t('admin.grandFinal') }}</h3>
-      <BracketBoard
-        :matches="grandFinal"
-        :sets-by-match="setsByMatch"
-        :entries-map="entriesMap"
-        :live-scores-by-match="liveScoresByMatch"
-        :can-live-score="canLiveScore"
-        @view-live="emit('view-live', $event)"
-      />
-    </div>
+    <section v-if="grandFinal.length" class="de-panel de-panel--gf">
+      <header class="de-panel__head">
+        <h3 class="de-panel__title">{{ t('admin.grandFinal') }}</h3>
+      </header>
+      <div class="de-panel__canvas">
+        <BracketBoard
+          :matches="grandFinal"
+          :sets-by-match="setsByMatch"
+          :entries-map="entriesMap"
+          :live-scores-by-match="liveScoresByMatch"
+          :can-live-score="canLiveScore"
+          @view-live="emit('view-live', $event)"
+        />
+      </div>
+    </section>
   </div>
 </template>
 
 <style scoped>
-.de-board__section + .de-board__section {
-  margin-top: var(--space-4, 16px);
+.de-board {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4, 16px);
+}
+
+.de-panel {
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 16px);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.de-panel__head {
+  display: flex;
+  align-items: center;
+  padding: var(--space-3, 12px) var(--space-4, 16px);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.de-panel__title {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.de-panel__canvas :deep(.infinite-canvas) {
+  border-radius: 0;
+  min-height: 380px;
+  background-color: var(--surface-row);
+}
+
+.de-panel--gf .de-panel__canvas :deep(.infinite-canvas) {
+  min-height: 240px;
 }
 </style>

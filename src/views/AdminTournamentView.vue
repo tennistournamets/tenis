@@ -12,6 +12,7 @@ import { scoringFamily, getSportConfig } from '../lib/sportConfig'
 import LiveScoringModal from '../components/LiveScoringModal.vue'
 import ScoreEditor from '../components/ScoreEditor.vue'
 import { entryMemberNames } from '../lib/entryDisplay'
+import { confirmDialog } from '../lib/confirmDialog'
 import { supabase } from '../lib/supabase'
 import { copyTournamentLink } from '../lib/shareLink'
 import { useAuthStore } from '../stores/auth'
@@ -177,6 +178,16 @@ function entryLabel(entry) {
   return names.length ? names.join(' / ') : entry.display_name
 }
 
+function entryInitials(entry) {
+  const label = entryLabel(entry) || '?'
+  return label
+    .split(/[\s/]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0].toUpperCase())
+    .join('')
+}
+
 function teamLabel(entryId) {
   if (!entryId) {
     return t('bracket.tbd')
@@ -226,7 +237,7 @@ const showStartButton = computed(() => {
 const isSettingsDropdownDisabled = computed(() => isTournamentActive.value || isTournamentFinished.value)
 
 async function startTournament() {
-  if (!window.confirm(t('admin.startTournamentConfirm'))) {
+  if (!(await confirmDialog(t('admin.startTournamentConfirm')))) {
     return
   }
 
@@ -249,7 +260,7 @@ async function startTournament() {
 }
 
 async function finishTournament() {
-  if (!window.confirm(t('admin.finishTournamentConfirm'))) {
+  if (!(await confirmDialog(t('admin.finishTournamentConfirm')))) {
     return
   }
 
@@ -272,7 +283,7 @@ async function finishTournament() {
 }
 
 async function stopTournament() {
-  if (!window.confirm(t('admin.stopTournamentConfirm'))) {
+  if (!(await confirmDialog(t('admin.stopTournamentConfirm')))) {
     return
   }
 
@@ -440,12 +451,16 @@ async function loadAdmins() {
   admins.value = data || []
 }
 
-async function loadAll() {
+async function loadAll(silent = false) {
   if (!auth.user) {
     return
   }
 
-  loading.value = true
+  // Silent reloads (score saves, realtime pings) refresh data in place
+  // without unmounting the page — keeps the scroll position.
+  if (!silent) {
+    loading.value = true
+  }
   errorText.value = ''
 
   try {
@@ -462,14 +477,16 @@ async function loadAll() {
   } catch (error) {
     errorText.value = error.message || t('errors.generic')
   } finally {
-    loading.value = false
+    if (!silent) {
+      loading.value = false
+    }
   }
 }
 
 function scheduleReload() {
   clearTimeout(reloadTimer)
   reloadTimer = setTimeout(() => {
-    loadAll()
+    loadAll(true)
   }, 300)
 }
 
@@ -571,7 +588,7 @@ async function approveAllPending() {
   if (pendingEntries.value.length < 2) {
     return
   }
-  if (!window.confirm(t('admin.approveAllConfirm'))) {
+  if (!(await confirmDialog(t('admin.approveAllConfirm')))) {
     return
   }
 
@@ -790,7 +807,7 @@ async function formRandomPairs() {
     return
   }
 
-  if (!window.confirm(t('admin.formPairsConfirm'))) {
+  if (!(await confirmDialog(t('admin.formPairsConfirm')))) {
     return
   }
 
@@ -1027,7 +1044,7 @@ async function loadStandings() {
 async function generateBracket() {
   const fn = hasBracket.value ? 'rebuild_bracket' : 'generate_bracket'
 
-  if (hasBracket.value && !window.confirm(t('admin.rebuildConfirm'))) {
+  if (hasBracket.value && !(await confirmDialog(t('admin.rebuildConfirm')))) {
     return
   }
 
@@ -1072,7 +1089,7 @@ async function loadGroups() {
 }
 
 async function generateGroups() {
-  if (hasGroups.value && !window.confirm(t('admin.rebuildConfirm'))) {
+  if (hasGroups.value && !(await confirmDialog(t('admin.rebuildConfirm')))) {
     return
   }
   actionLoading.value = true
@@ -1104,7 +1121,7 @@ async function startPlayoff() {
 }
 
 async function generateSchedule() {
-  if (hasBracket.value && !window.confirm(t('admin.rebuildConfirm'))) {
+  if (hasBracket.value && !(await confirmDialog(t('admin.rebuildConfirm')))) {
     return
   }
 
@@ -1126,7 +1143,7 @@ async function generateSchedule() {
 }
 
 async function resetBracket() {
-  if (!window.confirm(t('admin.resetBracketConfirm'))) {
+  if (!(await confirmDialog(t('admin.resetBracketConfirm'), { danger: true }))) {
     return
   }
 
@@ -1292,7 +1309,7 @@ async function onCopyShareLink() {
 }
 
 async function deleteTournament() {
-  if (!window.confirm(t('admin.deleteTournamentConfirm'))) {
+  if (!(await confirmDialog(t('admin.deleteTournamentConfirm'), { danger: true }))) {
     return
   }
 
@@ -1318,10 +1335,13 @@ async function deleteTournament() {
 
 function statusBadgeClass(status) {
   if (status === 'completed') {
-    return 'badge--success'
+    return 'badge--done'
   }
-  if (status === 'in_progress' || status === 'registration_open') {
-    return 'badge--warn'
+  if (status === 'in_progress') {
+    return 'badge--live'
+  }
+  if (status === 'registration_open') {
+    return 'badge--success'
   }
   return 'badge--neutral'
 }
@@ -1466,7 +1486,7 @@ onBeforeUnmount(() => {
           <div v-if="canManageTournament" class="admin-tournament-overview__actions">
             <button
               v-if="showPublicShareActions"
-              class="btn btn--warn btn--sm"
+              class="btn btn--outline btn--sm"
               type="button"
               @click="onCopyShareLink"
             >
@@ -1697,7 +1717,7 @@ onBeforeUnmount(() => {
             <div class="admin-list-header" style="margin-bottom: var(--space-3)">
               <h3 class="section-title" style="font-size: 1rem; margin: 0">
                 {{ t('admin.pendingEntries') }}
-                <span class="badge badge--warn">{{ pendingEntries.length }}</span>
+                <span v-if="pendingEntries.length" class="badge badge--warn">{{ pendingEntries.length }}</span>
               </h3>
               <button
                 v-if="pendingEntries.length > 1"
@@ -1711,23 +1731,28 @@ onBeforeUnmount(() => {
             </div>
             <div v-if="pendingEntries.length" class="stack stack--sm">
               <div v-for="entry in pendingEntries" :key="entry.id" class="participant-item">
-                <strong>{{ entryLabel(entry) }}</strong>
-                <div class="inline-actions">
+                <span class="entry-avatar">{{ entryInitials(entry) }}</span>
+                <strong class="entry-name">{{ entryLabel(entry) }}</strong>
+                <div class="entry-actions">
                   <button
-                    class="btn btn--primary btn--sm"
+                    class="entry-icon-btn entry-icon-btn--approve"
                     type="button"
                     :disabled="actionLoading"
+                    :aria-label="t('admin.approve')"
+                    :title="t('admin.approve')"
                     @click="updateEntryStatus(entry.id, 'approved')"
                   >
-                    {{ t('admin.approve') }}
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
                   </button>
                   <button
-                    class="btn btn--danger btn--sm"
+                    class="entry-icon-btn entry-icon-btn--reject"
                     type="button"
                     :disabled="actionLoading"
+                    :aria-label="t('admin.reject')"
+                    :title="t('admin.reject')"
                     @click="updateEntryStatus(entry.id, 'rejected')"
                   >
-                    {{ t('admin.reject') }}
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg>
                   </button>
                 </div>
               </div>
@@ -1741,7 +1766,7 @@ onBeforeUnmount(() => {
             <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.75rem">
               <h3 class="section-title" style="font-size: 1rem; margin: 0">
                 {{ t('admin.approvedList') }}
-                <span class="badge badge--success">{{ approvedEntries.length }}</span>
+                <span v-if="approvedEntries.length" class="badge badge--success">{{ approvedEntries.length }}</span>
               </h3>
               <button
                 v-if="hasPairedEntries"
@@ -1756,7 +1781,8 @@ onBeforeUnmount(() => {
             </div>
             <div v-if="approvedEntries.length" class="stack stack--sm">
               <div v-for="entry in approvedEntries" :key="entry.id" class="participant-item">
-                <strong>{{ entryLabel(entry) }}</strong>
+                <span class="entry-avatar entry-avatar--ok">{{ entryInitials(entry) }}</span>
+                <strong class="entry-name">{{ entryLabel(entry) }}</strong>
                 <button
                   v-if="!isTournamentActive && !isTournamentFinished"
                   class="btn btn--ghost btn--sm"
@@ -2006,14 +2032,16 @@ onBeforeUnmount(() => {
         <template v-if="isRoundRobin">
           <section v-if="canManageTournament && !isTournamentActive" class="card stack stack--sm">
             <h2 class="section-title">{{ t('standings.title') }}</h2>
-            <button
-              class="btn btn--primary btn--sm"
-              type="button"
-              :disabled="actionLoading"
-              @click="generateSchedule"
-            >
-              {{ hasBracket ? t('standings.regenerateSchedule') : t('standings.generateSchedule') }}
-            </button>
+            <div class="inline-actions">
+              <button
+                class="btn btn--primary btn--sm"
+                type="button"
+                :disabled="actionLoading"
+                @click="generateSchedule"
+              >
+                {{ hasBracket ? t('standings.regenerateSchedule') : t('standings.generateSchedule') }}
+              </button>
+            </div>
           </section>
 
           <section v-if="standings.length" class="card stack stack--sm" style="margin-top: var(--space-4)">
@@ -2098,14 +2126,16 @@ onBeforeUnmount(() => {
           </div>
 
           <template v-if="!hasBracket">
-            <button
-              class="btn btn--primary btn--sm"
-              type="button"
-              :disabled="actionLoading"
-              @click="generateBracket"
-            >
-              {{ drawMode === 'manual' ? t('admin.generateManual') : t('admin.generateRandom') }}
-            </button>
+            <div class="inline-actions">
+              <button
+                class="btn btn--primary btn--sm"
+                type="button"
+                :disabled="actionLoading"
+                @click="generateBracket"
+              >
+                {{ drawMode === 'manual' ? t('admin.generateManual') : t('admin.generateRandom') }}
+              </button>
+            </div>
 
             <p v-if="drawMode === 'manual'" class="muted">{{ t('admin.manualBracketDnDHint') }}</p>
           </template>
@@ -2186,7 +2216,7 @@ onBeforeUnmount(() => {
           :matches="matches"
           :entries-map="entriesMap"
           :disabled="!canEditFinalScores"
-          @saved="loadAll"
+          @saved="() => loadAll(true)"
         />
         <ScoreEditor
           v-else
@@ -2198,7 +2228,7 @@ onBeforeUnmount(() => {
           :disabled="!canEditFinalScores"
           :can-live-score="canEditScores"
           :live-scores-by-match="liveScoresByMatch"
-          @saved="loadAll"
+          @saved="() => loadAll(true)"
           @start-live="openLiveScoring"
         />
       </div>
@@ -2308,9 +2338,10 @@ onBeforeUnmount(() => {
           <h2 class="section-title">{{ t('admin.admins') }}</h2>
           <div class="stack stack--sm">
             <div v-for="admin in admins" :key="admin.id" class="participant-item">
-              <div>
+              <span class="entry-avatar">{{ (admin.email || '?').slice(0, 2).toUpperCase() }}</span>
+              <div class="entry-name" style="display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap">
                 <span style="font-size: 0.875rem">{{ admin.email }}</span>
-                <span class="badge badge--neutral" style="margin-left: var(--space-2)">{{ t(`admin.${admin.role}`) }}</span>
+                <span class="badge badge--neutral">{{ t(`admin.${admin.role}`) }}</span>
               </div>
               <button
                 v-if="admin.user_id !== auth.user?.id"
@@ -2338,9 +2369,11 @@ onBeforeUnmount(() => {
               </select>
             </div>
           </div>
-          <button class="btn btn--primary btn--sm" type="button" :disabled="actionLoading || !addAdminForm.email" @click="addAdmin">
-            {{ t('admin.add') }}
-          </button>
+          <div class="inline-actions">
+            <button class="btn btn--primary btn--sm" type="button" :disabled="actionLoading || !addAdminForm.email" @click="addAdmin">
+              {{ t('admin.add') }}
+            </button>
+          </div>
         </section>
 
         <section class="admin-delete-zone">
@@ -2410,4 +2443,69 @@ onBeforeUnmount(() => {
   min-width: 3rem;
   text-align: center;
 }
+
+/* Entry rows (approve / roster) */
+.participant-item { gap: var(--space-3); }
+
+.entry-avatar {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--muted);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+}
+
+.entry-avatar--ok {
+  color: var(--primary);
+  background: var(--primary-muted);
+  border-color: transparent;
+}
+
+.entry-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.9375rem;
+}
+
+.entry-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.entry-icon-btn {
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+  transition: filter 0.15s, transform 0.1s;
+}
+
+.entry-icon-btn:active { transform: scale(0.94); }
+.entry-icon-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.entry-icon-btn--approve {
+  color: var(--primary-contrast, #fff);
+  background: var(--primary);
+}
+
+.entry-icon-btn--approve:hover { background: var(--primary-hover); }
+
+.entry-icon-btn--reject {
+  color: var(--danger);
+  background: var(--danger-bg);
+}
+
+.entry-icon-btn--reject:hover { filter: brightness(0.97); }
 </style>

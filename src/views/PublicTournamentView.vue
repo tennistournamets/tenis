@@ -123,16 +123,51 @@ function teamLabel(entryId) {
 
 function statusBadgeClass(status) {
   if (status === 'completed') {
+    return 'badge--done'
+  }
+  if (status === 'in_progress') {
+    return 'badge--live'
+  }
+  if (status === 'registration_open') {
     return 'badge--success'
   }
-  if (status === 'in_progress' || status === 'registration_open') {
-    return 'badge--warn'
-  }
   if (status === 'registration_closed') {
-    return 'badge--danger'
+    return 'badge--warn'
   }
   return 'badge--neutral'
 }
+
+const SPORT_ICONS = { tennis: '🎾', padel: '🏸', football: '⚽' }
+const FORMAT_ICONS = {
+  single_elimination: '🏆',
+  round_robin: '🔄',
+  groups_playoff: '🗂️',
+  double_elimination: '🔀',
+}
+const heroIcon = computed(() => SPORT_ICONS[tournament.value?.sport] || '🏆')
+const heroChips = computed(() => {
+  if (!tournament.value) return []
+  const chips = [
+    { icon: SPORT_ICONS[tournament.value.sport] || '🏆', label: t(`sport.${tournament.value.sport}`) },
+    { icon: FORMAT_ICONS[tournament.value.format] || '🏆', label: t(`tournamentFormat.${tournament.value.format}`) },
+  ]
+  if (sportCfg.value.supportsCategory) {
+    chips.push({
+      icon: tournament.value.category === 'doubles' ? '👥' : '👤',
+      label: t(`tournament.${tournament.value.category}`),
+    })
+  }
+  if (sportCfg.value.supportsSetFormat && tournament.value.set_format) {
+    chips.push({ icon: '⚙️', label: t(`format.${tournament.value.set_format}`) })
+  }
+  if (approvedEntries.value.length) {
+    chips.push({
+      icon: '🙌',
+      label: `${t('tournament.participants')}: ${approvedEntries.value.length}`,
+    })
+  }
+  return chips
+})
 
 function syncDefaultTab() {
   const s = tournament.value?.status
@@ -579,17 +614,21 @@ onBeforeUnmount(() => {
     </section>
 
     <template v-else-if="tournament">
-      <section class="card card--elevated stack stack--sm">
-        <h1 class="page-title">{{ tournament.name }}</h1>
-        <p v-if="tournament.description">{{ tournament.description }}</p>
-        <div class="badge-row">
-          <span class="badge" :class="statusBadgeClass(tournament.status)">
-            {{ t(`tournament.${tournament.status}`) }}
-          </span>
-          <span v-if="tournament.sport" class="badge badge--neutral">{{ t(`sport.${tournament.sport}`) }}</span>
-          <span v-if="tournament.format" class="badge badge--neutral">{{ t(`tournamentFormat.${tournament.format}`) }}</span>
-          <span v-if="sportCfg.supportsCategory" class="badge badge--neutral">{{ t(`tournament.${tournament.category}`) }}</span>
-          <span v-if="sportCfg.supportsSetFormat && tournament.set_format" class="badge badge--neutral">{{ t(`format.${tournament.set_format}`) }}</span>
+      <section class="card card--elevated pub-hero">
+        <span class="pub-hero__icon">{{ heroIcon }}</span>
+        <div class="pub-hero__body">
+          <div class="pub-hero__title-row">
+            <h1 class="page-title" style="margin: 0">{{ tournament.name }}</h1>
+            <span class="badge" :class="statusBadgeClass(tournament.status)">
+              {{ t(`tournament.${tournament.status}`) }}
+            </span>
+          </div>
+          <div class="pub-chips">
+            <span v-for="(chip, i) in heroChips" :key="i" class="pub-chip">
+              <span class="pub-chip__icon">{{ chip.icon }}</span>{{ chip.label }}
+            </span>
+          </div>
+          <p v-if="tournament.description" class="pub-hero__desc">{{ tournament.description }}</p>
         </div>
       </section>
 
@@ -605,20 +644,22 @@ onBeforeUnmount(() => {
           >
             {{ t('tournament.tabRegistration') }}
           </button>
-          <button
-            type="button"
-            class="tab tab--disabled"
-            role="tab"
-            :aria-selected="false"
-            :aria-disabled="true"
-            disabled
-          >
-            {{ t('tournament.tabBracket') }}
-          </button>
+          <span class="tooltip-wrapper" :data-tooltip="t('tournament.bracketLockedTooltip')">
+            <button
+              type="button"
+              class="tab tab--disabled"
+              role="tab"
+              :aria-selected="false"
+              :aria-disabled="true"
+              disabled
+            >
+              {{ t('tournament.tabBracket') }}
+            </button>
+          </span>
         </div>
 
         <div role="tabpanel">
-          <div class="grid-2">
+          <div :class="approvedEntries.length || pendingEntries.length ? 'grid-2' : 'pub-reg-solo'">
             <div class="stack stack--sm">
               <RegistrationForm
                 :tournament="tournament"
@@ -626,7 +667,7 @@ onBeforeUnmount(() => {
               />
             </div>
 
-            <div class="card stack stack--sm">
+            <div v-if="approvedEntries.length || pendingEntries.length" class="card stack stack--sm">
               <h3 class="section-title">{{ t('tournament.participants') }} ({{ approvedEntries.length }})</h3>
               <div v-if="approvedEntries.length" class="participant-list">
                 <div v-for="entry in approvedEntries" :key="entry.id" class="participant-item">
@@ -634,10 +675,9 @@ onBeforeUnmount(() => {
                   <span class="badge badge--success">{{ t('tournament.approved') }}</span>
                 </div>
               </div>
-              <p v-else-if="pendingEntries.length" class="alert alert--info">
+              <p v-else class="alert alert--info">
                 {{ t('tournament.pendingParticipantsHint', { count: pendingEntries.length }) }}
               </p>
-              <p v-else class="muted">{{ t('bracket.noParticipants') }}</p>
             </div>
           </div>
         </div>
@@ -715,3 +755,73 @@ onBeforeUnmount(() => {
     </template>
   </div>
 </template>
+
+<style scoped>
+.pub-hero {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.pub-hero__icon {
+  flex-shrink: 0;
+  width: 56px;
+  height: 56px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.7rem;
+  border-radius: 14px;
+  background: var(--primary-muted);
+}
+
+.pub-hero__body { min-width: 0; }
+
+.pub-hero__title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.pub-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.pub-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--text);
+  background: var(--surface-2, var(--surface-row));
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.pub-chip__icon {
+  font-size: 0.9rem;
+  line-height: 1;
+}
+
+.pub-reg-solo {
+  max-width: 560px;
+  margin: 0 auto;
+}
+
+.pub-hero__desc {
+  margin: var(--space-3) 0 0;
+  color: var(--text);
+  line-height: 1.6;
+}
+
+@media (max-width: 560px) {
+  .pub-hero { flex-direction: column; align-items: flex-start; gap: var(--space-3); }
+}
+</style>
