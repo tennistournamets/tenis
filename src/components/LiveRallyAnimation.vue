@@ -31,7 +31,7 @@ let celebrationTimer = null
 const burst = ref(null)
 let burstTimer = null
 
-const BURST_COLORS = ['var(--success)', '#d8e153', '#8fd9b0', '#e8e8e8']
+const BURST_COLORS = ['var(--success)', '#d8e153', '#8fd9b0', 'var(--muted)']
 const BURST_PARTICLES = Array.from({ length: 12 }, (_, i) => {
   const angle = (Math.PI * 2 * i) / 12 - Math.PI / 2
   const dist = 20 + (i % 3) * 5

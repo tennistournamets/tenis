@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 
 import BracketBoard from '../components/BracketBoard.vue'
 import StandingsTable from '../components/StandingsTable.vue'
+import RoundRobinCrossTable from '../components/RoundRobinCrossTable.vue'
 import GroupStageBoard from '../components/GroupStageBoard.vue'
 import DoubleElimBoard from '../components/DoubleElimBoard.vue'
 import LiveScoreViewerModal from '../components/LiveScoreViewerModal.vue'
@@ -55,16 +56,6 @@ const groupsView = computed(() =>
       }
     }),
 )
-const fixturesByRound = computed(() => {
-  const rounds = new Map()
-  for (const m of matches.value) {
-    if (!rounds.has(m.round_number)) rounds.set(m.round_number, [])
-    rounds.get(m.round_number).push(m)
-  }
-  return [...rounds.entries()]
-    .sort((a, b) => a[0] - b[0])
-    .map(([round, list]) => ({ round, list: list.sort((a, b) => a.match_number - b.match_number) }))
-})
 const matchSets = ref([])
 const liveScores = ref([])
 const selectedLiveMatchId = ref(null)
@@ -129,7 +120,7 @@ function statusBadgeClass(status) {
     return 'badge--live'
   }
   if (status === 'registration_open') {
-    return 'badge--success'
+    return 'badge--warn'
   }
   if (status === 'registration_closed') {
     return 'badge--warn'
@@ -686,30 +677,24 @@ onBeforeUnmount(() => {
       <template v-else-if="isRoundRobin">
         <div v-if="standings.length" class="card">
           <h3 class="section-title">{{ t('standings.title') }}</h3>
-          <StandingsTable :rows="standings" />
+          <StandingsTable :rows="standings" :family="sportCfg.scoringFamily" />
         </div>
-        <div v-if="matches.length" class="card" style="margin-top: var(--space-4)">
-          <h3 class="section-title">{{ t('standings.fixtures') }}</h3>
-          <div v-for="grp in fixturesByRound" :key="grp.round" class="rr-round">
-            <h4 class="muted" style="margin: 12px 0 4px">{{ t('tournament.round') }} {{ grp.round }}</h4>
-            <ul class="rr-fixtures">
-              <li v-for="m in grp.list" :key="m.id" class="rr-fixture">
-                <span class="rr-fixture__side">{{ entriesMap[m.side_a_entry_id]?.display_name || '—' }}</span>
-                <span class="rr-fixture__score">
-                  <template v-if="m.status === 'finished'">{{ m.side_a_score }} : {{ m.side_b_score }}</template>
-                  <template v-else>vs</template>
-                </span>
-                <span class="rr-fixture__side rr-fixture__side--right">{{ entriesMap[m.side_b_entry_id]?.display_name || '—' }}</span>
-              </li>
-            </ul>
-          </div>
-        </div>
-      </template>
+        <div v-if="matches.length" class="card rr-cross-card" style="margin-top: var(--space-4)">
+          <h3 class="section-title">{{ t('standings.crossTable') }}</h3>
+          <RoundRobinCrossTable
+            :matches="matches"
+            :entries-map="entriesMap"
+            :standings="standings"
+            :family="sportCfg.scoringFamily"
+            :live-scores-by-match="liveScoresByMatch"
+            @view-live="selectedLiveMatchId = $event.id"
+          />
+        </div>      </template>
 
       <template v-else-if="isGroupsPlayoff">
         <div v-if="groups.length" class="card">
           <h3 class="section-title">{{ t('admin.groupStage') }}</h3>
-          <GroupStageBoard :groups="groupsView" :entries-map="entriesMap" />
+          <GroupStageBoard :groups="groupsView" :entries-map="entriesMap" :family="sportCfg.scoringFamily" />
         </div>
         <div v-if="playoffMatches.length" class="card" style="margin-top: var(--space-4)">
           <h3 class="section-title">{{ t('admin.playoff') }}</h3>

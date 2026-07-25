@@ -3,6 +3,9 @@ import { useI18n } from 'vue-i18n'
 
 defineProps({
   rows: { type: Array, default: () => [] },
+  // 'goals' (football): full football-style columns; 'sets' (tennis/padel):
+  // no draws, sets won:lost instead of scored/conceded/diff.
+  family: { type: String, default: 'goals' },
 })
 const { t } = useI18n()
 </script>
@@ -16,11 +19,14 @@ const { t } = useI18n()
           <th class="standings__team">{{ t('standings.team') }}</th>
           <th :title="t('standings.played')">{{ t('standings.played') }}</th>
           <th :title="t('standings.won')">{{ t('standings.won') }}</th>
-          <th :title="t('standings.drawn')">{{ t('standings.drawn') }}</th>
+          <th v-if="family === 'goals'" :title="t('standings.drawn')">{{ t('standings.drawn') }}</th>
           <th :title="t('standings.lost')">{{ t('standings.lost') }}</th>
-          <th :title="t('standings.for')">{{ t('standings.for') }}</th>
-          <th :title="t('standings.against')">{{ t('standings.against') }}</th>
-          <th :title="t('standings.diff')">{{ t('standings.diff') }}</th>
+          <template v-if="family === 'goals'">
+            <th :title="t('standings.for')">{{ t('standings.for') }}</th>
+            <th :title="t('standings.against')">{{ t('standings.against') }}</th>
+            <th :title="t('standings.diff')">{{ t('standings.diff') }}</th>
+          </template>
+          <th v-else :title="t('standings.sets')">{{ t('standings.sets') }}</th>
           <th :title="t('standings.points')">{{ t('standings.points') }}</th>
         </tr>
       </thead>
@@ -30,11 +36,14 @@ const { t } = useI18n()
           <td class="standings__team">{{ r.display_name }}</td>
           <td>{{ r.played }}</td>
           <td>{{ r.won }}</td>
-          <td>{{ r.drawn }}</td>
+          <td v-if="family === 'goals'">{{ r.drawn }}</td>
           <td>{{ r.lost }}</td>
-          <td>{{ r.score_for }}</td>
-          <td>{{ r.score_against }}</td>
-          <td>{{ r.diff }}</td>
+          <template v-if="family === 'goals'">
+            <td>{{ r.score_for }}</td>
+            <td>{{ r.score_against }}</td>
+            <td>{{ r.diff }}</td>
+          </template>
+          <td v-else>{{ r.score_for }}:{{ r.score_against }}</td>
           <td><strong>{{ r.points }}</strong></td>
         </tr>
       </tbody>
@@ -78,7 +87,7 @@ const { t } = useI18n()
   font-family: var(--font-mono);
   color: var(--muted);
 }
-.standings__team {
+.standings .standings__team {
   text-align: left;
   font-weight: 600;
   color: var(--text);

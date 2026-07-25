@@ -1,15 +1,19 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-import { RouterLink, useRouter } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 
 import BracketBoard from '../components/BracketBoard.vue'
 import StandingsTable from '../components/StandingsTable.vue'
+import RoundRobinCrossTable from '../components/RoundRobinCrossTable.vue'
+import RoundRobinStandings from '../components/RoundRobinStandings.vue'
+import MatchScoreModal from '../components/MatchScoreModal.vue'
 import FootballScoreEditor from '../components/FootballScoreEditor.vue'
 import GroupStageBoard from '../components/GroupStageBoard.vue'
 import DoubleElimBoard from '../components/DoubleElimBoard.vue'
 import { scoringFamily, getSportConfig } from '../lib/sportConfig'
 import LiveScoringModal from '../components/LiveScoringModal.vue'
+import TournamentQrModal from '../components/TournamentQrModal.vue'
 import ScoreEditor from '../components/ScoreEditor.vue'
 import { entryMemberNames } from '../lib/entryDisplay'
 import { confirmDialog } from '../lib/confirmDialog'
@@ -25,6 +29,7 @@ const props = defineProps({
 })
 
 const { t } = useI18n()
+const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 
@@ -44,6 +49,7 @@ const loading = ref(false)
 const actionLoading = ref(false)
 const errorText = ref('')
 const copyFeedback = ref(false)
+const qrModalOpen = ref(false)
 
 const statusValue = ref('draft')
 const settingsForm = reactive({
@@ -232,6 +238,13 @@ const canEditFinalScores = computed(() => isTournamentActive.value && canManageT
 const showStartButton = computed(() => {
   const s = tournament.value?.status
   return canManageTournament.value && (s === 'draft' || s === 'registration_open' || s === 'registration_closed')
+})
+
+// Concrete reason why "Start tournament" is disabled (shown as tooltip).
+const startBlockReason = computed(() => {
+  if (canStartTournament.value) return null
+  if (tournament.value?.status !== 'registration_closed') return t('admin.startNeedRegClosed')
+  return t('admin.startNeedBracket')
 })
 
 const isSettingsDropdownDisabled = computed(() => isTournamentActive.value || isTournamentFinished.value)
@@ -789,17 +802,17 @@ const groupsView = computed(() =>
       }
     }),
 )
-const fixturesByRound = computed(() => {
-  const rounds = new Map()
-  for (const m of matches.value) {
-    const r = m.round_number
-    if (!rounds.has(r)) rounds.set(r, [])
-    rounds.get(r).push(m)
-  }
-  return [...rounds.entries()]
-    .sort((a, b) => a[0] - b[0])
-    .map(([round, list]) => ({ round, list: list.sort((a, b) => a.match_number - b.match_number) }))
-})
+const selectedRrMatch = ref(null)
+
+function openRrMatch(match) {
+  if (!canEditFinalScores.value && !canEditScores.value) return
+  selectedRrMatch.value = match
+}
+
+function startLiveFromRrModal(match) {
+  selectedRrMatch.value = null
+  openLiveScoring(match)
+}
 
 async function formRandomPairs() {
   if (unpairedCount.value % 2 !== 0) {
@@ -1437,6 +1450,15 @@ onMounted(async () => {
   await auth.init()
   await loadAll()
   syncTabFromHash()
+
+  // Wizard redirect with ?qr=1 opens the QR modal once; strip the flag so refresh doesn't reopen it.
+  if (route.query.qr === '1') {
+    if (tournament.value?.slug) {
+      qrModalOpen.value = true
+    }
+    const { qr, ...rest } = route.query
+    router.replace({ query: rest, hash: route.hash })
+  }
 })
 
 onBeforeUnmount(() => {
@@ -1471,11 +1493,13 @@ onBeforeUnmount(() => {
       <section class="card card--elevated admin-tournament-overview stack stack--sm" aria-labelledby="adm-tournament-title">
         <div class="admin-tournament-overview__top">
           <div class="admin-tournament-overview__title-block stack stack--sm">
-            <h1 id="adm-tournament-title" class="page-title" style="margin: 0">{{ tournament.name }}</h1>
-            <div class="badge-row">
+            <div class="admin-tournament-overview__title-row">
+              <h1 id="adm-tournament-title" class="page-title" style="margin: 0">{{ tournament.name }}</h1>
               <span class="badge" :class="statusBadgeClass(tournament.status)">
                 {{ t(`tournament.${tournament.status}`) }}
               </span>
+            </div>
+            <div class="badge-row">
               <span v-if="tournament.sport" class="badge badge--neutral">{{ t(`sport.${tournament.sport}`) }}</span>
               <span v-if="tournament.format" class="badge badge--neutral">{{ t(`tournamentFormat.${tournament.format}`) }}</span>
               <span v-if="sportCfg.supportsCategory" class="badge badge--neutral">{{ t(`tournament.${tournament.category}`) }}</span>
@@ -1493,10 +1517,19 @@ onBeforeUnmount(() => {
               {{ copyFeedback ? t('share.copied') : t('share.copyLink') }}
             </button>
 
+            <button
+              v-if="showPublicShareActions"
+              class="btn btn--outline btn--sm"
+              type="button"
+              @click="qrModalOpen = true"
+            >
+              {{ t('share.qrButton') }}
+            </button>
+
             <span
               v-if="showStartButton"
               class="tooltip-wrapper"
-              :data-tooltip="!canStartTournament ? t('admin.startTournamentTooltip') : undefined"
+              :data-tooltip="startBlockReason || undefined"
             >
               <button
                 class="btn btn--success btn--sm"
@@ -1534,7 +1567,7 @@ onBeforeUnmount(() => {
           aria-controls="panel-entries"
           @click="setTab('entries')"
         >
-          {{ t('admin.tabEntries') }}
+          {{ isTournamentActive ? t('admin.tabParticipants') : t('admin.tabEntries') }}
           <span v-if="pendingEntries.length" class="tab__badge">{{ pendingEntries.length }}</span>
         </button>
         <button
@@ -1590,9 +1623,11 @@ onBeforeUnmount(() => {
         :class="{ 'tab-panel--active': activeTab === 'entries' }"
       >
         <section class="card stack stack--sm">
-          <h2 class="section-title">{{ t('tournament.registration') }} — {{ t('admin.entriesSection') }}</h2>
+          <h2 class="section-title">
+            {{ isTournamentActive ? t('admin.participantsList') : `${t('tournament.registration')} — ${t('admin.entriesSection')}` }}
+          </h2>
 
-          <div class="admin-add-entry" :class="{ 'admin-add-entry--open': addEntryAccordionOpen }">
+          <div v-if="!isTournamentActive" class="admin-add-entry" :class="{ 'admin-add-entry--open': addEntryAccordionOpen }">
             <h3 class="admin-add-entry__heading">
               <button
                 id="adm-add-entry-trigger"
@@ -1634,7 +1669,7 @@ onBeforeUnmount(() => {
               <form class="stack stack--sm" @submit.prevent="addEntryManually">
                 <div class="grid-2 grid-2--admin">
                   <div class="form-field">
-                    <label for="adm-add-m1">{{ t('registrationForm.memberOne') }}</label>
+                    <label for="adm-add-m1">{{ isGoalsSport ? t('registrationForm.teamName') : tournament.category === 'doubles' ? t('registrationForm.memberOne') : t('registrationForm.member') }}</label>
                     <input
                       id="adm-add-m1"
                       v-model="addEntryForm.memberOne"
@@ -1668,7 +1703,7 @@ onBeforeUnmount(() => {
                       :disabled="actionLoading"
                     />
                   </div>
-                  <div class="form-field">
+                  <div v-if="tournament.category === 'doubles' || isGoalsSport" class="form-field">
                     <label for="adm-add-display">{{ t('registrationForm.displayName') }}</label>
                     <input
                       id="adm-add-display"
@@ -1711,9 +1746,9 @@ onBeforeUnmount(() => {
             </div>
           </div>
 
-          <div class="divider" />
+          <div v-if="!isTournamentActive" class="divider" />
 
-          <div>
+          <div v-if="!isTournamentActive">
             <div class="admin-list-header" style="margin-bottom: var(--space-3)">
               <h3 class="section-title" style="font-size: 1rem; margin: 0">
                 {{ t('admin.pendingEntries') }}
@@ -1760,7 +1795,7 @@ onBeforeUnmount(() => {
             <p v-else class="muted">{{ t('admin.noPending') }}</p>
           </div>
 
-          <div class="divider" />
+          <div v-if="!isTournamentActive" class="divider" />
 
           <div>
             <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.75rem">
@@ -2046,24 +2081,14 @@ onBeforeUnmount(() => {
 
           <section v-if="standings.length" class="card stack stack--sm" style="margin-top: var(--space-4)">
             <h2 class="section-title">{{ t('standings.title') }}</h2>
-            <StandingsTable :rows="standings" />
-          </section>
-
-          <section v-if="matches.length" class="card stack stack--sm" style="margin-top: var(--space-4)">
-            <h2 class="section-title">{{ t('standings.fixtures') }}</h2>
-            <div v-for="grp in fixturesByRound" :key="grp.round" class="rr-round">
-              <h3 class="muted" style="margin: 12px 0 4px">{{ t('tournament.round') }} {{ grp.round }}</h3>
-              <ul class="rr-fixtures">
-                <li v-for="m in grp.list" :key="m.id" class="rr-fixture">
-                  <span class="rr-fixture__side">{{ entriesMap[m.side_a_entry_id]?.display_name || '—' }}</span>
-                  <span class="rr-fixture__score">
-                    <template v-if="m.status === 'finished'">{{ m.side_a_score }} : {{ m.side_b_score }}</template>
-                    <template v-else>vs</template>
-                  </span>
-                  <span class="rr-fixture__side rr-fixture__side--right">{{ entriesMap[m.side_b_entry_id]?.display_name || '—' }}</span>
-                </li>
-              </ul>
-            </div>
+            <RoundRobinStandings
+              :rows="standings"
+              :matches="matches"
+              :entries-map="entriesMap"
+              :family="tournamentScoringFamily"
+              :live-scores-by-match="liveScoresByMatch"
+              @view-live="openLiveScoring"
+            />
           </section>
         </template>
 
@@ -2098,7 +2123,7 @@ onBeforeUnmount(() => {
 
           <section v-if="hasGroups" class="card stack stack--sm" style="margin-top: var(--space-4)">
             <h2 class="section-title">{{ t('admin.groupStage') }}</h2>
-            <GroupStageBoard :groups="groupsView" :entries-map="entriesMap" />
+            <GroupStageBoard :groups="groupsView" :entries-map="entriesMap" :family="tournamentScoringFamily" />
           </section>
 
           <section v-if="hasPlayoff" class="card stack stack--sm" style="margin-top: var(--space-4)">
@@ -2211,8 +2236,30 @@ onBeforeUnmount(() => {
         class="tab-panel"
         :class="{ 'tab-panel--active': activeTab === 'scores' }"
       >
+        <!-- Round-robin: same crosstable as the bracket tab (no artificial rounds) -->
+        <template v-if="isRoundRobin">
+          <section class="card stack stack--sm rr-cross-card">
+            <h2 class="section-title">{{ t('standings.crossTable') }}</h2>
+            <p class="muted">{{ t('standings.clickToScore') }}</p>
+            <RoundRobinCrossTable
+              :matches="matches"
+              :entries-map="entriesMap"
+              :standings="standings"
+              :family="tournamentScoringFamily"
+              :clickable="canEditFinalScores || canEditScores"
+              :live-scores-by-match="liveScoresByMatch"
+              @select-match="openRrMatch"
+              @view-live="openLiveScoring"
+            />
+          </section>
+
+          <section v-if="standings.length" class="card stack stack--sm" style="margin-top: var(--space-4)">
+            <h2 class="section-title">{{ t('standings.title') }}</h2>
+            <StandingsTable :rows="standings" :family="tournamentScoringFamily" />
+          </section>
+        </template>
         <FootballScoreEditor
-          v-if="isGoalsSport"
+          v-else-if="isGoalsSport"
           :matches="matches"
           :entries-map="entriesMap"
           :disabled="!canEditFinalScores"
@@ -2405,45 +2452,33 @@ onBeforeUnmount(() => {
         :team-b="teamLabel(selectedLiveMatch.side_b_entry_id)"
         @close="selectedLiveMatch = null"
       />
+
+      <TournamentQrModal
+        v-if="qrModalOpen && tournament.slug"
+        :slug="tournament.slug"
+        :name="tournament.name"
+        @close="qrModalOpen = false"
+      />
+
+      <MatchScoreModal
+        v-if="selectedRrMatch"
+        :match="selectedRrMatch"
+        :entries-map="entriesMap"
+        :family="tournamentScoringFamily"
+        :set-format="tournament.set_format || 'best_of_3'"
+        :sets="setsByMatch[selectedRrMatch.id] || []"
+        :can-edit-final="canEditFinalScores"
+        :can-live-score="canEditScores && !isGoalsSport"
+        :live-status="liveScoresByMatch[selectedRrMatch.id]?.status || null"
+        @close="selectedRrMatch = null"
+        @saved="loadAll(true)"
+        @start-live="startLiveFromRrModal"
+      />
     </template>
   </div>
 </template>
 
 <style scoped>
-.rr-fixtures {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.rr-fixture {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  border: 1px solid var(--border, #e5e7eb);
-  border-radius: var(--radius, 8px);
-}
-.rr-fixture__side {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.rr-fixture__side--right {
-  text-align: right;
-}
-.rr-fixture__score {
-  font-variant-numeric: tabular-nums;
-  font-weight: 600;
-  color: var(--text-muted, #6b7280);
-  min-width: 3rem;
-  text-align: center;
-}
-
 /* Entry rows (approve / roster) */
 .participant-item { gap: var(--space-3); }
 

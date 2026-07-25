@@ -154,7 +154,7 @@ function statusBadgeClass(status) {
     return 'badge--live'
   }
   if (status === 'registration_open') {
-    return 'badge--success'
+    return 'badge--warn'
   }
   return 'badge--neutral'
 }
@@ -381,8 +381,8 @@ onMounted(async () => {
 }
 
 .t-card__next--live {
-  color: var(--accent-text);
-  background: var(--accent-bg);
+  color: var(--success-text);
+  background: var(--success-bg);
 }
 
 .t-card__next--setup {

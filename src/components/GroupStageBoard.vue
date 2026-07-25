@@ -5,6 +5,7 @@ import StandingsTable from './StandingsTable.vue'
 defineProps({
   groups: { type: Array, default: () => [] }, // [{ id, name, standings, rounds }]
   entriesMap: { type: Object, default: () => ({}) },
+  family: { type: String, default: 'goals' },
 })
 const { t } = useI18n()
 
@@ -18,7 +19,7 @@ function name(map, id) {
     <section v-for="g in groups" :key="g.id" class="card stack stack--sm group-board__group">
       <h3 class="section-title">{{ t('admin.group') }} {{ g.name }}</h3>
 
-      <StandingsTable :rows="g.standings" />
+      <StandingsTable :rows="g.standings" :family="family" />
 
       <div v-if="g.rounds.length" class="group-board__fixtures">
         <div v-for="grp in g.rounds" :key="grp.round" class="rr-round">

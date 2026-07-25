@@ -245,8 +245,8 @@ async function stopLive() {
   font-size: 0.65rem;
   font-weight: 700;
   letter-spacing: 0.08em;
-  color: var(--accent-text);
-  background: var(--accent-bg);
+  color: var(--success-text);
+  background: var(--success-bg);
   border-radius: 999px;
 }
 

@@ -25,7 +25,10 @@ const form = reactive({
   format: 'single_elimination',
   category: 'singles',
   set_format: 'best_of_3',
+  contact_phone: '',
+  contact_email: '',
   is_public: true,
+  generate_qr: false,
   doubles_pairing_random: false,
 })
 
@@ -97,6 +100,8 @@ async function createTournament() {
         : null,
     p_format_config: {},
     p_scoring_config: {},
+    p_contact_phone: form.contact_phone.trim() || null,
+    p_contact_email: form.contact_email.trim() || null,
   })
 
   saving.value = false
@@ -107,7 +112,8 @@ async function createTournament() {
   }
 
   if (newId) {
-    await router.replace({ name: 'admin-tournament', params: { id: newId } })
+    const query = form.is_public && form.generate_qr ? { qr: '1' } : undefined
+    await router.replace({ name: 'admin-tournament', params: { id: newId }, query })
   } else {
     await router.replace({ name: 'admin-tournaments' })
   }
@@ -219,6 +225,22 @@ onMounted(async () => {
         </section>
 
         <section class="wizard__group">
+          <h2 class="wizard__eyebrow">{{ t('admin.wizardContacts') }}</h2>
+
+          <div class="wizard__grid2">
+            <div class="form-field">
+              <label for="create-phone">{{ t('admin.contactPhone') }}</label>
+              <input id="create-phone" v-model="form.contact_phone" class="input" type="tel" placeholder="+370 600 00000" />
+            </div>
+
+            <div class="form-field">
+              <label for="create-email">{{ t('admin.contactEmail') }}</label>
+              <input id="create-email" v-model="form.contact_email" class="input" type="email" placeholder="info@example.com" />
+            </div>
+          </div>
+        </section>
+
+        <section class="wizard__group">
           <h2 class="wizard__eyebrow">{{ t('admin.wizardPublish') }}</h2>
 
           <label class="wizard__toggle">
@@ -226,6 +248,14 @@ onMounted(async () => {
             <span class="wizard__toggle-body">
               <span class="wizard__toggle-title">{{ t('admin.isPublic') }}</span>
               <span class="wizard__toggle-hint">{{ t('admin.isPublicHint') }}</span>
+            </span>
+          </label>
+
+          <label class="wizard__toggle" :class="{ 'wizard__toggle--disabled': !form.is_public }">
+            <input v-model="form.generate_qr" type="checkbox" :disabled="!form.is_public" />
+            <span class="wizard__toggle-body">
+              <span class="wizard__toggle-title">{{ t('admin.wizardQr') }}</span>
+              <span class="wizard__toggle-hint">{{ t('admin.wizardQrHint') }}</span>
             </span>
           </label>
         </section>
@@ -431,6 +461,15 @@ onMounted(async () => {
   border-color: var(--border-strong);
 }
 
+.wizard__toggle--disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.wizard__toggle--disabled:hover {
+  border-color: var(--border);
+}
+
 .wizard__toggle input {
   margin-top: 2px;
   accent-color: var(--primary);
@@ -470,15 +509,10 @@ onMounted(async () => {
 .wizard__preview-card {
   padding: var(--space-5);
   border-radius: var(--radius);
-  background: #101512;
-  color: #F2F5F1;
-  border: 1px solid transparent;
-  box-shadow: var(--shadow-lg);
-}
-
-:root[data-theme='dark'] .wizard__preview-card {
   background: var(--surface-raised);
-  border-color: var(--border-strong);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-lg);
 }
 
 .wizard__preview-top {
@@ -496,7 +530,8 @@ onMounted(async () => {
   justify-content: center;
   font-size: 1.3rem;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--surface-row);
+  border: 1px solid var(--border);
 }
 
 .wizard__preview-badge {
@@ -505,8 +540,8 @@ onMounted(async () => {
   padding: 4px 10px;
   font-size: 0.72rem;
   font-weight: 600;
-  color: var(--lime);
-  background: rgba(198, 242, 78, 0.14);
+  color: var(--success-text);
+  background: var(--success-bg);
   border-radius: 999px;
 }
 
@@ -520,7 +555,7 @@ onMounted(async () => {
 
 .wizard__preview-meta {
   font-size: 0.9rem;
-  color: #96A39A;
+  color: var(--muted);
   margin: 0;
 }
 
@@ -528,7 +563,7 @@ onMounted(async () => {
   margin: var(--space-3) 0 0;
   font-size: 0.9rem;
   line-height: 1.6;
-  color: #C7CCC6;
+  color: var(--text-muted);
 }
 
 .wizard__foot {

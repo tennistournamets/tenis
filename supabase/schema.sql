@@ -94,10 +94,15 @@ create table if not exists tournaments (
   doubles_pairing_mode doubles_pairing_mode,
   format_config jsonb not null default '{}'::jsonb,
   scoring_config jsonb not null default '{}'::jsonb,
+  contact_phone text,
+  contact_email text,
   created_by uuid not null references auth.users (id) on delete restrict,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table tournaments add column if not exists contact_phone text;
+alter table tournaments add column if not exists contact_email text;
 
 create table if not exists tournament_admins (
   id uuid primary key default gen_random_uuid(),
@@ -538,6 +543,20 @@ drop function if exists create_tournament(
   uuid
 );
 
+drop function if exists create_tournament(
+  text,
+  text,
+  text,
+  sport,
+  tournament_format,
+  tournament_category,
+  set_format,
+  boolean,
+  doubles_pairing_mode,
+  jsonb,
+  jsonb
+);
+
 create or replace function create_tournament(
   p_name text,
   p_slug text,
@@ -549,7 +568,9 @@ create or replace function create_tournament(
   p_is_public boolean default true,
   p_doubles_pairing_mode doubles_pairing_mode default null,
   p_format_config jsonb default '{}'::jsonb,
-  p_scoring_config jsonb default '{}'::jsonb
+  p_scoring_config jsonb default '{}'::jsonb,
+  p_contact_phone text default null,
+  p_contact_email text default null
 )
 returns uuid
 language plpgsql
@@ -583,7 +604,8 @@ begin
 
   insert into tournaments (
     name, slug, description, sport, format, category, set_format, status,
-    is_public, doubles_pairing_mode, format_config, scoring_config, created_by
+    is_public, doubles_pairing_mode, format_config, scoring_config,
+    contact_phone, contact_email, created_by
   )
   values (
     p_name,
@@ -598,6 +620,8 @@ begin
     case when v_category = 'doubles' then coalesce(p_doubles_pairing_mode, 'pre_agreed') else null end,
     coalesce(p_format_config, '{}'::jsonb),
     coalesce(p_scoring_config, '{}'::jsonb),
+    nullif(btrim(coalesce(p_contact_phone, '')), ''),
+    nullif(btrim(coalesce(p_contact_email, '')), ''),
     v_uid
   )
   returning id into v_id;
@@ -2497,7 +2521,7 @@ using (
   )
 );
 
-grant execute on function create_tournament(text, text, text, sport, tournament_format, tournament_category, set_format, boolean, doubles_pairing_mode, jsonb, jsonb) to authenticated;
+grant execute on function create_tournament(text, text, text, sport, tournament_format, tournament_category, set_format, boolean, doubles_pairing_mode, jsonb, jsonb, text, text) to authenticated;
 grant execute on function register_entry(text, tournament_category, text, text, text, text) to anon, authenticated;
 grant execute on function normalize_contact(text) to authenticated;
 grant execute on function hash_contact(text) to authenticated;
