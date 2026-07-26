@@ -504,25 +504,28 @@ function scheduleReload() {
 }
 
 function onMatchSetsChange(payload) {
-  const matchId = payload.new?.match_id || payload.old?.match_id
-  if (!matchId) {
-    return
-  }
-  const belongsToTournament = matches.value.some((m) => m.id === matchId)
-  if (!belongsToTournament) {
-    return
-  }
   if (payload.eventType === 'DELETE') {
+    // DELETE payloads may only carry the row id — remove by id, no
+    // tournament check (ids of other tournaments are simply not in the list).
     if (!payload.old?.id) return
     matchSets.value = matchSets.value.filter((row) => row.id !== payload.old.id)
     return
   }
-  if (!payload.new?.id) return
-  const idx = matchSets.value.findIndex((row) => row.id === payload.new.id)
+  const row = payload.new
+  if (!row?.id || !row.match_id) return
+  const belongsToTournament = matches.value.some((m) => m.id === row.match_id)
+  if (!belongsToTournament) {
+    return
+  }
+  const idx = matchSets.value.findIndex((item) => item.id === row.id)
   if (idx >= 0) {
-    matchSets.value[idx] = payload.new
+    matchSets.value[idx] = row
   } else {
-    matchSets.value = [...matchSets.value, payload.new]
+    // Drop any stale row occupying the same (match, set) slot before adding.
+    matchSets.value = [
+      ...matchSets.value.filter((item) => !(item.match_id === row.match_id && item.set_index === row.set_index)),
+      row,
+    ]
   }
 }
 

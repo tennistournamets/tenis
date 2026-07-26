@@ -1,10 +1,31 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, defineAsyncComponent, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { pointLabel, scoreLine } from '../lib/useTennisScoring'
+import { displaySides, useDeferredChangeover } from '../lib/liveSides'
 
 import LiveRallyAnimation from './LiveRallyAnimation.vue'
+
+// 3D court is a lazy chunk (three.js); the 2D SVG scene stays as fallback
+// for reduced-motion, missing WebGL, or a failed init.
+const LiveRallyScene3D = defineAsyncComponent(() => import('./LiveRallyScene3D.vue'))
+
+function webglAvailable() {
+  try {
+    const canvas = document.createElement('canvas')
+    return Boolean(canvas.getContext('webgl2') || canvas.getContext('webgl'))
+  } catch {
+    return false
+  }
+}
+
+const reducedMotion =
+  typeof window !== 'undefined' && window.matchMedia
+    ? window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    : false
+
+const use3D = ref(!reducedMotion && webglAvailable())
 
 const props = defineProps({
   liveScore: {
@@ -31,6 +52,16 @@ const statusText = computed(() => {
   if (props.liveScore?.status === 'stopped') return t('live.stopped')
   return t('live.active')
 })
+
+// Court sides follow the scorer's orientation (stored on the live row).
+// Changeover flips wait for the game-win celebration to finish.
+const autoChangeover = useDeferredChangeover(state)
+const sides = computed(() => displaySides(props.liveScore, state.value, autoChangeover.value))
+const swapped = computed(() => sides.value[0] === 'b')
+
+function teamName(side) {
+  return side === 'a' ? props.teamA : props.teamB
+}
 </script>
 
 <template>
@@ -44,16 +75,26 @@ const statusText = computed(() => {
         <button class="modal-close" type="button" :aria-label="t('actions.close')" @click="emit('close')">×</button>
       </div>
 
-      <LiveRallyAnimation :state="state" :team-a="teamA" :team-b="teamB" />
+      <LiveRallyScene3D
+        v-if="use3D"
+        :state="state"
+        :team-a="teamA"
+        :team-b="teamB"
+        :swapped="swapped"
+        @fallback="use3D = false"
+      />
+      <LiveRallyAnimation v-else :state="state" :team-a="teamA" :team-b="teamB" :swapped="swapped" />
 
+      <!-- Score rows keep a fixed A/B order — only the court figures swap ends. -->
       <div class="live-scoreboard">
-        <div class="live-scoreboard__row" :class="{ 'live-scoreboard__row--winner': state?.winner === 'a' }">
-          <strong>{{ teamA }}</strong>
-          <span class="live-scoreboard__point">{{ pointLabel(state, 'a') }}</span>
-        </div>
-        <div class="live-scoreboard__row" :class="{ 'live-scoreboard__row--winner': state?.winner === 'b' }">
-          <strong>{{ teamB }}</strong>
-          <span class="live-scoreboard__point">{{ pointLabel(state, 'b') }}</span>
+        <div
+          v-for="side in ['a', 'b']"
+          :key="side"
+          class="live-scoreboard__row"
+          :class="{ 'live-scoreboard__row--winner': state?.winner === side }"
+        >
+          <strong>{{ teamName(side) }}</strong>
+          <span class="live-scoreboard__point">{{ pointLabel(state, side) }}</span>
         </div>
       </div>
 

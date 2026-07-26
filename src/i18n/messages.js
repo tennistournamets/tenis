@@ -395,6 +395,8 @@ export const messages = {
       setN: '{n}-й сет',
       sets: 'сеты',
       games: 'геймы',
+      swapSides: 'Поменять стороны',
+      autoSwap: 'Авто-смена сторон',
     },
     errors: {
       generic: 'Что-то пошло не так',
@@ -1047,6 +1049,8 @@ export const messages = {
       setN: 'Set {n}',
       sets: 'sets',
       games: 'games',
+      swapSides: 'Swap sides',
+      autoSwap: 'Auto swap sides',
     },
     errors: {
       generic: 'Something went wrong',
@@ -1699,6 +1703,8 @@ export const messages = {
       setN: '{n} setas',
       sets: 'setai',
       games: 'geimai',
+      swapSides: 'Sukeisti puses',
+      autoSwap: 'Automatinis pusių keitimas',
     },
     errors: {
       generic: 'Įvyko klaida',

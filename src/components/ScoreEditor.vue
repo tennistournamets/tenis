@@ -262,28 +262,30 @@ async function save(match) {
           </div>
         </div>
 
-        <button class="btn btn--primary btn--sm" type="button" :disabled="disabled || !canScore(match)" @click="save(match)">
-          {{ t('admin.saveScore') }}
-        </button>
-        <Transition name="saved-pop">
-          <span v-if="savedFlash[match.id]" class="score-saved-badge">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
-            {{ t('actions.saved') }}
+        <div class="score-match__actions">
+          <button class="btn btn--primary btn--sm" type="button" :disabled="disabled || !canScore(match)" @click="save(match)">
+            {{ t('admin.saveScore') }}
+          </button>
+          <Transition name="saved-pop">
+            <span v-if="savedFlash[match.id]" class="score-saved-badge">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+              {{ t('actions.saved') }}
+            </span>
+          </Transition>
+          <button
+            v-if="canLiveScore"
+            class="btn btn--ghost btn--sm"
+            type="button"
+            :disabled="!canScore(match)"
+            @click="emit('start-live', match)"
+          >
+            {{ liveStatus(match.id) === 'active' ? t('live.openLive') : t('live.start') }}
+          </button>
+          <span v-if="liveStatus(match.id) === 'active'" class="badge badge--warn">
+            <span class="live-dot"></span>
+            {{ t('live.live') }}
           </span>
-        </Transition>
-        <button
-          v-if="canLiveScore"
-          class="btn btn--ghost btn--sm"
-          type="button"
-          :disabled="!canScore(match)"
-          @click="emit('start-live', match)"
-        >
-          {{ liveStatus(match.id) === 'active' ? t('live.openLive') : t('live.start') }}
-        </button>
-        <span v-if="liveStatus(match.id) === 'active'" class="badge badge--warn">
-          <span class="live-dot"></span>
-          {{ t('live.live') }}
-        </span>
+        </div>
 
         <p v-if="(setForms[match.id] || [])[0]?.error" class="error-text" style="margin-top: var(--space-2)">
           {{ (setForms[match.id] || [])[0]?.error }}
@@ -296,11 +298,17 @@ async function save(match) {
 </template>
 
 <style scoped>
+.score-match__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
 .score-saved-badge {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  margin-left: var(--space-2);
   padding: 4px 11px;
   font-size: 0.8rem;
   font-weight: 600;

@@ -3,9 +3,8 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { normalizeTennisState, pointLabel } from '../lib/useTennisScoring'
+import { useDeferredChangeover } from '../lib/liveSides'
 import { supabase } from '../lib/supabase'
-
-import LiveRallyAnimation from './LiveRallyAnimation.vue'
 
 const props = defineProps({
   match: {
@@ -38,9 +37,12 @@ const pendingTaps = ref(0)
 watch(
   () => props.liveScore,
   (next) => {
-    if (next && next.match_id === props.match.id) {
-      currentLiveScore.value = next
-    }
+    if (!next || next.match_id !== props.match.id) return
+    // Ignore stale realtime echoes: an event older than what we already
+    // hold (e.g. arriving after our own RPC response) must not roll back.
+    const current = currentLiveScore.value
+    if (current && (next.revision ?? 0) < (current.revision ?? 0)) return
+    currentLiveScore.value = next
   },
   { deep: true },
 )
@@ -64,6 +66,67 @@ function completedSets(side) {
     .join(' ')
 }
 
+// Court sides. While the live row does not exist yet the counter can already
+// arrange the players; the pending values are flushed right after start.
+const pendingSwapped = ref(false)
+const pendingAuto = ref(true)
+
+const baseSwapped = computed(() =>
+  currentLiveScore.value ? Boolean(currentLiveScore.value.sides_swapped) : pendingSwapped.value,
+)
+const autoSides = computed(() =>
+  currentLiveScore.value ? currentLiveScore.value.sides_auto !== false : pendingAuto.value,
+)
+// Deferred: after a completed game the flip waits for the celebration.
+const autoChangeover = useDeferredChangeover(state)
+const displaySwapped = computed(
+  () => baseSwapped.value !== (autoSides.value ? autoChangeover.value : false),
+)
+const sides = computed(() => (displaySwapped.value ? ['b', 'a'] : ['a', 'b']))
+
+function teamName(side) {
+  return side === 'a' ? props.teamA : props.teamB
+}
+
+async function setSides({ swapped = null, auto = null }) {
+  pendingSwapped.value = swapped === null ? baseSwapped.value : swapped
+  pendingAuto.value = auto === null ? autoSides.value : auto
+
+  if (!currentLiveScore.value) return
+
+  errorText.value = ''
+  const { data, error } = await supabase.rpc('set_live_sides', {
+    p_match_id: props.match.id,
+    p_swapped: swapped,
+    p_auto: auto,
+  })
+
+  if (error) {
+    errorText.value = error.message
+    return
+  }
+
+  currentLiveScore.value = data
+  emit('changed')
+}
+
+function toggleSwapSides() {
+  setSides({ swapped: !baseSwapped.value })
+}
+
+function toggleAutoSides(event) {
+  setSides({ auto: event.target.checked })
+}
+
+async function flushPendingSides() {
+  const live = currentLiveScore.value
+  if (!live) return
+  const sameSwapped = Boolean(live.sides_swapped) === pendingSwapped.value
+  const sameAuto = (live.sides_auto !== false) === pendingAuto.value
+  if (sameSwapped && sameAuto) return
+  await setSides({ swapped: pendingSwapped.value, auto: pendingAuto.value })
+}
+
 async function ensureStarted() {
   if (currentLiveScore.value?.status === 'active' || currentLiveScore.value?.status === 'finished') {
     return
@@ -82,6 +145,7 @@ async function ensureStarted() {
   }
 
   currentLiveScore.value = data
+  await flushPendingSides()
   emit('changed')
 }
 
@@ -166,18 +230,34 @@ async function stopLive() {
         <button class="modal-close" type="button" :aria-label="t('actions.close')" @click="emit('close')">×</button>
       </div>
 
-      <LiveRallyAnimation :state="state" :team-a="teamA" :team-b="teamB" />
+      <div class="live-sides">
+        <label class="switch">
+          <input type="checkbox" :checked="autoSides" @change="toggleAutoSides" />
+          <span class="switch__track"><span class="switch__thumb"></span></span>
+          <span class="switch__label">{{ t('live.autoSwap') }}</span>
+        </label>
+        <button
+          class="live-sides__swap"
+          type="button"
+          :aria-label="t('live.swapSides')"
+          :title="t('live.swapSides')"
+          @click="toggleSwapSides"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="17 4 21 8 17 12" />
+            <line x1="21" y1="8" x2="4" y2="8" />
+            <polyline points="7 12 3 16 7 20" />
+            <line x1="3" y1="16" x2="20" y2="16" />
+          </svg>
+        </button>
+      </div>
 
+      <!-- Score rows keep a fixed A/B order — only the tap zones follow court ends. -->
       <div class="live-board">
-        <div class="live-board__row">
-          <strong class="live-board__name">{{ teamA }}</strong>
-          <span class="live-board__sets">{{ completedSets('a') }} {{ norm ? norm.games.a : '' }}</span>
-          <span class="live-board__points">{{ pointLabel(state, 'a') }}</span>
-        </div>
-        <div class="live-board__row">
-          <strong class="live-board__name">{{ teamB }}</strong>
-          <span class="live-board__sets">{{ completedSets('b') }} {{ norm ? norm.games.b : '' }}</span>
-          <span class="live-board__points">{{ pointLabel(state, 'b') }}</span>
+        <div v-for="side in ['a', 'b']" :key="side" class="live-board__row">
+          <strong class="live-board__name">{{ teamName(side) }}</strong>
+          <span class="live-board__sets">{{ completedSets(side) }} {{ norm ? norm.games[side] : '' }}</span>
+          <span class="live-board__points">{{ pointLabel(state, side) }}</span>
         </div>
       </div>
 
@@ -188,14 +268,18 @@ async function stopLive() {
       <template v-if="!isFinished">
         <p class="live-modal__question">{{ t('live.whoWon') }}</p>
 
-        <div class="live-tap-zones">
-          <button class="live-tap" type="button" :disabled="isFinished" @click="record('a')">
-            <span class="live-tap__name">{{ teamA }}</span>
+        <TransitionGroup name="side-swap" tag="div" class="live-tap-zones">
+          <button
+            v-for="side in sides"
+            :key="side"
+            class="live-tap"
+            type="button"
+            :disabled="isFinished"
+            @click="record(side)"
+          >
+            <span class="live-tap__name">{{ teamName(side) }}</span>
           </button>
-          <button class="live-tap" type="button" :disabled="isFinished" @click="record('b')">
-            <span class="live-tap__name">{{ teamB }}</span>
-          </button>
-        </div>
+        </TransitionGroup>
       </template>
 
       <div class="live-modal__footer">
@@ -259,10 +343,49 @@ async function stopLive() {
   color: var(--muted);
 }
 
+.live-sides {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 2px 0;
+}
+
+.live-sides__swap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.live-sides__swap:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
 .live-board {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+/* FLIP glide when court ends flip after a game */
+.side-swap-move {
+  transition: transform 0.9s cubic-bezier(0.45, 0, 0.25, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .side-swap-move {
+    transition: none;
+  }
 }
 
 .live-board__row {
@@ -315,7 +438,7 @@ async function stopLive() {
 }
 
 .live-tap {
-  min-height: 120px;
+  min-height: 84px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -368,6 +491,6 @@ async function stopLive() {
 }
 
 @media (max-width: 480px) {
-  .live-tap { min-height: 96px; }
+  .live-tap { min-height: 68px; }
 }
 </style>

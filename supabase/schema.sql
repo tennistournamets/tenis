@@ -2578,6 +2578,10 @@ begin
   end if;
 end $$;
 
+-- Realtime DELETE payloads only carry the primary key by default; clients
+-- need match_id to route the event, so publish the full old row.
+alter table match_sets replica identity full;
+
 do $$
 begin
   if not exists (
@@ -2691,6 +2695,8 @@ alter table live_scores add column if not exists status text default 'active';
 alter table live_scores add column if not exists state jsonb;
 alter table live_scores add column if not exists history jsonb default '[]'::jsonb;
 alter table live_scores add column if not exists revision integer default 0;
+alter table live_scores add column if not exists sides_swapped boolean default false;
+alter table live_scores add column if not exists sides_auto boolean default true;
 alter table live_scores add column if not exists created_at timestamptz default now();
 alter table live_scores add column if not exists updated_at timestamptz default now();
 
@@ -2761,6 +2767,12 @@ alter table live_scores alter column history set default '[]'::jsonb;
 alter table live_scores alter column history set not null;
 alter table live_scores alter column revision set default 0;
 alter table live_scores alter column revision set not null;
+update live_scores set sides_swapped = false where sides_swapped is null;
+alter table live_scores alter column sides_swapped set default false;
+alter table live_scores alter column sides_swapped set not null;
+update live_scores set sides_auto = true where sides_auto is null;
+alter table live_scores alter column sides_auto set default true;
+alter table live_scores alter column sides_auto set not null;
 alter table live_scores alter column created_at set default now();
 alter table live_scores alter column created_at set not null;
 alter table live_scores alter column updated_at set default now();
@@ -2960,6 +2972,55 @@ begin
 end;
 $$;
 
+-- Rewrite match_sets from a live-score state: all completed sets plus the
+-- in-progress set (current games), so the score table follows the live match
+-- game by game. Upserts by (match_id, set_index) so realtime subscribers get
+-- UPDATE events with stable row ids instead of delete+insert churn.
+-- Internal helper for record_point — not exposed to clients.
+create or replace function sync_live_match_sets(p_match_id uuid, p_state jsonb)
+returns void
+language plpgsql
+as $$
+declare
+  v_set jsonb;
+  v_games_a integer := coalesce((p_state #>> '{games,a}')::integer, 0);
+  v_games_b integer := coalesce((p_state #>> '{games,b}')::integer, 0);
+  v_current_set integer := coalesce((p_state->>'currentSet')::integer, 1);
+  v_winner text := nullif(p_state->>'winner', '');
+  v_max_index integer := 0;
+begin
+  for v_set in
+    select value
+    from jsonb_array_elements(coalesce(p_state->'sets', '[]'::jsonb))
+  loop
+    insert into match_sets (match_id, set_index, side_a_games, side_b_games)
+    values (
+      p_match_id,
+      (v_set->>'set_index')::integer,
+      (v_set->>'side_a_games')::integer,
+      (v_set->>'side_b_games')::integer
+    )
+    on conflict (match_id, set_index) do update
+      set side_a_games = excluded.side_a_games,
+          side_b_games = excluded.side_b_games;
+    v_max_index := greatest(v_max_index, (v_set->>'set_index')::integer);
+  end loop;
+
+  if v_winner is null and (v_games_a > 0 or v_games_b > 0) then
+    insert into match_sets (match_id, set_index, side_a_games, side_b_games)
+    values (p_match_id, v_current_set, v_games_a, v_games_b)
+    on conflict (match_id, set_index) do update
+      set side_a_games = excluded.side_a_games,
+          side_b_games = excluded.side_b_games;
+    v_max_index := greatest(v_max_index, v_current_set);
+  end if;
+
+  delete from match_sets where match_id = p_match_id and set_index > v_max_index;
+end;
+$$;
+
+revoke execute on function sync_live_match_sets(uuid, jsonb) from public, anon, authenticated;
+
 drop function if exists start_live_match(uuid);
 drop function if exists record_point(uuid, text);
 drop function if exists record_point(uuid, text, integer);
@@ -3045,12 +3106,12 @@ declare
   v_match matches%rowtype;
   v_tournament_status tournament_status;
   v_history_len integer;
+  v_old_state jsonb;
   v_new_state jsonb;
   v_new_history jsonb;
   v_winner_side text;
   v_winner_id uuid;
   v_previous_winner uuid;
-  v_set jsonb;
 begin
   select *
     into v_match
@@ -3101,6 +3162,8 @@ begin
       raise exception 'Nothing to undo';
     end if;
 
+    v_old_state := v_live.state;
+
     update live_scores
     set state = v_live.history -> (v_history_len - 1),
         history = v_live.history - (v_history_len - 1),
@@ -3109,6 +3172,12 @@ begin
     where id = v_live.id
     returning * into v_live;
 
+    -- Undo may roll back a completed game/set — keep match_sets in sync.
+    if v_old_state->'games' is distinct from v_live.state->'games'
+       or v_old_state->'sets' is distinct from v_live.state->'sets' then
+      perform sync_live_match_sets(p_match_id, v_live.state);
+    end if;
+
     return v_live;
   end if;
 
@@ -3116,6 +3185,7 @@ begin
     raise exception 'Match already finished';
   end if;
 
+  v_old_state := v_live.state;
   v_new_history := v_live.history || jsonb_build_array(v_live.state);
   v_new_state := tennis_apply_point(v_live.state, p_side);
   v_winner_side := v_new_state->>'winner';
@@ -3135,20 +3205,7 @@ begin
       else v_match.side_b_entry_id
     end;
 
-    delete from match_sets where match_id = p_match_id;
-
-    for v_set in
-      select value
-      from jsonb_array_elements(v_new_state->'sets')
-    loop
-      insert into match_sets (match_id, set_index, side_a_games, side_b_games)
-      values (
-        p_match_id,
-        (v_set->>'set_index')::integer,
-        (v_set->>'side_a_games')::integer,
-        (v_set->>'side_b_games')::integer
-      );
-    end loop;
+    perform sync_live_match_sets(p_match_id, v_new_state);
 
     update matches
     set winner_entry_id = v_winner_id,
@@ -3160,6 +3217,11 @@ begin
     end if;
 
     perform propagate_winner(p_match_id, v_winner_id);
+  elsif v_old_state->'games' is distinct from v_new_state->'games'
+     or v_old_state->'sets' is distinct from v_new_state->'sets' then
+    -- Game (or set) completed: mirror progress into match_sets so the main
+    -- score table follows the live match game by game.
+    perform sync_live_match_sets(p_match_id, v_new_state);
   end if;
 
   return v_live;
@@ -3202,6 +3264,49 @@ begin
         revision = revision + 1
     where id = v_live.id
     returning * into v_live;
+  end if;
+
+  return v_live;
+end;
+$$;
+
+-- Court-side orientation for the live scoring UI. Display-only: it never
+-- touches the score, so revision is left alone (bumping it would break the
+-- optimistic-concurrency check of in-flight record_point calls).
+create or replace function set_live_sides(
+  p_match_id uuid,
+  p_swapped boolean default null,
+  p_auto boolean default null
+)
+returns live_scores
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_live live_scores%rowtype;
+  v_tournament_id uuid;
+begin
+  select m.tournament_id into v_tournament_id
+  from matches m
+  where m.id = p_match_id;
+
+  if v_tournament_id is null then
+    raise exception 'Match not found';
+  end if;
+
+  if not can_live_score(v_tournament_id) then
+    raise exception 'Not allowed';
+  end if;
+
+  update live_scores
+  set sides_swapped = coalesce(p_swapped, sides_swapped),
+      sides_auto = coalesce(p_auto, sides_auto)
+  where match_id = p_match_id
+  returning * into v_live;
+
+  if v_live.id is null then
+    raise exception 'Live match not found';
   end if;
 
   return v_live;
@@ -3285,6 +3390,7 @@ grant execute on function get_my_tournament_role(uuid) to authenticated;
 grant execute on function start_live_match(uuid) to authenticated;
 grant execute on function record_point(uuid, text, integer) to authenticated;
 grant execute on function stop_live_match(uuid) to authenticated;
+grant execute on function set_live_sides(uuid, boolean, boolean) to authenticated;
 
 do $$
 begin

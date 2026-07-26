@@ -503,22 +503,24 @@ function onMatchesChange(payload) {
 }
 
 function onMatchSetsChange(payload) {
-  const matchId = payload.new?.match_id || payload.old?.match_id
-  if (!matchId || !matches.value.some((match) => match.id === matchId)) {
-    return
-  }
-
   if (payload.eventType === 'DELETE') {
+    // DELETE payloads may only carry the row id — remove by id, no
+    // tournament check (ids of other tournaments are simply not in the list).
     if (!payload.old?.id) return
     matchSets.value = removeById(matchSets.value, payload.old.id)
     return
   }
 
-  if (!payload.new?.id) {
+  const row = payload.new
+  if (!row?.id || !row.match_id || !matches.value.some((match) => match.id === row.match_id)) {
     return
   }
 
-  matchSets.value = upsertById(matchSets.value, payload.new, sortMatchSets)
+  // Drop any stale row occupying the same (match, set) slot before upserting.
+  const cleaned = matchSets.value.filter(
+    (item) => item.id === row.id || !(item.match_id === row.match_id && item.set_index === row.set_index),
+  )
+  matchSets.value = upsertById(cleaned, row, sortMatchSets)
 }
 
 function onLiveScoresChange(payload) {
