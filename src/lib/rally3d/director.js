@@ -1,18 +1,7 @@
 import * as THREE from 'three'
 
 import { makeBlobShadowTexture } from './scene'
-import { KITS, createPlayer } from './player'
-import {
-  PoseBlender,
-  clipCelebrate,
-  clipDejected,
-  clipMove,
-  clipReady,
-  clipSplitStep,
-  clipStroke,
-  clipWalk,
-  headTrack,
-} from './strokes'
+import { createPrimitiveActor } from './actors/primitiveActor'
 
 const HALF = 1.7 // seconds per net crossing
 const STROKE_PRE = 0.55 // unit turn starts this long before own contact
@@ -27,7 +16,6 @@ const CONTACT_Y = 1.15
 const BALL_R = 0.13
 const BOUNCE_S = 0.72
 const SWAP_DUR = 1.6
-const PLAYER_SCALE = 1.12
 const REACH = 0.72 // stand this far to the side of the contact point
 const MAX_SPEED = 6.5 // m/s lateral coverage
 
@@ -52,7 +40,7 @@ function arcY(y0, y1, height, u) {
 }
 
 export class RallyDirector {
-  constructor(scene, { swapped = false } = {}) {
+  constructor(scene, { swapped = false, actorFactory = createPrimitiveActor } = {}) {
     this.scene = scene
     this.time = 0
     this.rallyClock = HALF * 0.5 // start mid-flight, both players in ready
@@ -62,13 +50,11 @@ export class RallyDirector {
     this.plan = new Map() // contact index -> { type, standZ }
 
     // players[0] = side A, players[1] = side B
-    this.players = [KITS.a, KITS.b].map((kit, i) => {
-      const rig = createPlayer(kit)
-      rig.group.scale.setScalar(PLAYER_SCALE)
-      scene.add(rig.group)
+    this.players = [0, 1].map((i) => {
+      const actor = actorFactory(i)
+      scene.add(actor.group)
       return {
-        rig,
-        blender: new PoseBlender(rig),
+        actor,
         z: 0,
         vz: 0,
         yawOffset: 0,
@@ -78,8 +64,8 @@ export class RallyDirector {
     this.endSigns = [swapped ? 1 : -1, swapped ? -1 : 1]
     for (let i = 0; i < 2; i += 1) {
       const end = this.endSigns[i]
-      this.players[i].rig.group.position.set(end * HOME_X, 0, 0)
-      this.players[i].rig.group.rotation.y = this.facingYaw(end)
+      this.players[i].actor.group.position.set(end * HOME_X, 0, 0)
+      this.players[i].actor.group.rotation.y = this.facingYaw(end)
     }
 
     const ballMat = new THREE.MeshStandardMaterial({ color: 0xd8e153, roughness: 0.45 })
@@ -164,16 +150,16 @@ export class RallyDirector {
     if (!animate) {
       for (let i = 0; i < 2; i += 1) {
         const end = this.endSigns[i]
-        this.players[i].rig.group.position.set(end * HOME_X, 0, 0)
-        this.players[i].rig.group.rotation.y = this.facingYaw(end)
+        this.players[i].actor.group.position.set(end * HOME_X, 0, 0)
+        this.players[i].actor.group.rotation.y = this.facingYaw(end)
         this.players[i].z = 0
       }
       return
     }
 
     const from = this.players.map((p) => ({
-      x: p.rig.group.position.x,
-      z: p.rig.group.position.z,
+      x: p.actor.group.position.x,
+      z: p.actor.group.position.z,
     }))
     const to = this.players.map((p, i) => ({ x: this.endSigns[i] * HOME_X, z: 0 }))
     this.swap = { start: this.time, from, to }
@@ -204,15 +190,22 @@ export class RallyDirector {
       const bow = Math.sin(Math.PI * eased) * 2.6 * (i === 0 ? 1 : -1)
       const x = lerp(from.x, to.x, eased)
       const z = lerp(from.z, to.z, eased) + bow
-      const group = player.rig.group
+      const group = player.actor.group
       const vx = x - group.position.x
       const vz = z - group.position.z
       group.position.x = x
       group.position.z = z
       player.z = z
 
-      player.blender.setState('walk')
-      player.blender.apply(clipWalk(this.time + player.idlePhase, Math.sin(Math.PI * p)), dt)
+      player.actor.update(dt, {
+        mode: 'walk',
+        stateKey: 'walk',
+        time: this.time,
+        idlePhase: player.idlePhase,
+        speed01: Math.sin(Math.PI * p),
+        ballPos: null,
+        trackWeight: 0,
+      })
 
       if (p < 0.96 && (Math.abs(vx) > 1e-4 || Math.abs(vz) > 1e-4)) {
         group.rotation.y = Math.atan2(vx, vz)
@@ -233,12 +226,16 @@ export class RallyDirector {
 
     for (let i = 0; i < 2; i += 1) {
       const player = this.players[i]
-      player.blender.setState(i === index ? 'celebrate' : 'dejected')
-      player.blender.apply(
-        i === index ? clipCelebrate(this.time) : clipDejected(this.time + player.idlePhase),
-        dt,
-      )
-      player.rig.group.rotation.y = this.facingYaw(this.endSigns[i])
+      const mode = i === index ? 'celebrate' : 'dejected'
+      player.actor.update(dt, {
+        mode,
+        stateKey: mode,
+        time: this.time,
+        idlePhase: player.idlePhase,
+        ballPos: null,
+        trackWeight: 0,
+      })
+      player.actor.group.rotation.y = this.facingYaw(this.endSigns[i])
     }
 
     if (this.time >= this.celebration.until) {
@@ -287,8 +284,7 @@ export class RallyDirector {
     const tOwn = kOwn * HALF
     const tOwnPrev = tOwn - 2 * HALF
     const tOpp = tOwn - HALF // opponent's contact between our own
-    const group = player.rig.group
-    const blender = player.blender
+    const group = player.actor.group
 
     // --- decide the current activity ---
     const prevPlan = this.plan.get(kOwn - 2)
@@ -321,42 +317,57 @@ export class RallyDirector {
     const localVx = player.vz * end // velocity in the player's local X
     const far = Math.abs(targetZ - player.z) > 1.25
 
-    // face the net; lean the run direction in only for long sprints
+    // Face the net by default; when sprinting to a far ball turn (almost)
+    // fully into the running direction so forward run clips read correctly.
     let yawTarget = 0
     if (!nextPlan && !inPrevStroke && far && speed01 > 0.25) {
-      yawTarget = Math.atan2(localVx, 2.2)
+      yawTarget = Math.atan2(localVx, 0.6)
     }
     player.yawOffset += (yawTarget - player.yawOffset) * Math.min(1, dt * 7)
     group.rotation.y = this.facingYaw(end) + player.yawOffset
 
     // --- pose ---
-    let trackWeight = 1
+    const base = {
+      time: this.time,
+      idlePhase: player.idlePhase,
+      ballPos: this.ball.position,
+      trackWeight: 1,
+    }
     if (nextPlan) {
       const phase = clamp((clock - (tOwn - STROKE_PRE)) / STROKE_DUR, 0, 1)
-      blender.setState(`stroke-${kOwn}`)
-      blender.apply(clipStroke(nextPlan.type, phase), dt)
-      trackWeight = 0.55
+      player.actor.update(dt, {
+        ...base,
+        mode: 'stroke',
+        stateKey: `stroke-${kOwn}`,
+        phase,
+        type: nextPlan.type,
+        trackWeight: 0.55,
+      })
     } else if (inPrevStroke) {
       const phase = clamp((clock - (tOwnPrev - STROKE_PRE)) / STROKE_DUR, 0, 1)
-      blender.setState(`stroke-${kOwn - 2}`)
-      blender.apply(clipStroke(prevPlan.type, phase), dt)
-      trackWeight = 0.55
+      player.actor.update(dt, {
+        ...base,
+        mode: 'stroke',
+        stateKey: `stroke-${kOwn - 2}`,
+        phase,
+        type: prevPlan.type,
+        trackWeight: 0.55,
+      })
     } else if (inSplit) {
       const t01 = (clock - (tOpp - SPLIT_LEAD)) / SPLIT_DUR
-      blender.setState(`split-${kOwn}`)
-      blender.apply(clipSplitStep(t01), dt)
+      player.actor.update(dt, { ...base, mode: 'split', stateKey: `split-${kOwn}`, t01 })
     } else if (speed01 > 0.12) {
-      blender.setState('move')
-      blender.apply(
-        clipMove(this.time + player.idlePhase, speed01, far ? 1 : 0, Math.sign(localVx) || 1),
-        dt,
-      )
+      player.actor.update(dt, {
+        ...base,
+        mode: 'move',
+        stateKey: 'move',
+        speed01,
+        gait: far ? 1 : 0,
+        lateralSign: Math.sign(localVx) || 1,
+      })
     } else {
-      blender.setState('ready')
-      blender.apply(clipReady(this.time + player.idlePhase), dt)
+      player.actor.update(dt, { ...base, mode: 'ready', stateKey: 'ready' })
     }
-
-    headTrack(blender, this.ball.position, dt, trackWeight)
   }
 
   setBallVisible(visible) {
@@ -365,10 +376,11 @@ export class RallyDirector {
   }
 }
 
-// Static 3/4 camera: slightly off-axis like a broadcast end-corner view.
-const CAM_AZ = Math.PI / 2 - 0.24
+// Static camera, dead-on side view: the court sits level in the frame to
+// match the flat UI (elevation only, no side angle).
+const CAM_AZ = Math.PI / 2
 const CAM_EL = 0.36
-const CAM_R = 20.5
+const CAM_R = 16.5
 
 export function updateCamera(camera) {
   camera.position.set(
@@ -376,5 +388,5 @@ export function updateCamera(camera) {
     Math.sin(CAM_EL) * CAM_R,
     Math.sin(CAM_AZ) * Math.cos(CAM_EL) * CAM_R,
   )
-  camera.lookAt(0.6, 0.35, 0)
+  camera.lookAt(0, 0.35, 0)
 }

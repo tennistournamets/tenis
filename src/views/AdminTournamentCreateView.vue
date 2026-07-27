@@ -25,6 +25,8 @@ const form = reactive({
   format: 'single_elimination',
   category: 'singles',
   set_format: 'best_of_3',
+  tiebreak_to: 7,
+  gender: 'men',
   contact_phone: '',
   contact_email: '',
   is_public: true,
@@ -99,7 +101,9 @@ async function createTournament() {
         ? (form.doubles_pairing_random ? 'pick_random' : 'pre_agreed')
         : null,
     p_format_config: {},
-    p_scoring_config: {},
+    p_scoring_config: cfg.value.supportsSetFormat
+      ? { tiebreak_to: Number(form.tiebreak_to), gender: form.gender }
+      : { gender: form.gender },
     p_contact_phone: form.contact_phone.trim() || null,
     p_contact_email: form.contact_email.trim() || null,
   })
@@ -212,6 +216,22 @@ onMounted(async () => {
               <select id="create-format" v-model="form.set_format" class="input">
                 <option value="best_of_3">{{ t('format.best_of_3') }}</option>
                 <option value="best_of_5">{{ t('format.best_of_5') }}</option>
+              </select>
+            </div>
+
+            <div v-if="cfg.supportsSetFormat" class="form-field">
+              <label for="create-tiebreak">{{ t('admin.tiebreakTo') }}</label>
+              <select id="create-tiebreak" v-model.number="form.tiebreak_to" class="input">
+                <option :value="7">{{ t('admin.tiebreakTo7') }}</option>
+                <option :value="10">{{ t('admin.tiebreakTo10') }}</option>
+              </select>
+            </div>
+
+            <div class="form-field">
+              <label for="create-gender">{{ t('admin.championshipGender') }}</label>
+              <select id="create-gender" v-model="form.gender" class="input">
+                <option value="men">{{ t('admin.genderMen') }}</option>
+                <option value="women">{{ t('admin.genderWomen') }}</option>
               </select>
             </div>
           </div>

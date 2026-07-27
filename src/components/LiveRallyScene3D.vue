@@ -22,6 +22,11 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  // 'primitives' | 'characters' — decided by network tier; remount to switch
+  tier: {
+    type: String,
+    default: 'primitives',
+  },
 })
 
 // 'fallback' asks the parent to render the 2D scene instead.
@@ -99,10 +104,23 @@ function onVisibility() {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
   try {
+    let actorFactory
+    if (props.tier === 'characters') {
+      const { loadRigSource, createSkinnedActor } = await import('../lib/rally3d/actors/skinnedActor')
+      try {
+        // the parent pre-warmed this download; the promise is cached
+        const source = await loadRigSource()
+        actorFactory = (i) => createSkinnedActor(source, i)
+      } catch (loadError) {
+        console.warn('rally3d rig load failed, using primitives:', loadError)
+      }
+    }
+    if (!container.value) return // unmounted while the rig was loading
+
     world = createWorld(container.value)
-    director = new RallyDirector(world.scene, { swapped: props.swapped })
+    director = new RallyDirector(world.scene, { swapped: props.swapped, actorFactory })
     if (norm.value.winner) director.setWinner(norm.value.winner)
   } catch (error) {
     console.warn('rally3d init failed, falling back to 2D:', error)
@@ -146,7 +164,7 @@ onBeforeUnmount(() => {
 
 .rally3d__canvas {
   width: 100%;
-  height: 230px;
+  height: 160px;
   border-radius: var(--radius-sm);
   overflow: hidden;
 }
@@ -177,7 +195,7 @@ onBeforeUnmount(() => {
 
 @media (max-width: 480px) {
   .rally3d__canvas {
-    height: 180px;
+    height: 130px;
   }
 }
 </style>

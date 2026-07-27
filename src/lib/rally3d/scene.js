@@ -192,6 +192,10 @@ export function createWorld(container) {
 
   scene.add(buildNet())
 
+  if (import.meta.env.DEV && typeof window !== 'undefined') {
+    window.__rally = { scene, camera, renderer }
+  }
+
   function resize() {
     const w = container.clientWidth
     const h = Math.max(1, container.clientHeight)

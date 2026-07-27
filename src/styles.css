@@ -2372,8 +2372,14 @@ textarea.input:focus {
 }
 
 /* Infinite Canvas */
-.infinite-canvas {
+/* The toolbar anchors to the surrounding .card so it sits at the section
+   heading level instead of inside the board area. */
+.card:has(.infinite-canvas) {
   position: relative;
+}
+
+.infinite-canvas {
+  position: static;
   overflow: hidden;
   width: 100%;
   min-height: 400px;
@@ -2392,6 +2398,7 @@ textarea.input:focus {
 }
 
 .infinite-canvas--fullscreen {
+  position: relative; /* toolbar re-anchors to the canvas in fullscreen */
   min-height: 100vh;
   border-radius: 0;
   background-color: var(--bg);
@@ -2406,8 +2413,8 @@ textarea.input:focus {
 
 .infinite-canvas__toolbar {
   position: absolute;
-  top: var(--space-3);
-  right: var(--space-3);
+  top: var(--space-4);
+  right: var(--space-4);
   display: flex;
   align-items: center;
   gap: var(--space-1);

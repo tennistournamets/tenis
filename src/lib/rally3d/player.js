@@ -100,7 +100,7 @@ function makeStringsTexture() {
   return texture
 }
 
-function buildRacket(kit) {
+export function buildRacket(kit) {
   // +Y runs from the butt cap up through the head.
   const racket = new THREE.Group()
   const frameMat = new THREE.MeshStandardMaterial({
@@ -148,6 +148,39 @@ function buildRacket(kit) {
   racket.add(head)
 
   return racket
+}
+
+// Baseball cap: flattened dome with a brim ring, top button and a downward
+// angled visor. Shared by both actor styles.
+export function addCap(parent, kit, headR) {
+  const capMat = mat(kit.cap, { roughness: 0.8 })
+  const dome = new THREE.Mesh(
+    new THREE.SphereGeometry(headR + 0.012, 18, 12, 0, Math.PI * 2, 0, Math.PI * 0.5),
+    capMat,
+  )
+  dome.scale.y = 0.82
+  dome.position.y = 0.03
+  dome.rotation.x = 0.1
+  dome.castShadow = true
+  parent.add(dome)
+
+  const trim = new THREE.Mesh(new THREE.TorusGeometry(headR + 0.008, 0.008, 8, 20), mat(kit.band))
+  trim.rotation.x = Math.PI / 2 - 0.1
+  trim.position.y = 0.028
+  parent.add(trim)
+
+  const button = new THREE.Mesh(new THREE.SphereGeometry(0.014, 8, 6), mat(kit.band))
+  button.position.y = 0.03 + (headR + 0.012) * 0.82
+  parent.add(button)
+
+  const visor = new THREE.Mesh(
+    new THREE.CylinderGeometry(headR + 0.004, headR + 0.004, 0.014, 14, 1, false, -Math.PI / 3.8, Math.PI / 1.9),
+    capMat,
+  )
+  visor.scale.z = 1.75
+  visor.position.set(0, 0.035, 0.02)
+  visor.rotation.x = -0.22 // tipped down
+  parent.add(visor)
 }
 
 function buildArm(kit, sideX) {
@@ -280,18 +313,7 @@ export function createPlayer(kit) {
   skull.castShadow = true
   head.add(skull)
 
-  const cap = new THREE.Mesh(
-    new THREE.SphereGeometry(BODY.headR + 0.012, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.52),
-    mat(kit.cap, { roughness: 0.8 }),
-  )
-  cap.position.y = 0.024
-  cap.rotation.x = 0.12
-  head.add(cap)
-  const visor = new THREE.Mesh(new THREE.CylinderGeometry(BODY.headR + 0.012, BODY.headR + 0.012, 0.016, 14, 1, false, -Math.PI / 3.4, Math.PI / 1.7), mat(kit.cap, { roughness: 0.8 }))
-  visor.scale.z = 1.65
-  visor.position.set(0, 0.05, 0.012)
-  visor.rotation.x = -0.08
-  head.add(visor)
+  addCap(head, kit, BODY.headR)
 
   const armL = buildArm(kit, -1)
   const armR = buildArm(kit, 1)

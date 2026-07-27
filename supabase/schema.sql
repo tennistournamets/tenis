@@ -2832,7 +2832,12 @@ before update on live_scores
 for each row
 execute function set_updated_at();
 
-create or replace function live_score_initial_state(p_required_sets integer)
+drop function if exists live_score_initial_state(integer);
+
+create or replace function live_score_initial_state(
+  p_required_sets integer,
+  p_tiebreak_to integer default 7
+)
 returns jsonb
 language sql
 immutable
@@ -2846,6 +2851,7 @@ as $$
     'isTiebreak', false,
     'tiebreakPoints', jsonb_build_object('a', 0, 'b', 0),
     'requiredSets', p_required_sets,
+    'tiebreakTo', p_tiebreak_to,
     'winner', null
   );
 $$;
@@ -2867,6 +2873,7 @@ declare
   v_tb_a integer := coalesce((p_state #>> '{tiebreakPoints,a}')::integer, 0);
   v_tb_b integer := coalesce((p_state #>> '{tiebreakPoints,b}')::integer, 0);
   v_required_sets integer := coalesce((p_state->>'requiredSets')::integer, 2);
+  v_tb_to integer := coalesce((p_state->>'tiebreakTo')::integer, 7);
   v_current_set integer := coalesce((p_state->>'currentSet')::integer, 1);
   v_is_tiebreak boolean := coalesce((p_state->>'isTiebreak')::boolean, false);
   v_winner text := nullif(p_state->>'winner', '');
@@ -2888,13 +2895,13 @@ begin
   if v_is_tiebreak then
     if v_side = 'a' then
       v_tb_a := v_tb_a + 1;
-      if v_tb_a >= 7 and v_tb_a - v_tb_b >= 2 then
+      if v_tb_a >= v_tb_to and v_tb_a - v_tb_b >= 2 then
         v_games_a := v_games_a + 1;
         v_set_winner := 'a';
       end if;
     else
       v_tb_b := v_tb_b + 1;
-      if v_tb_b >= 7 and v_tb_b - v_tb_a >= 2 then
+      if v_tb_b >= v_tb_to and v_tb_b - v_tb_a >= 2 then
         v_games_b := v_games_b + 1;
         v_set_winner := 'b';
       end if;
@@ -2967,6 +2974,7 @@ begin
     'isTiebreak', v_is_tiebreak,
     'tiebreakPoints', jsonb_build_object('a', v_tb_a, 'b', v_tb_b),
     'requiredSets', v_required_sets,
+    'tiebreakTo', v_tb_to,
     'winner', v_winner
   );
 end;
@@ -3037,6 +3045,7 @@ declare
   v_set_format set_format;
   v_tournament_status tournament_status;
   v_required_sets integer;
+  v_tiebreak_to integer;
   v_live live_scores%rowtype;
 begin
   select *
@@ -3048,8 +3057,9 @@ begin
     raise exception 'Match not found';
   end if;
 
-  select t.set_format, t.status
-    into v_set_format, v_tournament_status
+  select t.set_format, t.status,
+         coalesce((t.scoring_config->>'tiebreak_to')::integer, 7)
+    into v_set_format, v_tournament_status, v_tiebreak_to
   from tournaments t
   where t.id = v_match.tournament_id;
 
@@ -3077,7 +3087,7 @@ begin
 
   if v_live.id is null then
     insert into live_scores (match_id, tournament_id, counter_user_id, status, state)
-    values (p_match_id, v_match.tournament_id, auth.uid(), 'active', live_score_initial_state(v_required_sets))
+    values (p_match_id, v_match.tournament_id, auth.uid(), 'active', live_score_initial_state(v_required_sets, v_tiebreak_to))
     returning * into v_live;
   elsif v_live.status <> 'finished' then
     update live_scores

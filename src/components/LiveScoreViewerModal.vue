@@ -1,14 +1,16 @@
 <script setup>
-import { computed, defineAsyncComponent, ref } from 'vue'
+import { computed, defineAsyncComponent, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { pointLabel, scoreLine } from '../lib/useTennisScoring'
 import { displaySides, useDeferredChangeover } from '../lib/liveSides'
+import { GLB_TIMEOUT_MS, maxNetworkTier, withTimeout } from '../lib/rally3d/networkTier'
 
 import LiveRallyAnimation from './LiveRallyAnimation.vue'
 
-// 3D court is a lazy chunk (three.js); the 2D SVG scene stays as fallback
-// for reduced-motion, missing WebGL, or a failed init.
+// 3D court is a lazy chunk (three.js); the 2D SVG scene renders instantly and
+// stays as the floor for reduced-motion, missing WebGL, slow networks, or a
+// failed load/init.
 const LiveRallyScene3D = defineAsyncComponent(() => import('./LiveRallyScene3D.vue'))
 
 function webglAvailable() {
@@ -25,7 +27,38 @@ const reducedMotion =
     ? window.matchMedia('(prefers-reduced-motion: reduce)').matches
     : false
 
-const use3D = ref(!reducedMotion && webglAvailable())
+// Quality cascade: '2d' -> 'primitives' -> 'characters'. Starts at 2D (zero
+// extra payload); upgrades ONCE when the needed resources are ready, so slow
+// networks never leave the viewer staring at an empty box.
+const tier = ref('2d')
+
+onMounted(async () => {
+  if (reducedMotion || !webglAvailable()) return
+
+  const allowed = maxNetworkTier()
+  if (allowed === '2d') return
+
+  try {
+    if (allowed === 'characters') {
+      // pre-warm the scene chunk and the GLB in parallel; timeout demotes
+      const [, skinned] = await Promise.all([
+        import('./LiveRallyScene3D.vue'),
+        import('../lib/rally3d/actors/skinnedActor'),
+      ])
+      try {
+        await withTimeout(skinned.loadRigSource(), GLB_TIMEOUT_MS, 'characters model')
+        tier.value = 'characters'
+      } catch {
+        tier.value = 'primitives'
+      }
+    } else {
+      await import('./LiveRallyScene3D.vue')
+      tier.value = 'primitives'
+    }
+  } catch {
+    // chunk itself failed to load — stay on 2D
+  }
+})
 
 const props = defineProps({
   liveScore: {
@@ -76,12 +109,14 @@ function teamName(side) {
       </div>
 
       <LiveRallyScene3D
-        v-if="use3D"
+        v-if="tier !== '2d'"
+        :key="tier"
         :state="state"
         :team-a="teamA"
         :team-b="teamB"
         :swapped="swapped"
-        @fallback="use3D = false"
+        :tier="tier"
+        @fallback="tier = '2d'"
       />
       <LiveRallyAnimation v-else :state="state" :team-a="teamA" :team-b="teamB" :swapped="swapped" />
 
