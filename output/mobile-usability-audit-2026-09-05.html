@@ -1,0 +1,662 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Bracketa — мобильный UX-аудит · 05.09.2026</title><style>
+:root{color-scheme:light;--ink:#182b29;--muted:#536763;--paper:#f3f5f2;--line:#d4ded9;--green:#09694e}
+*{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:24px}body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}a{color:var(--green);text-underline-offset:3px}a:hover{text-decoration-thickness:2px}button,input,select{font:inherit}button,select,input{min-height:44px;border:1px solid #92a59e;border-radius:9px;background:white;color:var(--ink);padding:8px 11px}button{cursor:pointer}button:hover{background:#e8f2ed}:focus-visible{outline:3px solid #178263;outline-offset:3px}h1,h2,h3{line-height:1.22;letter-spacing:-.025em;overflow-wrap:anywhere}h1{font-size:clamp(29px,4vw,48px);max-width:900px;margin:0 0 24px}h2{font-size:28px;margin:64px 0 24px;padding-top:10px}h3{font-size:22px;margin:16px 0 22px}p{margin:0 0 18px}li{margin-bottom:10px}code{font-size:.85em;background:#edf1ee;border-radius:4px;padding:2px 4px;overflow-wrap:anywhere}strong{font-weight:650}.topbar{background:#132e27;color:#f4faf6;padding:17px 28px;display:flex;justify-content:space-between;gap:20px;align-items:center}.topbar a{color:#d7f3e2}.brand{font-weight:750;letter-spacing:.02em}.toplinks{display:flex;flex-wrap:wrap;gap:8px 24px}.layout{max-width:1530px;margin:auto;display:grid;grid-template-columns:255px minmax(0,1fr);gap:44px;padding:40px 28px 80px}.sidebar{position:sticky;top:24px;align-self:start;font-size:13px;line-height:1.4;max-height:calc(100dvh - 48px);overflow:auto}.sidebar summary{cursor:pointer;min-height:44px;padding:10px 0;display:block;margin-bottom:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;font-size:11px}.sidebar summary::after{content:" ▾"}.sidebar a{display:block;padding:9px 12px;border-left:2px solid var(--line);text-decoration:none}.sidebar a:hover{border-color:var(--green);background:#e5eee8}.content{min-width:0;max-width:1080px;overflow-wrap:anywhere}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:26px 0 36px}.stat{border:1px solid var(--line);background:white;border-radius:14px;padding:17px}.stat b{display:block;font-size:32px;line-height:1.25}.stat span{font-size:13px;color:var(--muted)}.table-scroll{max-width:100%;overflow:auto;border:1px solid var(--line);border-radius:12px;background:white;margin:22px 0 28px}table{border-collapse:collapse;min-width:580px;width:100%;font-size:14px;line-height:1.5}th{text-align:left;background:#eaf0eb;font-size:12px;text-transform:uppercase;letter-spacing:.025em}td,th{padding:13px 15px;border-bottom:1px solid var(--line);vertical-align:top}tr:last-child td{border-bottom:0}td:first-child{font-weight:550}table code{font-size:12px}.filters{display:flex;align-items:end;flex-wrap:wrap;gap:12px;background:#e5eee7;border:1px solid #bccfc2;padding:18px;border-radius:14px;margin:24px 0}.filters label{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600;min-width:0}.filters input,.filters select{font-size:15px;max-width:100%}.filters .search{flex:1 1 270px}.filters p{width:100%;margin:0;color:var(--muted);font-size:13px}.finding{background:white;border:1px solid var(--line);border-radius:18px;padding:28px;margin:22px 0;scroll-margin-top:24px}.finding:target{box-shadow:0 0 0 3px #60a98c}.finding-meta{display:flex;gap:10px;align-items:center;color:var(--muted);font-size:12px;line-height:1.5}.badge{padding:4px 9px;border-radius:5px;font-weight:800;flex-shrink:0}.P1{background:#ffe9e3;color:#9c311d}.P2{background:#fff0d0;color:#7a4e00}.P3{background:#e2eef7;color:#25567a}.permalink{color:var(--ink);text-decoration:none}.sources{color:var(--muted);font-size:13px}.evidence{border-top:1px solid var(--line);padding-top:12px}.evidence summary{cursor:pointer;min-height:44px;color:var(--green);font-size:14px;padding:8px 0}.images{display:flex;flex-wrap:wrap;gap:16px}.image-link{display:block;max-width:210px;font-size:12px;overflow-wrap:anywhere}.image-link img{display:block;width:200px;height:230px;object-fit:cover;object-position:top;border:1px solid var(--line);border-radius:8px;margin-bottom:5px}.note{border-left:4px solid #579f80;padding:15px 20px;background:#e7f1e9;margin:24px 0;color:#294b3b}.footer{border-top:1px solid var(--line);padding-top:24px;margin-top:40px;color:var(--muted);font-size:13px}.skip{position:absolute;top:-100px;left:16px;background:white;padding:12px;z-index:5}.skip:focus{top:12px}[hidden]{display:none!important}
+@media(max-width:1100px){.layout{grid-template-columns:205px minmax(0,1fr);gap:24px}.sidebar{font-size:12px}.finding{padding:22px}}
+@media(max-width:800px){.layout{display:block;padding:28px 16px 50px}.sidebar{position:static;max-height:none;margin-bottom:28px}.sidebar nav{display:flex;gap:6px;flex-wrap:wrap}.sidebar a{border:1px solid var(--line);border-radius:8px;padding:10px;min-height:44px;background:white}.sidebar summary{cursor:pointer;min-height:44px;padding:10px 0;font-size:12px}.topbar{padding:16px;align-items:start;flex-direction:column;gap:10px}.toplinks{font-size:13px}.stats{grid-template-columns:repeat(2,1fr)}h2{font-size:25px;margin-top:44px}.finding{padding:18px 16px}.finding h3{font-size:21px}.finding-meta{align-items:start}.filters{padding:14px}.filters label{flex:1 1 125px}.filters .search{flex-basis:100%}.content{max-width:none}.image-link{max-width:100%}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+@media print{body{background:white;font:11pt/1.5 sans-serif}.topbar,.sidebar,.filters,.stats,.evidence,.skip,#empty-results{display:none!important}.layout{display:block;padding:0}.content{max-width:none}.finding[hidden]{display:block!important}.finding{border:0;border-top:1px solid #aaa;border-radius:0;padding:16px 0;break-inside:auto}h1{font-size:26pt}h2{font-size:20pt;break-after:avoid}h3{font-size:15pt;break-after:avoid}.table-scroll{overflow:visible;border-radius:0}table{min-width:0;font-size:9pt}a{color:inherit}th,td{padding:7px}.toplinks{display:none}p,li{orphans:3;widows:3}}
+</style></head><body>
+<a class="skip" href="#main">Перейти к отчёту</a><header class="topbar"><span class="brand">BRACKETA / UX RESEARCH</span><div class="toplinks"><span>05 сентября 2026</span><a href="mobile-usability-audit-2026-09-05.md" download>Скачать Markdown</a></div></header>
+<div class="layout"><aside class="sidebar"><details id="contents" open><summary>Содержание отчёта</summary><nav aria-label="Содержание"><a href="#оценка-и-главный-вывод">Оценка и главный вывод</a><a href="#что-проверено-и-каким-способом">Что проверено и каким способом</a><a href="#на-что-обратить-внимание-в-первую-очередь">На что обратить внимание в первую очередь</a><a href="#измеренная-геометрия-проблем">Измеренная геометрия проблем</a><a href="#что-уже-сделано-хорошо">Что уже сделано хорошо</a><a href="#каталог-находок">Каталог находок</a><a href="#причины-в-архитектуре-интерфейса">Причины в архитектуре интерфейса</a><a href="#предлагаемый-мобильный-сценарий-по-ролям">Предлагаемый мобильный сценарий по ролям</a><a href="#доступность-проверенные-факты-и-границы-выводов">Доступность: проверенные факты и границы выводов</a><a href="#производительность-и-3d">Производительность и 3D</a><a href="#очерёдность-работ">Очерёдность работ</a><a href="#приёмка-после-исправлений">Приёмка после исправлений</a><a href="#доказательства-и-воспроизводимость">Доказательства и воспроизводимость</a></nav></details></aside><main class="content" id="main">
+<div class="stats" aria-label="Итоги"><div class="stat"><b>5/10</b><span>Мобильная готовность</span></div><div class="stat"><b>47</b><span>Находок и решений</span></div><div class="stat"><b>11</b><span>Проблем P1</span></div><div class="stat"><b>72 + 44</b><span>Наблюдения и сценарии</span></div></div>
+<h1 id="bracketa-подробный-аудит-мобильной-версии-и-юзабилити">Bracketa — подробный аудит мобильной версии и юзабилити</h1>
+<p>Дата: 5 сентября 2026 года. Объект: текущая локальная версия приложения в проекте Tenis. Проверены реальные Vue-компоненты и маршруты; данные для закрытых сценариев изолированы в тестовом браузере.</p>
+<h2 id="оценка-и-главный-вывод">Оценка и главный вывод</h2>
+<p><strong>Общая экспертная оценка мобильной готовности: 5/10.</strong> Визуальная основа приложения уже достаточно цельная: единая палитра, понятные карточки, светлая и тёмная темы, крупные основные кнопки. Но мобильная работа с турниром пока ненадёжна: есть потеря черновиков, неоднозначное подтверждение заявки, недоступные действия счётчика и сетки, которые вписываются в экран за счёт уменьшения текста до нечитаемого размера.</p>
+<p>Это экспертная оценка по наблюдаемым сценариям, а не результат Lighthouse, опроса пользователей или формальной сертификации WCAG. Числа ниже помогают расставить приоритеты; их нельзя интерпретировать как измеренный процент удовлетворённости.</p>
+<div class="table-scroll" role="region" aria-label="Таблица отчёта" tabindex="0"><table><thead><tr><th scope="col">Направление</th><th scope="col">Оценка</th><th scope="col">Обоснование</th></tr></thead><tbody>
+<tr><td>Визуальная последовательность</td><td>7/10</td><td>Хорошая общая система цветов, карточек и состояний; местами избыточные отступы и слабые границы полей</td></tr>
+<tr><td>Просмотр турнира с телефона</td><td>5/10</td><td>Базовая информация доступна, но сетка требует увеличения и перемещений; нет быстрого поиска матча</td></tr>
+<tr><td>Работа организатора</td><td>4/10</td><td>Ширина действий, переходы мастера, ввод результата и сохранность черновиков требуют исправлений</td></tr>
+<tr><td>Работа счётчика</td><td>3/10</td><td>Основное действие недоступно в части сочетаний роли и формата; риск ошибочного выбора стороны</td></tr>
+<tr><td>Обратная связь и восстановление</td><td>4/10</td><td>Ошибки сети, копирование и отправка заявки не всегда объясняют фактический результат</td></tr>
+<tr><td>Доступность управления</td><td>5/10</td><td>Хороший контраст основного текста и улучшенные модальные окна; проблемы клавиатуры, drag-only и подписей ввода</td></tr>
+</tbody></table></div>
+<p><strong>Зафиксировано 47 находок: 11 P1, 29 P2 и 7 P3.</strong> Это 47 отдельных тем для исправления или продуктового решения, а не 47 подтверждённых нарушений стандарта. Часть тем связана общей причиной и может исправляться одним изменением. P0 в проверенных сценариях не обнаружены; безопасность и серверная корректность не были предметом полного аудита.</p>
+<div class="table-scroll" role="region" aria-label="Таблица отчёта" tabindex="0"><table><thead><tr><th scope="col">Приоритет</th><th scope="col">Значение в этом отчёте</th><th scope="col">Как использовать</th></tr></thead><tbody>
+<tr><td>P1</td><td>Блокируется основная задача, теряются данные ввода или предлагается неправильная операция</td><td>Исправить до расширения мобильного использования</td></tr>
+<tr><td>P2</td><td>Существенное затруднение, скрытое действие, недостаточная доступность или ненадёжная обратная связь</td><td>Включить в ближайший цикл улучшений</td></tr>
+<tr><td>P3</td><td>Полировка, согласованность или гипотеза, требующая проверки ценности</td><td>Планировать после устранения основных препятствий</td></tr>
+</tbody></table></div>
+<p>Обозначения доказательств: <strong>«Браузер»</strong> — воспроизведено в интерфейсе; <strong>«Код»</strong> — следует из реализации, но соответствующая внешняя ситуация могла не разыгрываться; <strong>«Спорное решение»</strong> — факт поведения подтверждён, а предпочтительность другого решения требует продуктовой проверки. Размер работ S/M/L — относительная оценка сложности, не обещание срока: S — локальная правка, M — несколько связанных компонентов/состояний, L — изменение сценария или представления данных.</p>
+<h2 id="что-проверено-и-каким-способом">Что проверено и каким способом</h2>
+<p>Обойдены <strong>все шесть страниц, представленных в роутере</strong>, вместе с административной оболочкой и основными внутренними вкладками. Базовая серия: <strong>24 состояния × 3 размера = 72 наблюдения</strong>. Дополнительно сохранены <strong>44 результата сценарных проверок</strong>: формы, ошибки, роли, touch-жесты, модальные окна, смена ориентации и сохранность ввода. Эти числа обозначают наблюдения, а не число независимых автоматических тестов с полным покрытием.</p>
+<div class="table-scroll" role="region" aria-label="Таблица отчёта" tabindex="0"><table><thead><tr><th scope="col">Область</th><th scope="col">Проверенные состояния</th><th scope="col">Основные связанные находки</th></tr></thead><tbody>
+<tr><td>Главная <code>/</code></td><td>RU, узкий экран, CTA входа, ошибка входа, меню языка</td><td>M18, M19, M22, M41, M42, M43</td></tr>
+<tr><td>Мои чемпионаты <code>/admin/tournaments</code></td><td>Организатор, счётчик, наполненный и пустой список, ошибка загрузки, карточки и фильтр</td><td>M21, M22, M34, M35</td></tr>
+<tr><td>Создание <code>/admin/tournaments/new</code></td><td>Все три шага, русский slug, уход с черновиком, EN/LT</td><td>M06, M10, M12, M23, M32, M36</td></tr>
+<tr><td>Управление <code>/admin/tournaments/:id</code></td><td>Участники, сетка, счёт, настройки; черновик, регистрация, активный турнир; одобрение/отклонение, пары</td><td>M01, M03, M04, M09, M11, M20, M24, M37, M39</td></tr>
+<tr><td>Аккаунт <code>/admin/settings</code></td><td>Обычная структура, длинный email, мобильный и планшетный размер</td><td>M15, M40, M44</td></tr>
+<tr><td>Публичный турнир <code>/tournaments/:slug</code></td><td>Регистрация, активный/завершённый, отсутствующий турнир, ошибка сети</td><td>M02, M05, M13, M14, M22, M28, M31</td></tr>
+<tr><td>Форматы соревнований</td><td>Олимпийка, круговой, группы + плей-офф, двойное выбывание</td><td>M02, M03, M25–M29</td></tr>
+<tr><td>Виды спорта</td><td>Теннис, падел; футбол в круговом и кубковом вариантах; оба способа регистрации пар</td><td>M04, M07–M09, M17</td></tr>
+<tr><td>Всплывающие слои</td><td>Просмотр live, ведение live, финальный счёт, QR; закрытие, прокрутка, длинные имена, низкий экран</td><td>M07, M16, M23, M30, M33, M46</td></tr>
+<tr><td>Состояния интерфейса</td><td>Светлая/тёмная темы, RU/EN/LT, задержка 500 мс, отказ копирования, клавиатура, touch</td><td>M16–M22, M25, M26, M38, M43, M44</td></tr>
+</tbody></table></div>
+<p>Основные размеры: <strong>320×568, 390×844 и 768×844 CSS px</strong>. Для live и поворота использован <strong>844×390</strong>. Для жестов создан Chromium-контекст с <code>isMobile</code>, <code>hasTouch</code>, <code>pointer:coarse</code> и <code>hover:false</code>; свайпы отправлялись как touch-события. Измерялись границы DOM, ширина документа, размеры контролов, CSS transform, положение прокрутки и отправленные тестовые payload. Скриншоты сопоставлялись с исходниками.</p>
+<p>Набор синтетических данных включает длинные русские и литовские имена, длинный email, одиночные и парные заявки, pending/approved/rejected, 8 и 16 участников, разные стадии матчей и пятисетовый формат. Отдельная роль editor интерактивно не проходилась: изучены общие ветви прав, но браузерные сценарии выполнены для гостя, owner и counter. Полная декартова матрица «спорт × формат × роль × состояние × язык × устройство» не проверялась.</p>
+<p><strong>Гарды не снимались.</strong> Вместо изменения авторизации тестовый браузер получал изолированный модуль данных и тестовую сессию. Настоящий <code>router.beforeEach</code>, проверка <code>requiresAuth</code> и компонентная проверка роли продолжали выполняться. Анонимный тестовый переход в <code>/admin/tournaments</code> вернулся на <code>/</code>. Реальные заявки, счета и турниры не изменялись. В конце аудита отдельно сверены SHA-256 исходников и конфигурации с состоянием до исследования.</p>
+<h3 id="практические-ограничения-результата">Практические ограничения результата</h3>
+<ul>
+<li>Это аудит локальной версии, а не подтверждение идентичного поведения опубликованного сайта. Набор данных и сетевые ответы были контролируемыми; RLS, реальный Google OAuth, доставка realtime и серверные транзакции не тестировались как внешние сервисы.</li>
+<li>Физические iPhone/Android, Safari/WebKit, экранные дикторы VoiceOver/TalkBack и настоящая виртуальная клавиатура не использовались. Их проверка включена в план приёмки. Эмуляция touch подтверждает воспроизведённые жесты Chromium, но не заменяет тесты устройств.</li>
+<li>Полный браузерный zoom 200%, системное увеличение шрифта, все варианты вложенных окон, обрыв связи в середине реального live и восстановление после сна остаются отдельными проверками.</li>
+<li>В 72 базовых наблюдениях не зарегистрированы runtime-ошибки. В намеренных ошибочных сценариях исключения ожидаемо возникали; одно из них выявило отсутствие обратной связи при входе.</li>
+<li>Размеры файлов измерены, но полевые LCP/INP/CLS, батарея, нагрев и реальная скорость загрузки не измерялись. Оценка мобильной готовности не основана на выдуманных показателях производительности.</li>
+</ul>
+<h2 id="на-что-обратить-внимание-в-первую-очередь">На что обратить внимание в первую очередь</h2>
+<div class="table-scroll" role="region" aria-label="Таблица отчёта" tabindex="0"><table><thead><tr><th scope="col">Очерёдность</th><th scope="col">Проблема</th><th scope="col">Почему это раньше визуальной полировки</th></tr></thead><tbody>
+<tr><td>1</td><td>M11 — сохранение стирает черновик другого матча</td><td>Пользователь теряет выполненную работу</td></tr>
+<tr><td>2</td><td>M03 — счётчик не может начать работу в части форматов</td><td>Назначенная роль не выполняет основную задачу</td></tr>
+<tr><td>3</td><td>M04 — футбол открывает теннисное ведение счёта</td><td>Предлагается неверная операция</td></tr>
+<tr><td>4</td><td>M08 — пустой счёт становится 0:0; M20 — повторная отправка</td><td>Отсутствие ввода и повторный тап меняют смысл действия</td></tr>
+<tr><td>5</td><td>M05 — исчезающее подтверждение заявки</td><td>Игрок не знает, принят ли его ввод</td></tr>
+<tr><td>6</td><td>M06, M10 — переходы мастера и адрес из кириллицы</td><td>Новый организатор сталкивается с проблемами до начала турнира</td></tr>
+<tr><td>7</td><td>M01, M07 — скрытые действия и исчезающие имена в пяти сетах</td><td>Нужные элементы физически не помещаются</td></tr>
+<tr><td>8</td><td>M02 — сетка в масштабе 10–14%</td><td>Зритель не может быстро прочитать результат</td></tr>
+<tr><td>9</td><td>M09 — ручные пары только перетаскиванием</td><td>Нет полноценного альтернативного управления</td></tr>
+<tr><td>10</td><td>M18, M21, M22 — язык, копирование и ошибки</td><td>Базовые действия должны быть предсказуемыми и доступными</td></tr>
+</tbody></table></div>
+<h2 id="измеренная-геометрия-проблем">Измеренная геометрия проблем</h2>
+<p>Ширина документа больше ширины экрана означает выход всей страницы, а не просто горизонтальную прокрутку двумерной таблицы. Последняя может быть допустима; её удобство оценивается отдельно.</p>
+<div class="table-scroll" role="region" aria-label="Таблица отчёта" tabindex="0"><table><thead><tr><th scope="col">Экран / элемент</th><th scope="col">Размер экрана</th><th scope="col">Наблюдение</th><th scope="col">Следствие</th></tr></thead><tbody>
+<tr><td>Активный турнир, действия организатора</td><td>390 и 320</td><td>Документ около 473 px; ряд действий около 440 px</td><td>Правая кнопка скрыта</td></tr>
+<tr><td>Регистрация/падел, действия организатора</td><td>390 и 320</td><td>Документ около 441 px</td><td>Управление выезжает вправо</td></tr>
+<tr><td>Аккаунт с длинным email</td><td>390 и 320</td><td>Документ около 586 px</td><td>Сильный боковой сдвиг</td></tr>
+<tr><td>Публичная регистрация</td><td>320</td><td>Документ около 373 px</td><td>Форма шире экрана</td></tr>
+<tr><td>Публичные группы</td><td>320</td><td>Документ около 353 px</td><td>Карточка группы шире контейнера</td></tr>
+<tr><td>Мастер, шаги 2–3</td><td>320</td><td>Документ около 359 px</td><td>Шапка ломает reflow</td></tr>
+<tr><td>Сетка на 16 участников</td><td>390 / 320 / 768</td><td>Масштаб около 14% / 10% / 36%</td><td>Текст уменьшается вместе с полотном</td></tr>
+<tr><td>Пять сетов в модальном окне</td><td>320</td><td>254 px доступно, около 300 px требуется, имя 0 px</td><td>Пропадает идентификация строки</td></tr>
+<tr><td>Круговой формат, 8 участников</td><td>390</td><td>324 px видно; таблицы около 455 и 826 px</td><td>Нужна горизонтальная навигация с сохранением контекста</td></tr>
+<tr><td>Вкладка счёта, 16 участников</td><td>390 / 320</td><td>Высота около 4990 / 5835 px</td><td>Долгий поиск матча и повторяющиеся формы</td></tr>
+</tbody></table></div>
+<h2 id="что-уже-сделано-хорошо">Что уже сделано хорошо</h2>
+<ul>
+<li>Общая визуальная система узнаваема и достаточно последовательна. Для исправления мобильных сценариев полный визуальный редизайн не нужен.</li>
+<li>Основные цвета текста контрастны в обеих темах. Слабые места связаны прежде всего с маленьким масштабом, границами полей и управлением, а не с тотальной нечитаемостью палитры.</li>
+<li>Новая общая модальная оболочка использует нативный <code>dialog.showModal()</code>, затемнение и блокировку прокрутки. В текущем touch-тесте фон не сдвинулся под открытым окном; на скриншоте тёмного QR отделение окна от страницы хорошо различимо. В коде предусмотрены возврат фокуса, замыкание Tab и общий счётчик блокировок для вложенных окон.</li>
+<li>В live крупные кнопки розыгрыша и отдельная отмена — полезная основа рабочего инструмента. Обычные имена и короткие матчи воспринимаются существенно лучше крайних тестовых данных.</li>
+<li>Форма публичной регистрации имеет подписи и адаптирует обязательность второго игрока под режим пар. Пустой список турниров содержит понятное действие начала работы.</li>
+<li>Разделение мастера на спорт, формат и детали логично; проблема в мобильной подаче и переходах, а не в самой последовательности.</li>
+<li>Для анимации предусмотрены уровни качества, облегчённое представление, учёт экономии данных и reduced-motion. 3D останавливается при скрытии страницы. Маршруты загружаются отдельными чанками.</li>
+<li>Сборка проекта проходит. Основные трудности можно исправлять последовательно в существующей архитектуре.</li>
+</ul>
+<p>Модальные окна оцениваются относительно поведения диалога: фокус внутри, недоступный фон и возврат к инициатору. Это соответствует направлению <a href="https://www.w3.org/WAI/ARIA/apg/patterns/dialog-modal/">рекомендаций WAI-ARIA для modal dialog</a>. Нативная оболочка не решает автоматически сохранность черновика или поведение browser Back — для них выделены M23 и M46.</p>
+<h2 id="каталог-находок">Каталог находок</h2>
+<p>У каждой записи есть наблюдение, влияние на пользователя, сценарий воспроизведения, предложение, критерий приёмки и ссылки на реализацию. Скриншоты, логи и временные скрипты удалены после исследования при очистке проекта; текст находок и результаты измерений сохранены.</p><p class="note">Фильтры действуют на каталог находок. Полный отчёт и план остаются ниже. Ссылки на строки исходников доступны в Markdown-версии; здесь указаны файл и строка.</p><div class="filters" id="filters">
+<label class="search">Поиск по 47 находкам<input id="search" type="search" placeholder="Например: счёт, M07, клавиатура" autocomplete="off"></label>
+<label>Приоритет<select id="priority"><option value="">Все приоритеты</option><option>P1</option><option>P2</option><option>P3</option></select></label>
+<label>Область<select id="area"><option value="">Все области</option><option>Live</option><option>Live и связь</option><option>Аккаунт</option><option>Ввод счёта</option><option>Вход</option><option>Групповая стадия</option><option>Двойное выбывание</option><option>Доступность</option><option>Информационная иерархия</option><option>Информация о турнире</option><option>Кабинет</option><option>Круговой формат</option><option>Локализация</option><option>Мастер создания</option><option>Модальные окна</option><option>Настройки аккаунта</option><option>Настройки турнира</option><option>Обмен ссылками</option><option>Обратная связь</option><option>Общая навигация</option><option>Ошибки и восстановление</option><option>Пары и жеребьёвка</option><option>Первое знакомство</option><option>Поиск и навигация</option><option>Производительность</option><option>Регистрация</option><option>Роль счётчика</option><option>Сетка</option><option>Сохранение</option><option>Участники</option><option>Формы</option><option>Футбол</option></select></label>
+<button id="reset" type="button">Сбросить</button><p id="result-count" role="status" aria-live="polite">Показано 47 из 47</p></div><p id="empty-results" hidden>Совпадений нет. Измените запрос или сбросьте фильтры.</p><article class="finding" id="M01" data-priority="P1" data-area="Кабинет">
+<div class="finding-meta"><span class="badge P1">P1</span><span>M01 · Кабинет · Браузер · S</span></div>
+<h3><a class="permalink" href="#M01">Кнопки управления турниром выходят за экран</a></h3>
+<p><strong>Что наблюдалось.</strong> При ширине 390 px страница активного турнира имеет scrollWidth 473 px. Ряд «Копировать ссылку / QR-код / Остановить турнир» занимает 440 px и заканчивается на x=473. На 320 px кнопка остановки практически целиком находится справа за экраном. В регистрации аналогичный ряд заканчивается на x=441.</p>
+<p><strong>Влияние.</strong> Появляется горизонтальная прокрутка всей страницы; ключевые действия скрыты. При фокусировке браузер может сдвинуть страницу вбок, и часть шапки окажется обрезана.</p>
+<p><strong>Как воспроизвести.</strong> Открыть активный турнир как организатор на 320 или 390 px; прокрутить до кнопок под описанием. Измерить правую границу ряда.</p>
+<p><strong>Предложение.</strong> На узком экране разрешить перенос действий или сделать сетку из двух колонок; менее частые действия перенести в меню. Проверять ширину самого контейнера, а не только окна. Не устранять симптом глобальным overflow-x:hidden.</p>
+<p><strong>Критерий приёмки.</strong> Все действия доступны при 320–430 px; documentElement.scrollWidth не превышает clientWidth. Кнопки не требуют бокового сдвига страницы.</p>
+<p class="sources"><strong>Код:</strong> <code>src/styles.css:2284</code>, <code>src/views/AdminTournamentView.vue:1513</code></p>
+
+</article><article class="finding" id="M02" data-priority="P1" data-area="Сетка">
+<div class="finding-meta"><span class="badge P1">P1</span><span>M02 · Сетка · Браузер · L</span></div>
+<h3><a class="permalink" href="#M02">Автоматическое вписывание делает сетку нечитаемой</a></h3>
+<p><strong>Что наблюдалось.</strong> Для сетки на 16 участников начальный масштаб составляет около 14% на 390 px и 10% на 320 px. Масштабируется всё: фамилии, счёт и кнопки. Номинальный текст 13–16 px превращается примерно в 1,3–2,3 экранного CSS-пикселя. На 768 px масштаб остаётся около 36%.</p>
+<p><strong>Влияние.</strong> Зрителю сложно найти свой матч, а счётчику — попасть в кнопку. Формальное отсутствие обрезания достигается ценой потери читаемости.</p>
+<p><strong>Как воспроизвести.</strong> Открыть публичную олимпийскую сетку на 16 участников на телефоне; попробовать прочитать фамилии без увеличения и открыть live-матч.</p>
+<p><strong>Предложение.</strong> Сделать мобильным режимом по умолчанию список матчей или один раунд с переключателем. Полную сетку оставить отдельным обзором. Для обзора дать явные «+ / −», восстановление вида и переход к конкретному матчу.</p>
+<p><strong>Критерий приёмки.</strong> В основном мобильном режиме имена читаются без масштабирования, счёт имеет устойчивую иерархию, действия имеют нормальные области нажатия. Пользователь находит заданный матч за 10–15 секунд в тесте.</p>
+<p class="sources"><strong>Код:</strong> <code>src/components/InfiniteCanvas.vue:69</code>, <code>src/components/BracketBoard.vue:254</code></p>
+
+</article><article class="finding" id="M03" data-priority="P1" data-area="Роль счётчика">
+<div class="finding-meta"><span class="badge P1">P1</span><span>M03 · Роль счётчика · Браузер · M</span></div>
+<h3><a class="permalink" href="#M03">У счётчика есть активная вкладка, которая ничего не делает</a></h3>
+<p><strong>Что наблюдалось.</strong> У роли counter вкладка «Счёт» доступна для нажатия, но после нажатия активной остаётся panel-bracket. isTabEnabled разрешает этой роли только bracket. В групповой стадии на вкладке сетки вообще нет кнопок ввода счёта. В круговом формате раскрытые строки позволяют открыть лишь уже активный live-матч.</p>
+<p><strong>Влияние.</strong> Человек, которому назначили ведение счёта, не может выполнить основную задачу в части форматов. Это функциональный блокер, не косметический недостаток.</p>
+<p><strong>Как воспроизвести.</strong> Войти в тестовую роль counter; открыть активный турнир; нажать «Счёт». Повторить для групп и кругового формата, где live ещё не запущен.</p>
+<p><strong>Предложение.</strong> Согласовать видимость вкладок, isTabEnabled и права действий. Дать счётчику отдельный список доступных матчей с кнопкой «Начать счёт». Для футбола явно учитывать отсутствие поочкового теннисного режима.</p>
+<p><strong>Критерий приёмки.</strong> Counter может начать, продолжить и отменить очко в разрешённом матче каждого поддерживаемого формата; запрещённые действия организатора отсутствуют. Нажатие на активную вкладку всегда меняет соответствующую панель.</p>
+<p class="sources"><strong>Код:</strong> <code>src/views/AdminTournamentView.vue:1367</code>, <code>src/components/GroupStageBoard.vue:28</code>, <code>src/components/RoundRobinStandings.vue:56</code></p>
+
+</article><article class="finding" id="M04" data-priority="P1" data-area="Футбол">
+<div class="finding-meta"><span class="badge P1">P1</span><span>M04 · Футбол · Браузер · S</span></div>
+<h3><a class="permalink" href="#M04">Футбольная сетка открывает теннисное live-окно</a></h3>
+<p><strong>Что наблюдалось.</strong> В футбольном турнире на выбывание кнопка ввода на карточке матча открывает LiveScoringModal с вопросом «Кто выиграл розыгрыш?», авто-сменой сторон и теннисным состоянием. На уровне обычной сетки canLiveScore не ограничен семейством спорта.</p>
+<p><strong>Влияние.</strong> Интерфейс предлагает неподходящую механику и ведёт пользователя к неправильному типу операций. Результат реального RPC не проверялся; ошибочный экран воспроизведён на настоящих компонентах.</p>
+<p><strong>Как воспроизвести.</strong> Открыть футбольную олимпийку как организатор → «Сетка» → кнопка счёта на незавершённом матче.</p>
+<p><strong>Предложение.</strong> Выбирать редактор по scoringFamily. Пока футбольный live не реализован, открывать ввод голов/пенальти либо показывать только финальный результат. Общую кнопку назвать «Счёт матча».</p>
+<p><strong>Критерий приёмки.</strong> Во всех футбольных форматах не появляются теннисные очки, геймы, сеты и команды теннисного RPC. Матрица sport × format × role проверяется автоматически.</p>
+<p class="sources"><strong>Код:</strong> <code>src/views/AdminTournamentView.vue:1443</code>, <code>src/views/AdminTournamentView.vue:2139</code>, <code>src/components/LiveScoringModal.vue:131</code></p>
+
+</article><article class="finding" id="M05" data-priority="P1" data-area="Регистрация">
+<div class="finding-meta"><span class="badge P1">P1</span><span>M05 · Регистрация · Браузер · S</span></div>
+<h3><a class="permalink" href="#M05">После успешной заявки исчезает подтверждение</a></h3>
+<p><strong>Что наблюдалось.</strong> Тестовая заявка была принята, поля очистились, но ни одного видимого role=status не осталось. RegistrationForm устанавливает successText и сразу вызывает submitted; родитель запускает initialLoad, ставит loading=true и размонтирует форму вместе с сообщением.</p>
+<p><strong>Влияние.</strong> Игрок не понимает, отправилась ли заявка. Возможны повторные отправки и вопросы организатору. Список подтверждённых участников не помогает: новая заявка ещё pending.</p>
+<p><strong>Как воспроизвести.</strong> На публичной странице заполнить имя и корректный контакт; отправить заявку с успешным ответом API; дождаться обновления страницы.</p>
+<p><strong>Предложение.</strong> Хранить результат отправки выше формы либо обновлять список без её размонтирования. После успеха показывать устойчивое состояние «Заявка получена, ожидает подтверждения» с объяснением следующего шага.</p>
+<p><strong>Критерий приёмки.</strong> Подтверждение остаётся после обновления списка и объявляется скринридером. Повторная отправка того же участника не выглядит обязательным следующим действием.</p>
+<p class="sources"><strong>Код:</strong> <code>src/components/RegistrationForm.vue:88</code>, <code>src/views/PublicTournamentView.vue:659</code>, <code>src/views/PublicTournamentView.vue:373</code></p>
+
+</article><article class="finding" id="M06" data-priority="P1" data-area="Мастер создания">
+<div class="finding-meta"><span class="badge P1">P1</span><span>M06 · Мастер создания · Браузер · S</span></div>
+<h3><a class="permalink" href="#M06">Новый шаг мастера открывается внизу страницы</a></h3>
+<p><strong>Что наблюдалось.</strong> После «Далее» на 320 px второй шаг виден с нижних карточек формата, а третий — с превью и кнопки «Создать». Заголовок и обязательные поля остаются выше экрана. Номер шага на мобильном при этом скрыт.</p>
+<p><strong>Влияние.</strong> Пользователь теряет контекст: новый экран выглядит как продолжение старого или как пустая форма без полей. Особенно плохо это работает с клавиатурой и при длинном содержимом.</p>
+<p><strong>Как воспроизвести.</strong> В мастере на 320 px нажать «Далее» на первом и втором шагах, не прокручивая вручную вверх. Зафиксировать видимую область сразу после перехода.</p>
+<p><strong>Предложение.</strong> При смене шага после nextTick переводить фокус на заголовок текущего шага и прокручивать его под шапку. Учитывать prefers-reduced-motion. Данные формы при переходах сохранять.</p>
+<p><strong>Критерий приёмки.</strong> Каждый шаг начинается с видимого заголовка и понятного контекста; первый обязательный ввод достижим без поиска. Клавиатурный фокус не остаётся на нижней кнопке предыдущего шага.</p>
+<p class="sources"><strong>Код:</strong> <code>src/views/AdminTournamentCreateView.vue:18</code>, <code>src/views/AdminTournamentCreateView.vue:311</code></p>
+
+</article><article class="finding" id="M07" data-priority="P1" data-area="Ввод счёта">
+<div class="finding-meta"><span class="badge P1">P1</span><span>M07 · Ввод счёта · Браузер · M</span></div>
+<h3><a class="permalink" href="#M07">В пятисетовом окне подписи игроков имеют ширину 0 px</a></h3>
+<p><strong>Что наблюдалось.</strong> На 320 px сетка содержит 5 колонок по 52 px и промежутки; доступно 254 px, требуется 300 px. Вычисленная первая колонка — 0 px. Имена внутри строк исчезают, пятый сет обрезается. Заголовок матча остаётся, но привязка каждой строки к игроку становится неявной.</p>
+<p><strong>Влияние.</strong> Можно перепутать стороны при вводе результата. Горизонтальная прокрутка окна не восстанавливает нулевую колонку имён.</p>
+<p><strong>Как воспроизвести.</strong> Открыть «Счёт матча» для best_of_5 на 320 px. Проверить grid-template-columns и ширину .msm-grid__name.</p>
+<p><strong>Предложение.</strong> На узком экране вынести имя отдельной строкой над полями каждой стороны либо вводить результат по сетам: «Сет 1: A / B». Не ужимать имена до нуля. Аналогично проверить ScoreEditor на пять сетов.</p>
+<p><strong>Критерий приёмки.</strong> На 320 px видны названия обеих сторон и доступны все 10 полей. Пользователь однозначно связывает каждое поле с игроком и номером сета.</p>
+<p class="sources"><strong>Код:</strong> <code>src/components/MatchScoreModal.vue:210</code>, <code>src/styles.css:2776</code></p>
+
+</article><article class="finding" id="M08" data-priority="P1" data-area="Футбол">
+<div class="finding-meta"><span class="badge P1">P1</span><span>M08 · Футбол · Браузер · S</span></div>
+<h3><a class="permalink" href="#M08">Пустой футбольный результат отправляется как 0:0</a></h3>
+<p><strong>Что наблюдалось.</strong> В пустом окне достаточно нажать «Сохранить счёт»: тестовый API получает p_a_goals:0 и p_b_goals:0. Причина — Number(&#x27;&#x27;) === 0. Ввод не обёрнут в форму, поэтому одних min/type=number недостаточно для гарантированного выполнения всех проверок перед кнопкой.</p>
+<p><strong>Влияние.</strong> Незаполненный матч может превратиться в реальный нулевой результат. Для пользователя отсутствие данных и ничья 0:0 — принципиально разные состояния.</p>
+<p><strong>Как воспроизвести.</strong> Открыть незаполненный футбольный матч; не вводить значения; нажать сохранение. Проверить отправленный payload.</p>
+<p><strong>Предложение.</strong> Проверять присутствие обоих значений до преобразования Number, затем целочисленность и диапазон. Подсвечивать конкретное поле. Пенальти раскрывать только в подходящем контексте.</p>
+<p><strong>Критерий приёмки.</strong> Пустые поля не отправляют RPC. Настоящий 0:0 сохраняется только после явного ввода двух нулей; ошибки описаны рядом с соответствующими полями.</p>
+<p class="sources"><strong>Код:</strong> <code>src/components/MatchScoreModal.vue:75</code>, <code>src/components/FootballScoreEditor.vue:45</code></p>
+
+</article><article class="finding" id="M09" data-priority="P1" data-area="Пары и жеребьёвка">
+<div class="finding-meta"><span class="badge P1">P1</span><span>M09 · Пары и жеребьёвка · Браузер + код · M</span></div>
+<h3><a class="permalink" href="#M09">Ручное составление пар зависит только от перетаскивания</a></h3>
+<p><strong>Что наблюдалось.</strong> В режиме ручных пар обнаружены восемь draggable-элементов и ни одного select, input или listbox для назначения игрока. Нажатие на игрока и затем на слот не заполняет пару. Перестановка слотов сетки также построена на HTML drag-and-drop.</p>
+<p><strong>Влияние.</strong> Для сенсорного устройства это хрупкий сценарий, а для клавиатуры альтернативы нет. Это противоречит требованию доступной альтернативы перетаскиванию WCAG 2.5.7. Само наличие drag-and-drop оставлять допустимо.</p>
+<p><strong>Как воспроизвести.</strong> Открыть падел с неспаренными игроками → «Сформировать пары вручную». Попробовать назначить игрока последовательными нажатиями или клавиатурой.</p>
+<p><strong>Предложение.</strong> Добавить «Выбрать игрока» в каждый слот с поиском, исключением уже назначенных и возможностью очистки. Для сетки — выбрать участника, затем «Переместить / поменять местами». Drag-and-drop оставить дополнительным способом.</p>
+<p><strong>Критерий приёмки.</strong> Все операции назначения и обмена выполняются одним указателем без drag, а также клавиатурой. Полная фамилия доступна в выборе и в заполненном слоте.</p>
+<p class="sources"><strong>Код:</strong> <code>src/views/AdminTournamentView.vue:872</code>, <code>src/components/BracketMatchCard.vue:73</code></p>
+<p class="sources">Ориентир: <a href="https://www.w3.org/WAI/WCAG22/Understanding/dragging-movements.html">WCAG 2.5.7: альтернатива перетаскиванию</a>.</p>
+
+</article><article class="finding" id="M10" data-priority="P1" data-area="Мастер создания">
+<div class="finding-meta"><span class="badge P1">P1</span><span>M10 · Мастер создания · Браузер · S</span></div>
+<h3><a class="permalink" href="#M10">Русское название может превратиться в адрес «-»</a></h3>
+<p><strong>Что наблюдалось.</strong> Для названия «Весенний кубок» без ручного адреса create_tournament получает p_slug равный «-». slugify удаляет кириллицу, но сохраняет дефис от пробела и считает результат непустым. Другое русское название из двух слов создаст такой же адрес.</p>
+<p><strong>Влияние.</strong> Получается непонятная публичная ссылка; последующие турниры могут столкнуться с уникальностью slug. Организатор не видит итоговый адрес до отправки.</p>
+<p><strong>Как воспроизвести.</strong> В мастере указать русское название из двух слов, поле адреса оставить пустым. Проверить вычисленный payload перед API.</p>
+<p><strong>Предложение.</strong> Транслитерировать поддерживаемые языки, убирать крайние/повторные дефисы, добавлять устойчивый суффикс при коллизии. Показать полный адрес заранее и дать проверку доступности с понятной ошибкой.</p>
+<p><strong>Критерий приёмки.</strong> Кириллица, литовские диакритические знаки, пробелы и пунктуация дают валидный непустой slug. Адрес из одних дефисов невозможен.</p>
+<p class="sources"><strong>Код:</strong> <code>src/views/AdminTournamentCreateView.vue:65</code></p>
+</article><article class="finding" id="M11" data-priority="P1" data-area="Ввод счёта">
+<div class="finding-meta"><span class="badge P1">P1</span><span>M11 · Ввод счёта · Браузер + код · M</span></div>
+<h3><a class="permalink" href="#M11">Обновление данных сбрасывает несохранённый счёт другого матча</a></h3>
+<p><strong>Что наблюдалось.</strong> ScoreEditor заново вызывает initializeRows для всех матчей при глубоком изменении matches/setsByMatch. Сохранение одного матча вызывает loadAll(true), поэтому введённый черновик в другом матче может быть заменён значениями с сервера. Такой же путь запускается частью realtime-обновлений.</p>
+<p><strong>Влияние.</strong> Организатор теряет уже введённые значения без предупреждения. При параллельной работе это особенно опасно: пользователь не инициировал обновление своего черновика.</p>
+<p><strong>Как воспроизвести.</strong> Внести 5 в первое поле одного матча, затем сохранить другой матч. Проверить первое поле после обновления данных.</p>
+<p><strong>Предложение.</strong> Хранить черновики по matchId отдельно от серверного состояния с dirty-флагом. Обновлять чистые формы; для конфликтующих изменений показывать предложение сравнить значения. После сохранения очищать dirty только у сохранённого матча.</p>
+<p><strong>Критерий приёмки.</strong> Сохранение и realtime-события другого матча не меняют локальный черновик. Изменение того же матча другим оператором явно обозначается.</p>
+<p class="sources"><strong>Код:</strong> <code>src/components/ScoreEditor.vue:70</code>, <code>src/views/AdminTournamentView.vue:2269</code></p>
+
+</article><article class="finding" id="M12" data-priority="P2" data-area="Мастер создания">
+<div class="finding-meta"><span class="badge P2">P2</span><span>M12 · Мастер создания · Браузер · S</span></div>
+<h3><a class="permalink" href="#M12">Шапка мастера не помещается на узком экране</a></h3>
+<p><strong>Что наблюдалось.</strong> Первый шаг на 320 px имеет нормальную ширину. После появления плашки выбранного спорта на втором и третьем шагах ширина документа становится 359 px. Заголовок, плашка спорта и выход пытаются делить одну строку.</p>
+<p><strong>Влияние.</strong> Появляется боковой сдвиг; доступная ширина формы расходуется на вложенные отступы. Проблема проявляется именно после продвижения по мастеру, поэтому проверка только первого экрана её пропускает.</p>
+<p><strong>Как воспроизвести.</strong> На 320 px пройти со спорта к формату и деталям; проверить ширину документа и шапку мастера.</p>
+<p><strong>Предложение.</strong> Разделить шапку на компактный заголовок/выход и вторую строку «Шаг N из 3 · выбранный спорт». Дать перенос текста и адаптивные боковые отступы, включая длинные EN/LT-подписи.</p>
+<p><strong>Критерий приёмки.</strong> На всех трёх шагах documentWidth=viewportWidth; выход, название шага и выбранный спорт доступны без горизонтальной прокрутки.</p>
+<p class="sources"><strong>Код:</strong> <code>src/views/AdminTournamentCreateView.vue:341</code>, <code>src/views/AdminTournamentCreateView.vue:349</code></p>
+
+</article><article class="finding" id="M13" data-priority="P2" data-area="Регистрация">
+<div class="finding-meta"><span class="badge P2">P2</span><span>M13 · Регистрация · Браузер · S</span></div>
+<h3><a class="permalink" href="#M13">Форма регистрации расширяет страницу до 373 px на экране 320 px</a></h3>
+<p><strong>Что наблюдалось.</strong> При наличии списка участников grid-2 содержит колонки с автоматическим минимальным размером. На тестовом турнире карточка формы и соседняя область получают ширину 357 px вместо доступных 288 px. Это не внутренняя прокрутка таблицы: выезжает вся форма.</p>
+<p><strong>Влияние.</strong> Поля и кнопка выходят за границы; браузер сдвигает страницу при фокусировании. После отправки на скриншоте обрезана даже левая часть шапки.</p>
+<p><strong>Как воспроизвести.</strong> Открыть регистрацию с участниками и длинными именами на 320 px; перейти в контактное поле и отправить тестовую заявку.</p>
+<p><strong>Предложение.</strong> Задать minmax(0,1fr) для мобильной сетки, min-width:0 для её детей, width:100%/min-width:0 для полей. Строки участников и статусы должны переноситься независимо от формы.</p>
+<p><strong>Критерий приёмки.</strong> Форма, список и сообщения укладываются в 320 px с длинными именами; при фокусе не возникает горизонтального сдвига.</p>
+<p class="sources"><strong>Код:</strong> <code>src/styles.css:1468</code>, <code>src/views/PublicTournamentView.vue:655</code></p>
+
+</article><article class="finding" id="M14" data-priority="P2" data-area="Групповая стадия">
+<div class="finding-meta"><span class="badge P2">P2</span><span>M14 · Групповая стадия · Браузер · S</span></div>
+<h3><a class="permalink" href="#M14">Минимальная ширина группы больше доступного контейнера</a></h3>
+<p><strong>Что наблюдалось.</strong> GroupStageBoard задаёт minmax(320px,1fr), хотя внутри мобильной карточки остаётся меньше места. На 320 px правая граница групповой карточки достигает x=353. Дополнительная вложенная карточка ещё уменьшает место для таблицы.</p>
+<p><strong>Влияние.</strong> Группы обрезаются и создают горизонтальную прокрутку страницы. Внутренняя прокрутка таблицы сама по себе допустима, но контейнер группы должен помещаться.</p>
+<p><strong>Как воспроизвести.</strong> Открыть публичные группы на 320 px и прокрутить к группе A.</p>
+<p><strong>Предложение.</strong> Использовать minmax(min(100%,320px),1fr) либо одну колонку до подходящего breakpoint. На мобильном сократить количество вложенных рамок и отступов.</p>
+<p><strong>Критерий приёмки.</strong> Контейнеры групп не выходят за экран; горизонтально прокручивается только таблица, если она действительно требует двухмерного представления.</p>
+<p class="sources"><strong>Код:</strong> <code>src/components/GroupStageBoard.vue:46</code></p>
+
+</article><article class="finding" id="M15" data-priority="P2" data-area="Настройки аккаунта">
+<div class="finding-meta"><span class="badge P2">P2</span><span>M15 · Настройки аккаунта · Браузер · S</span></div>
+<h3><a class="permalink" href="#M15">Длинный email ломает ширину страницы</a></h3>
+<p><strong>Что наблюдалось.</strong> С тестовым адресом alexander.organizer.international.tournament@example.com ширина документа достигает 586 px и на 320, и на 390 px. Имя аккаунта тоже выводится этим адресом. min-width:0 у контейнера не заставляет сам текст переноситься.</p>
+<p><strong>Влияние.</strong> Обычный длинный адрес создаёт горизонтальную прокрутку и уводит содержимое за карточку.</p>
+<p><strong>Как воспроизвести.</strong> Открыть настройки с длинным email без загруженного currentPlayer.</p>
+<p><strong>Предложение.</strong> Добавить overflow-wrap:anywhere для email/неразрывных строк. В качестве имени использовать display_name или Google full_name; email показывать отдельно. Аналогично проверить меню профиля и список соорганизаторов.</p>
+<p><strong>Критерий приёмки.</strong> Адреса длиной 60–100 символов помещаются при 320 px; адрес остаётся полностью доступным, например через перенос и копирование.</p>
+<p class="sources"><strong>Код:</strong> <code>src/views/AdminSettingsView.vue:86</code>, <code>src/views/AdminSettingsView.vue:93</code></p>
+
+</article><article class="finding" id="M16" data-priority="P2" data-area="Доступность">
+<div class="finding-meta"><span class="badge P2">P2</span><span>M16 · Доступность · Браузер + код · S</span></div>
+<h3><a class="permalink" href="#M16">Размеры областей нажатия непоследовательны</a></h3>
+<p><strong>Что наблюдалось.</strong> Общий токен touch-min=44 есть, но многие элементы его обходят: тема 38×38, меню и закрытие 32×32, смена сторон 34×34, одобрение/отклонение 40×40, поля сетов высотой 36 px. Иконка счёта в карточке сетки ещё меньше и дополнительно уменьшается transform.</p>
+<p><strong>Влияние.</strong> На телефоне возрастает число промахов, особенно возле соседнего разрушительного действия. Размер меньше 44 px не автоматически означает нарушение WCAG AA: минимум 2.5.8 — 24 px с исключениями по расстояниям; 44 px здесь практическая цель удобства.</p>
+<p><strong>Как воспроизвести.</strong> Сравнить реальные getBoundingClientRect интерактивных элементов на мобильном, включая масштабированные карточки.</p>
+<p><strong>Предложение.</strong> Ввести единые размеры touch-target не менее 44×44 для основных мобильных действий. Иконку можно оставить визуально маленькой, увеличив её кнопку. Расстояния проверять с учётом соседних действий.</p>
+<p><strong>Критерий приёмки.</strong> Кнопки управления, крестики и действия строки комфортно нажимаются одним пальцем; отсутствуют микроскопические цели в масштабированном основном режиме.</p>
+<p class="sources"><strong>Код:</strong> <code>src/styles.css:79</code>, <code>src/components/ThemeToggle.vue:34</code>, <code>src/components/LiveScoringModal.vue:359</code>, <code>src/styles.css:2658</code></p>
+<p class="sources">Ориентир: <a href="https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum.html">WCAG 2.5.8: размер цели и исключения</a>.</p>
+
+</article><article class="finding" id="M17" data-priority="P2" data-area="Доступность">
+<div class="finding-meta"><span class="badge P2">P2</span><span>M17 · Доступность · Браузер + код · S</span></div>
+<h3><a class="permalink" href="#M17">Поля счёта не имеют однозначных доступных названий</a></h3>
+<p><strong>Что наблюдалось.</strong> В ScoreEditor и сетовой части MatchScoreModal у полей нет label/aria-label, связывающего игрока и номер сета. Дефис-placeholder не сообщает, что редактируется. Футбольные поля имеют одинаковую подпись «Голы» без команды; у пенальти в FootballScoreEditor подписи полей отсутствуют.</p>
+<p><strong>Влияние.</strong> Скринридер и голосовой ввод не позволяют уверенно выбрать нужное поле. При горизонтальном сдвиге визуальные подписи тоже теряют контекст.</p>
+<p><strong>Как воспроизвести.</strong> Перейти Tab по полям результата и проверить доступное имя каждого input в дереве доступности.</p>
+<p><strong>Предложение.</strong> Задать названия вида «Анна Петраускайте, сет 2, геймы» и «ФК Вильнюс, голы». Ошибки связывать через aria-describedby, состояние ошибки — aria-invalid. Объединить поля матча семантической группой.</p>
+<p><strong>Критерий приёмки.</strong> У каждого поля уникальное осмысленное имя; порядок Tab соответствует визуальному порядку; ошибку можно найти без чтения всей страницы.</p>
+<p class="sources"><strong>Код:</strong> <code>src/components/ScoreEditor.vue:232</code>, <code>src/components/MatchScoreModal.vue:129</code>, <code>src/components/FootballScoreEditor.vue:109</code></p>
+
+</article><article class="finding" id="M18" data-priority="P2" data-area="Доступность">
+<div class="finding-meta"><span class="badge P2">P2</span><span>M18 · Доступность · Браузер · S</span></div>
+<h3><a class="permalink" href="#M18">Язык нельзя нормально выбрать клавиатурой</a></h3>
+<p><strong>Что наблюдалось.</strong> Enter открывает список языка, ArrowDown не перемещает фокус. При Tab срабатывает blur на триггере и список исчезает. Выбор реализован только через mousedown.prevent; для option нет обычного click/клавиатурного сценария.</p>
+<p><strong>Влияние.</strong> Настройка недоступна части пользователей с клавиатурой, переключателями и некоторыми вспомогательными средствами. Это затрагивает все страницы.</p>
+<p><strong>Как воспроизвести.</strong> Сфокусировать RU → Enter → ArrowDown → Tab. Опции исчезают, язык остаётся прежним.</p>
+<p><strong>Предложение.</strong> Проще всего использовать нативный select. Если сохранять listbox, реализовать стрелки, Enter/Space, Escape, фокус внутри и закрытие только при уходе за пределы всего контрола.</p>
+<p><strong>Критерий приёмки.</strong> RU/EN/LT полностью выбираются без мыши; после закрытия фокус предсказуемо возвращается к триггеру.</p>
+<p class="sources"><strong>Код:</strong> <code>src/components/LanguageSwitcher.vue:43</code>, <code>src/components/LanguageSwitcher.vue:58</code></p>
+</article><article class="finding" id="M19" data-priority="P2" data-area="Локализация">
+<div class="finding-meta"><span class="badge P2">P2</span><span>M19 · Локализация · Браузер · XS</span></div>
+<h3><a class="permalink" href="#M19">После смены языка html остаётся lang=&quot;ru&quot;</a></h3>
+<p><strong>Что наблюдалось.</strong> Интерфейс переключается на English или Lietuvių, но document.documentElement.lang остаётся ru из index.html. Изменение locale обновляет тексты и localStorage, не язык документа.</p>
+<p><strong>Влияние.</strong> Скринридер может читать английский или литовский русскими правилами произношения. Автоматические средства перевода тоже получают неверный контекст.</p>
+<p><strong>Как воспроизвести.</strong> Переключить язык на EN или LT; проверить атрибут lang элемента html.</p>
+<p><strong>Предложение.</strong> Синхронизировать html.lang с текущим locale при инициализации и изменениях. Для отдельных фрагментов другого языка задавать собственный lang, если они остаются.</p>
+<p><strong>Критерий приёмки.</strong> Сохранённый и выбранный язык совпадают с html.lang после загрузки и переключения. Проверить по WCAG 3.1.1.</p>
+<p class="sources"><strong>Код:</strong> <code>index.html:2</code>, <code>src/components/LanguageSwitcher.vue:16</code></p>
+<p class="sources">Ориентир: <a href="https://www.w3.org/WAI/WCAG22/Understanding/language-of-page.html">WCAG 3.1.1: язык страницы</a>.</p>
+
+</article><article class="finding" id="M20" data-priority="P2" data-area="Сохранение">
+<div class="finding-meta"><span class="badge P2">P2</span><span>M20 · Сохранение · Браузер · S</span></div>
+<h3><a class="permalink" href="#M20">Двойное нажатие отправляет два сохранения счёта</a></h3>
+<p><strong>Что наблюдалось.</strong> На тестовой задержке 500 мс dblclick по «Сохранить счёт» вызвал два update_match_sets. Поля получают row.saving, но кнопка не блокируется по этому состоянию; в save нет ранней защиты от повторного вызова.</p>
+<p><strong>Влияние.</strong> Пользователь не видит устойчивого состояния отправки и может породить повторные запросы. Это создаёт лишние обновления и увеличивает риск гонок при изменениях результата.</p>
+<p><strong>Как воспроизвести.</strong> В ScoreEditor включить задержку ответа и быстро дважды нажать сохранение одного матча; посчитать запросы.</p>
+<p><strong>Предложение.</strong> Хранить saving по matchId, проверять его в обработчике и блокировать кнопку. Показывать «Сохраняем…», затем подтверждение для конкретного матча. Ошибки не должны уничтожать введённые значения.</p>
+<p><strong>Критерий приёмки.</strong> Один цикл отправки создаёт один запрос даже при серии быстрых тапов; другие матчи остаются доступны согласно выбранной модели работы.</p>
+<p class="sources"><strong>Код:</strong> <code>src/components/ScoreEditor.vue:127</code>, <code>src/components/ScoreEditor.vue:266</code></p>
+</article><article class="finding" id="M21" data-priority="P2" data-area="Обмен ссылками">
+<div class="finding-meta"><span class="badge P2">P2</span><span>M21 · Обмен ссылками · Браузер · S</span></div>
+<h3><a class="permalink" href="#M21">«Скопировано» показывается даже при отказе буфера обмена</a></h3>
+<p><strong>Что наблюдалось.</strong> При принудительном отказе navigator.clipboard.writeText окно QR показывает «Скопировано!». Аналогичные catch-ветки есть в списке турниров и шапке турнира. Если Clipboard API отсутствует, shareLink возвращает URL, ничего не копируя.</p>
+<p><strong>Влияние.</strong> Организатор уверен, что ссылка в буфере, но отправляет старый текст или пустое сообщение. На мобильном этот сценарий особенно важен для распространения турнира.</p>
+<p><strong>Как воспроизвести.</strong> Сымитировать отказ Clipboard API; нажать «Копировать ссылку»; проверить текст обратной связи и факт вызова.</p>
+<p><strong>Предложение.</strong> Показывать успех только после успешного копирования. При отказе выводить выделяемую ссылку и подсказку ручного копирования; при наличии Web Share предлагать «Поделиться».</p>
+<p><strong>Критерий приёмки.</strong> Ошибка никогда не выдаётся за успех. Ссылка остаётся доступной для ручного копирования, в том числе в браузере без Clipboard API.</p>
+<p class="sources"><strong>Код:</strong> <code>src/lib/shareLink.js:13</code>, <code>src/components/TournamentQrModal.vue:37</code>, <code>src/views/AdminTournamentListView.vue:131</code></p>
+
+</article><article class="finding" id="M22" data-priority="P2" data-area="Ошибки и восстановление">
+<div class="finding-meta"><span class="badge P2">P2</span><span>M22 · Ошибки и восстановление · Браузер · M</span></div>
+<h3><a class="permalink" href="#M22">Сетевые ошибки либо выглядят как неправильная ссылка, либо не видны</a></h3>
+<p><strong>Что наблюдалось.</strong> Публичная страница при Failed to fetch предлагает проверить ссылку, хотя причина — сеть. В кабинете показывается технический текст без «Повторить». На лендинге отказ Google-входа становится необработанным исключением, а видимого объяснения нет.</p>
+<p><strong>Влияние.</strong> Пользователь не знает, повторять действие, исправлять данные или ждать. Невозможно отличить временный сбой от отсутствия турнира.</p>
+<p><strong>Как воспроизвести.</strong> По отдельности сымитировать ошибку загрузки турнира, списка, регистрации и signInWithOAuth. Сравнить сообщения и доступные действия.</p>
+<p><strong>Предложение.</strong> Разделить not found / нет доступа / сеть / сервер / валидация. Добавить понятное сообщение, «Повторить» и сохранение введённых данных. Обрабатывать исключения входа, объявлять ошибки через role=alert.</p>
+<p><strong>Критерий приёмки.</strong> Каждый ошибочный сценарий даёт корректное объяснение и достижимый способ восстановления. Нет необработанных исключений от пользовательского действия.</p>
+<p class="sources"><strong>Код:</strong> <code>src/views/PublicTournamentView.vue:606</code>, <code>src/views/AdminTournamentListView.vue:247</code>, <code>src/views/HomeView.vue:11</code></p>
+
+</article><article class="finding" id="M23" data-priority="P2" data-area="Формы">
+<div class="finding-meta"><span class="badge P2">P2</span><span>M23 · Формы · Браузер · M</span></div>
+<h3><a class="permalink" href="#M23">Ввод теряется при случайном закрытии или уходе со страницы</a></h3>
+<p><strong>Что наблюдалось.</strong> Заполненный мастер закрывается по ссылке бренда без предупреждения. Изменённый счёт в модальном окне исчезает после Escape без проверки dirty. Для новой общей модальной оболочки это особенно важно: теперь дополнительные способы закрытия доступны во всех формах.</p>
+<p><strong>Влияние.</strong> На телефоне легко задеть фон или кнопку возврата. Несколько минут ввода могут быть потеряны. При этом подтверждение закрытия пустого окна было бы лишним.</p>
+<p><strong>Как воспроизвести.</strong> Внести данные в мастер и перейти к списку; изменить поле счёта и закрыть окно по Escape/фону.</p>
+<p><strong>Предложение.</strong> Добавить dirty-проверку на уровне редактирующей формы, а не всех окон. Для мастера сохранять локальный черновик с понятным восстановлением. При выходе из изменённой формы предложить «Продолжить редактирование / Отбросить».</p>
+<p><strong>Критерий приёмки.</strong> Неизменённые окна закрываются сразу. Изменённая форма не теряет ввод молча; после восстановления пользователь видит те же значения.</p>
+<p class="sources"><strong>Код:</strong> <code>src/views/AdminTournamentCreateView.vue:126</code>, <code>src/components/AppModal.vue:64</code>, <code>src/components/MatchScoreModal.vue:106</code></p>
+</article><article class="finding" id="M24" data-priority="P2" data-area="Участники">
+<div class="finding-meta"><span class="badge P2">P2</span><span>M24 · Участники · Браузер · S</span></div>
+<h3><a class="permalink" href="#M24">Отклонённая заявка исчезает без возможности восстановить её</a></h3>
+<p><strong>Что наблюдалось.</strong> После отклонения тестовой заявки участник больше не отображается: интерфейс показывает только pending и approved. Кнопки восстановления и списка отклонённых нет. В тесте количество видимых совпадений имени стало нулевым.</p>
+<p><strong>Влияние.</strong> Ошибочный тап рядом с одобрением трудно исправить. Пользователю приходится повторно добавлять человека или разбираться с данными вне обычного сценария.</p>
+<p><strong>Как воспроизвести.</strong> В разделе заявок отклонить одного участника и попытаться найти его либо отменить действие.</p>
+<p><strong>Предложение.</strong> Показывать фильтр «Отклонённые» и действие восстановления. Сразу после изменения дать «Отменить» с привязкой к имени. Для единичного отклонения такой undo обычно удобнее обязательного подтверждения каждого тапа.</p>
+<p><strong>Критерий приёмки.</strong> Любое случайное отклонение обратимо через интерфейс; сохраняются контакт и сведения заявки.</p>
+<p class="sources"><strong>Код:</strong> <code>src/views/AdminTournamentView.vue:144</code>, <code>src/views/AdminTournamentView.vue:587</code></p>
+</article><article class="finding" id="M25" data-priority="P2" data-area="Сетка">
+<div class="finding-meta"><span class="badge P2">P2</span><span>M25 · Сетка · Браузер · M</span></div>
+<h3><a class="permalink" href="#M25">Сетка перехватывает вертикальный свайп страницы</a></h3>
+<p><strong>Что наблюдалось.</strong> В Chromium с pointer:coarse и hover:false свайп на 150 px внутри полотна изменил translateY сетки с 250,81 до 100,81, а scrollY страницы остался 337. Полотно имеет touch-action:none и занимает значительную часть экрана.</p>
+<p><strong>Влияние.</strong> Обычный жест прокрутки неожиданно двигает диаграмму. На узком экране остаются маленькие поля вокруг полотна, за которые нужно попасть, чтобы продолжить читать страницу.</p>
+<p><strong>Как воспроизвести.</strong> На сенсорном представлении открыть публичную сетку и провести пальцем вверх внутри её области.</p>
+<p><strong>Предложение.</strong> В обычном режиме позволить вертикальную прокрутку страницы; интерактивное панорамирование включать явно или выносить в отдельный полноэкранный просмотр. Список матчей должен работать обычными свайпами.</p>
+<p><strong>Критерий приёмки.</strong> На основном экране свайп вверх предсказуемо прокручивает страницу. Режим управления диаграммой явно обозначен, имеет выход и доступную альтернативу жестам.</p>
+<p class="sources"><strong>Код:</strong> <code>src/styles.css:2392</code>, <code>src/components/InfiniteCanvas.vue:124</code></p>
+
+</article><article class="finding" id="M26" data-priority="P2" data-area="Сетка">
+<div class="finding-meta"><span class="badge P2">P2</span><span>M26 · Сетка · Браузер · S</span></div>
+<h3><a class="permalink" href="#M26">Поворот телефона не пересчитывает масштаб сетки</a></h3>
+<p><strong>Что наблюдалось.</strong> После перехода от 390×844 к 844×390 transform остался тем же — примерно scale(0.141). Resize обновляет соединительные линии, но не выполняет fitToView. В новом широком окне сетка остаётся миниатюрной.</p>
+<p><strong>Влияние.</strong> Альбомная ориентация не даёт ожидаемого выигрыша читаемости. При обратном повороте вид, настроенный под широкий экран, может оказаться неудобным.</p>
+<p><strong>Как воспроизвести.</strong> Открыть сетку, нажать вписывание, повернуть устройство и сравнить transform.</p>
+<p><strong>Предложение.</strong> Разделить режим «автоматически вписать» и пользовательский zoom. В автоматическом режиме реагировать на размер контейнера; в ручном сохранять выбранный матч/центр обзора, не сбрасывая пользователя при каждом обновлении счёта.</p>
+<p><strong>Критерий приёмки.</strong> Поворот и изменение контейнера корректируют автоматический вид. Ручное увеличение не сбрасывается из-за обычного realtime-события.</p>
+<p class="sources"><strong>Код:</strong> <code>src/components/BracketBoard.vue:239</code>, <code>src/components/InfiniteCanvas.vue:69</code></p>
+</article><article class="finding" id="M27" data-priority="P2" data-area="Двойное выбывание">
+<div class="finding-meta"><span class="badge P2">P2</span><span>M27 · Двойное выбывание · Браузер · S</span></div>
+<h3><a class="permalink" href="#M27">Панели управления трёх сеток накладываются друг на друга</a></h3>
+<p><strong>Что наблюдалось.</strong> У winners, losers и grand final одинаковые координаты toolbar: x=199, ширина 158, высота 42 в проверке на 390 px. position:absolute привязывает их к общей внешней .card; отдельные .de-panel не создают нужный контекст позиционирования.</p>
+<p><strong>Влияние.</strong> Визуально видно одну панель, хотя их три. Нажатие может управлять последней сеткой вместо той, которую смотрит пользователь.</p>
+<p><strong>Как воспроизвести.</strong> Открыть двойное выбывание с тремя секциями; сравнить boundingClientRect всех .infinite-canvas__toolbar.</p>
+<p><strong>Предложение.</strong> Привязать toolbar к конкретной .de-panel либо разместить controls внутри её заголовка обычным потоком. В названии доступного контрола уточнять сетку.</p>
+<p><strong>Критерий приёмки.</strong> В каждой секции собственные видимые controls; изменение одной сетки не затрагивает другую; ни один toolbar не перекрыт соседним.</p>
+<p class="sources"><strong>Код:</strong> <code>src/styles.css:2414</code>, <code>src/styles.css:2377</code>, <code>src/components/DoubleElimBoard.vue:80</code></p>
+
+</article><article class="finding" id="M28" data-priority="P2" data-area="Круговой формат">
+<div class="finding-meta"><span class="badge P2">P2</span><span>M28 · Круговой формат · Браузер · M</span></div>
+<h3><a class="permalink" href="#M28">Таблица результатов требует сложной горизонтальной навигации</a></h3>
+<p><strong>Что наблюдалось.</strong> На 390 px видимая область таблицы — 324 px, турнирная таблица занимает примерно 455 px, перекрёстная — 826 px для восьми участников. Первый столбец не закреплён. При прокрутке вправо теряется имя строки, а на исходном положении видны в основном имена.</p>
+<p><strong>Влияние.</strong> Сравнить соперников и попасть в нужный результат трудно одной рукой. Таблица как двухмерная структура может иметь исключение по WCAG reflow, но это не делает её удобным основным мобильным экраном.</p>
+<p><strong>Как воспроизвести.</strong> Открыть круговой турнир на телефоне; найти результат между двумя участниками из дальних столбцов.</p>
+<p><strong>Предложение.</strong> Добавить мобильный список «участник → его матчи» либо «матчи тура». Таблицу оставить альтернативным видом с закреплёнными именами/шапкой, подсказкой горизонтального скролла и поиском.</p>
+<p><strong>Критерий приёмки.</strong> Нужный матч находится без запоминания невидимых заголовков; переход между обзором и карточкой сохраняет выбранного участника.</p>
+<p class="sources"><strong>Код:</strong> <code>src/components/RoundRobinCrossTable.vue:126</code>, <code>src/components/RoundRobinStandings.vue:35</code></p>
+
+</article><article class="finding" id="M29" data-priority="P2" data-area="Доступность">
+<div class="finding-meta"><span class="badge P2">P2</span><span>M29 · Доступность · Код · S</span></div>
+<h3><a class="permalink" href="#M29">Раскрываемые строки таблицы работают только по click</a></h3>
+<p><strong>Что наблюдалось.</strong> RoundRobinStandings использует click на tr и li без доступной кнопки, tabindex и клавиатурных обработчиков. aria-expanded у строки сам по себе не делает её интерактивной. В перекрёстной таблице кнопка «LIVE» не включает имена соперников в собственное имя.</p>
+<p><strong>Влияние.</strong> Клавиатурой нельзя повторить обычный сценарий раскрытия расписания. В списке кнопок скринридера трудно понять, какой матч откроется.</p>
+<p><strong>Как воспроизвести.</strong> Проверить фокусируемые элементы расписания: строка участника и live-строка не входят в Tab-порядок как действия.</p>
+<p><strong>Предложение.</strong> Поместить в ячейку настоящую кнопку раскрытия с aria-expanded/aria-controls; live-матч сделать ссылкой или кнопкой с именами обеих сторон. Сохранить семантику самой таблицы.</p>
+<p><strong>Критерий приёмки.</strong> Раскрытие, закрытие и открытие live работают клавиатурой; все действия имеют понятные названия и видимый фокус.</p>
+<p class="sources"><strong>Код:</strong> <code>src/components/RoundRobinStandings.vue:87</code>, <code>src/components/RoundRobinStandings.vue:133</code>, <code>src/components/RoundRobinCrossTable.vue:96</code></p>
+</article><article class="finding" id="M30" data-priority="P2" data-area="Live и связь">
+<div class="finding-meta"><span class="badge P2">P2</span><span>M30 · Live и связь · Код · M</span></div>
+<h3><a class="permalink" href="#M30">Нет понятного состояния потери связи и актуальности счёта</a></h3>
+<p><strong>Что наблюдалось.</strong> Realtime-подписки не выводят состояние подключения в интерфейс. В live-окне пользователю видны технические rev и +N, но нет «Подключаемся / Нет связи / Последнее обновление». Наличие активного live_scores.status не гарантирует, что клиент продолжает получать события.</p>
+<p><strong>Влияние.</strong> Зритель может принять старый счёт за текущий. Оператор не понимает, сохранился ли тап или нужно повторить его. Работа на реальном нестабильном канале требует отдельного интеграционного теста.</p>
+<p><strong>Как воспроизвести.</strong> Проверено по setupRealtime и выводу LiveScoringModal; ошибки RPC сымитированы отдельно. Реальное переподключение Supabase в этом аудите не тестировалось.</p>
+<p><strong>Предложение.</strong> Показывать человеческое состояние соединения и подтверждения операций, время последнего обновления, явное восстановление. Не включать автоматический повтор мутаций без защиты от дублей и конфликтов.</p>
+<p><strong>Критерий приёмки.</strong> Отключение сети заметно пользователю; неподтверждённое действие не выглядит сохранённым; после восстановления счёт сверяется с сервером.</p>
+<p class="sources"><strong>Код:</strong> <code>src/views/PublicTournamentView.vue:545</code>, <code>src/views/AdminTournamentView.vue:570</code>, <code>src/components/LiveScoringModal.vue:308</code></p>
+
+</article><article class="finding" id="M31" data-priority="P2" data-area="Информационная иерархия">
+<div class="finding-meta"><span class="badge P2">P2</span><span>M31 · Информационная иерархия · Спорное решение · M</span></div>
+<h3><a class="permalink" href="#M31">Большая шапка откладывает главное содержимое за первый экран</a></h3>
+<p><strong>Что наблюдалось.</strong> На 320 px карточка турнира с иконкой, названием, статусом, пятью чипами и коротким описанием занимает почти весь первый экран. Сетка, форма или рабочие кнопки начинаются ниже. Длинное описание усиливает эффект.</p>
+<p><strong>Влияние.</strong> Зритель пришёл узнать счёт, но сначала просматривает метаданные. Счётчик каждый раз прокручивает одинаковую информацию перед работой.</p>
+<p><strong>Как воспроизвести.</strong> Открыть турнир по ссылке на небольшом телефоне и оценить, что видно без первого свайпа.</p>
+<p><strong>Предложение.</strong> Для идущего турнира оставить компактные название/статус, дать якорь «Матчи сейчас» и свернуть подробности. В регистрации приоритет отдать сроку и кнопке заявки. Роль и стадия должны влиять на композицию.</p>
+<p><strong>Критерий приёмки.</strong> В первом экране виден следующий полезный шаг либо сам текущий матч. Изменение проверено коротким тестом на зрителях и операторах, а не только визуальным сравнением.</p>
+<p class="sources"><strong>Код:</strong> <code>src/views/PublicTournamentView.vue:610</code>, <code>src/views/AdminTournamentView.vue:1496</code></p>
+
+</article><article class="finding" id="M32" data-priority="P2" data-area="Мастер создания">
+<div class="finding-meta"><span class="badge P2">P2</span><span>M32 · Мастер создания · Спорное решение · S</span></div>
+<h3><a class="permalink" href="#M32">На телефоне скрыта информация о прогрессе мастера</a></h3>
+<p><strong>Что наблюдалось.</strong> При max-width:760px wizard__progress-wrap полностью скрывается вместе с «Шаг N из 3». Между тем мастер действительно содержит три разных решения и длинный третий шаг.</p>
+<p><strong>Влияние.</strong> Пользователь не знает, сколько ещё осталось и что произойдёт после «Далее». Это усиливает проблему сохранённой прокрутки при смене шага.</p>
+<p><strong>Как воспроизвести.</strong> Сравнить шапку мастера на широком и мобильном экране.</p>
+<p><strong>Предложение.</strong> Оставить компактную текстовую строку «2 из 3 · Формат». На третьем шаге сгруппировать необязательные настройки и не ставить декоративное превью между последним полем и главным действием.</p>
+<p><strong>Критерий приёмки.</strong> На всех размерах понятны текущий шаг, оставшийся путь и возможность вернуться без потери данных.</p>
+<p class="sources"><strong>Код:</strong> <code>src/views/AdminTournamentCreateView.vue:602</code></p>
+
+</article><article class="finding" id="M33" data-priority="P2" data-area="Live">
+<div class="finding-meta"><span class="badge P2">P2</span><span>M33 · Live · Спорное решение · S</span></div>
+<h3><a class="permalink" href="#M33">Длинные имена плохо читаются на кнопках розыгрыша</a></h3>
+<p><strong>Что наблюдалось.</strong> На 390 px длинные фамилии в двух соседних кнопках разбиваются посреди слова на три строки, вплоть до одиночной последней буквы. В таблице выше одно имя уже обрезано многоточием. При смене сторон расположение кнопок меняется.</p>
+<p><strong>Влияние.</strong> Оператору нужно быстро узнавать нужную сторону, а не перечитывать ломанный текст. Цена ошибки здесь — неверно записанное очко.</p>
+<p><strong>Как воспроизвести.</strong> Открыть live с длинными именами и проверить распознавание сторон одним взглядом, затем повторить после смены сторон.</p>
+<p><strong>Предложение.</strong> Использовать устойчивый формат «И. Фамилия» с целыми словами и понятной связью со стороной; полное имя оставить доступным рядом. Добавить явный смысл «+ очко». Проверить с реальными счётчиками, что важнее: фиксированные игроки или соответствие сторонам корта.</p>
+<p><strong>Критерий приёмки.</strong> Имена различимы за один взгляд; кнопки не распадаются на случайные буквы; смена сторон не повышает частоту ошибочных тапов в пользовательском тесте.</p>
+<p class="sources"><strong>Код:</strong> <code>src/components/LiveScoringModal.vue:281</code>, <code>src/components/LiveScoringModal.vue:259</code></p>
+
+</article><article class="finding" id="M34" data-priority="P2" data-area="Поиск и навигация">
+<div class="finding-meta"><span class="badge P2">P2</span><span>M34 · Поиск и навигация · Спорное решение · M</span></div>
+<h3><a class="permalink" href="#M34">Длинные списки не помогают найти нужный матч или человека</a></h3>
+<p><strong>Что наблюдалось.</strong> При 16 участниках вкладка ввода счёта имеет высоту около 4990 px на 390 px и 5835 px на 320 px. Отрисованы также будущие незаполненные матчи. В списках турниров и участников нет поиска; в счёте нет фильтра «идут / готовы / завершены».</p>
+<p><strong>Влияние.</strong> Частая задача превращается в многократную прокрутку. Ошибиться соседним матчем проще, чем в коротком списке с явным контекстом.</p>
+<p><strong>Как воспроизвести.</strong> Попробовать найти заданного участника или готовый матч в середине большого списка.</p>
+<p><strong>Предложение.</strong> Добавить поиск по имени/турниру, фильтр состояния матчей и компактные карточки с раскрытием редактора по запросу. Сохранять фильтр и позицию при возврате. Начать с экрана счётчика, где это особенно часто используется.</p>
+<p><strong>Критерий приёмки.</strong> Нужный матч находится по имени за несколько действий. На экране редактируется один явно выбранный матч; завершённые и будущие не мешают текущим.</p>
+<p class="sources"><strong>Код:</strong> <code>src/components/ScoreEditor.vue:193</code>, <code>src/views/AdminTournamentListView.vue:21</code>, <code>src/views/AdminTournamentView.vue:145</code></p>
+
+</article><article class="finding" id="M35" data-priority="P2" data-area="Обмен ссылками">
+<div class="finding-meta"><span class="badge P2">P2</span><span>M35 · Обмен ссылками · Спорное решение · S</span></div>
+<h3><a class="permalink" href="#M35">Копирование ссылки скрыто именно в мобильном списке</a></h3>
+<p><strong>Что наблюдалось.</strong> При ширине меньше 560 px .t-card__copy получает display:none. На компьютере ссылкой можно поделиться из списка, а на телефоне нужно сначала открыть турнир и найти действия в его большой шапке.</p>
+<p><strong>Влияние.</strong> Усложняется частый мобильный сценарий «быстро отправить турнир в чат». Экономия места достигается удалением полезного действия.</p>
+<p><strong>Как воспроизвести.</strong> Сравнить карточку активного турнира на 390 и 768 px.</p>
+<p><strong>Предложение.</strong> Сохранить компактную кнопку «Поделиться» с достаточной зоной нажатия либо явное меню карточки. При наличии Web Share открывать системное меню, иначе копировать с корректным результатом.</p>
+<p><strong>Критерий приёмки.</strong> Поделиться активным турниром из списка можно одним действием на телефоне; карточка не становится перегруженной.</p>
+<p class="sources"><strong>Код:</strong> <code>src/views/AdminTournamentListView.vue:394</code></p>
+
+</article><article class="finding" id="M36" data-priority="P2" data-area="Информация о турнире">
+<div class="finding-meta"><span class="badge P2">P2</span><span>M36 · Информация о турнире · Код · S</span></div>
+<h3><a class="permalink" href="#M36">Контакты организатора собираются, но не доходят до участника</a></h3>
+<p><strong>Что наблюдалось.</strong> Мастер отправляет contact_phone и contact_email. Публичная страница и кабинет не включают эти поля в select и не выводят их; в настройках турнира нет их редактирования.</p>
+<p><strong>Влияние.</strong> Игрок не может использовать введённые контакты, чтобы уточнить место, время или отменить заявку. Организатор может ошибочно считать, что уже опубликовал способ связи.</p>
+<p><strong>Как воспроизвести.</strong> Заполнить контакты при создании и найти их на публичной странице; сопоставить запросы и шаблоны двух страниц.</p>
+<p><strong>Предложение.</strong> Объяснить назначение полей и дать явный выбор публикации. Если это публичные контакты, вывести «Позвонить / Написать» в блоке организатора и разрешить редактирование. Если внутренние — так и подписать.</p>
+<p><strong>Критерий приёмки.</strong> Назначение и видимость контактов ясны до отправки. Опубликованный контакт доступен с телефона и может быть исправлен.</p>
+<p class="sources"><strong>Код:</strong> <code>src/views/AdminTournamentCreateView.vue:107</code>, <code>src/views/PublicTournamentView.vue:381</code>, <code>src/views/AdminTournamentView.vue:340</code></p>
+</article><article class="finding" id="M37" data-priority="P2" data-area="Обратная связь">
+<div class="finding-meta"><span class="badge P2">P2</span><span>M37 · Обратная связь · Код · S</span></div>
+<h3><a class="permalink" href="#M37">Причины недоступности действий спрятаны в hover-подсказках</a></h3>
+<p><strong>Что наблюдалось.</strong> Причина блокировки запуска размещена в data-tooltip. CSS показывает её по hover/focus/focus-within; внутри находится disabled-кнопка, а обёртка не имеет своего доступного механизма открытия.</p>
+<p><strong>Влияние.</strong> На сенсорном экране нет устойчивого способа узнать, почему нельзя продолжить и что требуется исправить. Нативно отключённая кнопка не получает обычный клавиатурный фокус.</p>
+<p><strong>Как воспроизвести.</strong> Открыть черновик без достаточного количества участников; попробовать получить объяснение запуска только тапом или Tab.</p>
+<p><strong>Предложение.</strong> Под основной заблокированной кнопкой показывать короткую причину и действие: «Добавьте ещё 2 участников». Вспомогательные пояснения открывать явной доступной кнопкой, если постоянный текст слишком длинный.</p>
+<p><strong>Критерий приёмки.</strong> Причина и способ продолжить доступны без наведения мыши; объяснение обновляется после выполнения условия.</p>
+<p class="sources"><strong>Код:</strong> <code>src/views/AdminTournamentView.vue:1535</code>, <code>src/styles.css:2295</code></p>
+
+</article><article class="finding" id="M38" data-priority="P2" data-area="Доступность">
+<div class="finding-meta"><span class="badge P2">P2</span><span>M38 · Доступность · Код + визуальная оценка · S</span></div>
+<h3><a class="permalink" href="#M38">Границы полей слишком слабо отделяются от фона</a></h3>
+<p><strong>Что наблюдалось.</strong> Контраст пары --border / белая поверхность в светлой теме равен 1,25:1; тёмной границы #263029 на #131A16 — около 1,30:1. На скриншотах пустые поля счёта различимы главным образом по тонкой рамке. Основной текст, напротив, имеет хороший контраст.</p>
+<p><strong>Влияние.</strong> На солнце и при сниженном зрении становится сложнее понять, куда вводить счёт. Значение токена само по себе не доказывает нарушение для каждого элемента: нужно учитывать другие признаки поля и соседний фон.</p>
+<p><strong>Как воспроизвести.</strong> Проверить пустые активные поля счёта в обеих темах, затем оценить используемые цвета и необходимые визуальные границы.</p>
+<p><strong>Предложение.</strong> Ввести отдельный более контрастный токен границ ввода и отчётливый focus-ring. Для границ, необходимых для распознавания поля, ориентироваться на 3:1. Декоративные разделители не требуется делать столь же контрастными.</p>
+<p><strong>Критерий приёмки.</strong> Активные поля и фокус различимы в обеих темах; необходимые границы проходят отдельный расчёт контраста, а не только проверку общего токена.</p>
+<p class="sources"><strong>Код:</strong> <code>src/styles.css:56</code>, <code>src/styles.css:132</code></p>
+<p class="sources">Ориентир: <a href="https://www.w3.org/WAI/WCAG22/Understanding/non-text-contrast.html">WCAG 1.4.11: необходимые визуальные признаки контролов</a>.</p>
+
+</article><article class="finding" id="M39" data-priority="P3" data-area="Настройки турнира">
+<div class="finding-meta"><span class="badge P3">P3</span><span>M39 · Настройки турнира · Спорное решение · S</span></div>
+<h3><a class="permalink" href="#M39">После запуска нельзя исправить даже описание и опечатку в названии</a></h3>
+<p><strong>Что наблюдалось.</strong> Один isSettingsDropdownDisabled блокирует название, описание и параметры правил для активного и завершённого турнира.</p>
+<p><strong>Влияние.</strong> Ограничение защищает структуру соревнования, но также мешает уточнить информацию для участников, не затрагивая результаты.</p>
+<p><strong>Как воспроизвести.</strong> Открыть настройки активного турнира и попробовать исправить текст описания.</p>
+<p><strong>Предложение.</strong> Разделить изменяемые информационные поля и правила соревнования. Название, описание и контакты разрешать редактировать уполномоченному организатору; ограничения формата и результатов оставить явными.</p>
+<p><strong>Критерий приёмки.</strong> Без остановки турнира можно исправить информационный текст, а изменение правил требует предусмотренного бизнес-процесса.</p>
+<p class="sources"><strong>Код:</strong> <code>src/views/AdminTournamentView.vue:250</code>, <code>src/views/AdminTournamentView.vue:2316</code></p>
+
+</article><article class="finding" id="M40" data-priority="P3" data-area="Аккаунт">
+<div class="finding-meta"><span class="badge P3">P3</span><span>M40 · Аккаунт · Код + браузер · S</span></div>
+<h3><a class="permalink" href="#M40">Страница настроек почти не содержит настроек</a></h3>
+<p><strong>Что наблюдалось.</strong> Экран показывает аккаунт и заглушку уведомлений. currentPlayer используется для имени и аватара, но loadPlayerContext не вызывается из приложения; при обычной инициализации основным значением остаётся email, который повторяется дважды.</p>
+<p><strong>Влияние.</strong> Название раздела создаёт ожидание управления профилем и предпочтениями, а фактических действий почти нет.</p>
+<p><strong>Как воспроизвести.</strong> Открыть настройки аккаунта и сопоставить содержимое с меню и загрузкой данных профиля.</p>
+<p><strong>Предложение.</strong> Для текущего объёма продукта переименовать раздел в «Аккаунт» и убрать лишнее повторение. Загружать профиль при необходимости. Реальные настройки языка, темы и уведомлений добавлять по продуктовой необходимости; заглушку не выдавать за функцию.</p>
+<p><strong>Критерий приёмки.</strong> Название соответствует содержимому; доступные данные профиля отображаются; нет повторяющегося email в роли имени без необходимости.</p>
+<p class="sources"><strong>Код:</strong> <code>src/views/AdminSettingsView.vue:20</code>, <code>src/stores/auth.js:55</code>, <code>src/views/AdminSettingsView.vue:48</code></p>
+
+</article><article class="finding" id="M41" data-priority="P3" data-area="Первое знакомство">
+<div class="finding-meta"><span class="badge P3">P3</span><span>M41 · Первое знакомство · Спорное решение · S</span></div>
+<h3><a class="permalink" href="#M41">Некоторые обещания лендинга расходятся с текущим продуктом</a></h3>
+<p><strong>Что наблюдалось.</strong> Тексты обещают экспорт списка и автоматическое построение сетки после регистрации. В проверенном интерфейсе нет экспорта участников, а генерация сетки — отдельное действие организатора. Формулировка «любого масштаба» плохо сочетается с наблюдаемой читаемостью сетки уже на 16 участников.</p>
+<p><strong>Влияние.</strong> Новый организатор ожидает поведения, которого не находит после входа. Это затрудняет самостоятельное освоение приложения.</p>
+<p><strong>Как воспроизвести.</strong> Сопоставить блоки возможностей и шагов на главной с реальным созданием, подтверждением участников и генерацией сетки.</p>
+<p><strong>Предложение.</strong> Уточнить тексты под доступные функции: «Сформируйте сетку одним действием». Обещание экспорта оставить после появления соответствующей функции. Масштаб описать через проверенные сценарии.</p>
+<p><strong>Критерий приёмки.</strong> Каждое конкретное обещание главной проверяется простым действием в приложении; нет скрытых ручных шагов в описании автоматизации.</p>
+<p class="sources"><strong>Код:</strong> <code>src/i18n/messages.js:49</code>, <code>src/i18n/messages.js:65</code></p>
+
+</article><article class="finding" id="M42" data-priority="P2" data-area="Вход">
+<div class="finding-meta"><span class="badge P2">P2</span><span>M42 · Вход · Спорное решение · S</span></div>
+<h3><a class="permalink" href="#M42">Кнопка создания неожиданно начинает вход через Google</a></h3>
+<p><strong>Что наблюдалось.</strong> Основные CTA главной вызывают goRegister → signInWithGoogle. Кнопка создания не объясняет заранее, что следующим шагом будет Google, и не имеет собственного состояния ожидания. Реальный внешний OAuth-цикл в этом аудите не проходился.</p>
+<p><strong>Влияние.</strong> Пользователь может воспринимать переход на сторонний экран как неожиданный уход из мастера. При задержке неясно, сработало ли нажатие.</p>
+<p><strong>Как воспроизвести.</strong> Проследить обработчик CTA и поведение при моделируемой задержке/ошибке входа.</p>
+<p><strong>Предложение.</strong> Явно подписать «Продолжить с Google» либо рядом с CTA объяснить необходимость входа. Показать ожидание и понятную ошибку с повтором. Дополнительный парольный вход не является обязательным следствием этой находки.</p>
+<p><strong>Критерий приёмки.</strong> Пользователь до нажатия знает способ входа; видит состояние перехода; после успешного входа попадает в ожидаемый сценарий создания.</p>
+<p class="sources"><strong>Код:</strong> <code>src/views/HomeView.vue:11</code>, <code>src/stores/auth.js:73</code></p>
+
+</article><article class="finding" id="M43" data-priority="P3" data-area="Локализация">
+<div class="finding-meta"><span class="badge P3">P3</span><span>M43 · Локализация · Код + браузер · S</span></div>
+<h3><a class="permalink" href="#M43">Локализация непоследовательна в деталях</a></h3>
+<p><strong>Что наблюдалось.</strong> В демосетке главной остаются русские подписи, у удаления из ручной пары задано aria-label=&quot;Remove&quot;, даты списка форматируются через toLocaleDateString(undefined), то есть язык браузера, а не выбранный язык приложения. Основные экраны на EN и LT при этом переводятся.</p>
+<p><strong>Влияние.</strong> Экран воспринимается как смесь языков; произношение скрытых подписей и формат даты могут не соответствовать выбору пользователя.</p>
+<p><strong>Как воспроизвести.</strong> Переключить RU → EN → LT, открыть главную, список турниров и ручные пары; сравнить видимые и доступные подписи.</p>
+<p><strong>Предложение.</strong> Провести короткую инвентаризацию строк шаблонов, aria-подписей и форматирования дат. Использовать выбранную locale и переводить содержательные демонстрационные подписи.</p>
+<p><strong>Критерий приёмки.</strong> Интерфейс и его доступные подписи следуют одному выбранному языку; числовые и календарные форматы согласованы.</p>
+<p class="sources"><strong>Код:</strong> <code>src/views/AdminTournamentView.vue:1912</code>, <code>src/views/AdminTournamentListView.vue:115</code></p>
+
+</article><article class="finding" id="M44" data-priority="P3" data-area="Общая навигация">
+<div class="finding-meta"><span class="badge P3">P3</span><span>M44 · Общая навигация · Браузер · S</span></div>
+<h3><a class="permalink" href="#M44">Меню профиля не закрывается по Escape и плохо подписано</a></h3>
+<p><strong>Что наблюдалось.</strong> После открытия меню Escape оставляет его видимым. Кнопка содержит только инициал «А» без поясняющего доступного имени; раскрытие управляется кликом и закрытием по внешнему клику.</p>
+<p><strong>Влияние.</strong> Управление с клавиатуры менее предсказуемо, а название кнопки не объясняет назначение пользователю экранного диктора.</p>
+<p><strong>Как воспроизвести.</strong> Открыть меню профиля клавиатурой, нажать Escape и проверить доступное имя кнопки.</p>
+<p><strong>Предложение.</strong> Добавить локализованное имя «Меню аккаунта», Escape и возвращение фокуса. Выбрать согласованный шаблон: простое раскрытие с Tab либо полноценное ARIA-меню с соответствующей клавиатурой.</p>
+<p><strong>Критерий приёмки.</strong> Кнопка имеет понятное имя, Escape закрывает меню и возвращает фокус, все пункты доступны клавиатурой.</p>
+<p class="sources"><strong>Код:</strong> <code>src/App.vue:42</code>, <code>src/App.vue:79</code></p>
+</article><article class="finding" id="M45" data-priority="P3" data-area="Общая навигация">
+<div class="finding-meta"><span class="badge P3">P3</span><span>M45 · Общая навигация · Код · S</span></div>
+<h3><a class="permalink" href="#M45">Заголовок вкладки не сообщает, какой экран открыт</a></h3>
+<p><strong>Что наблюдалось.</strong> index.html задаёт один title «Bracketa». В маршрутах и просмотренных страницах нет обновления document.title под турнир, список или настройки.</p>
+<p><strong>Влияние.</strong> При нескольких вкладках, возврате из истории и использовании экранного диктора страницы сложно различать.</p>
+<p><strong>Как воспроизвести.</strong> Открыть несколько турниров и настройки, сравнить document.title и название вкладки.</p>
+<p><strong>Предложение.</strong> Задавать локализованный title по маршруту и данным: «Кубок Вильнюса — Bracketa», «Мои чемпионаты — Bracketa». Для загружаемого турнира использовать временный осмысленный заголовок.</p>
+<p><strong>Критерий приёмки.</strong> Все основные маршруты имеют отличимые названия; переходы и смена языка обновляют title.</p>
+<p class="sources"><strong>Код:</strong> <code>index.html:20</code>, <code>src/router/index.js:12</code></p>
+</article><article class="finding" id="M46" data-priority="P2" data-area="Модальные окна">
+<div class="finding-meta"><span class="badge P2">P2</span><span>M46 · Модальные окна · Спорное решение · M</span></div>
+<h3><a class="permalink" href="#M46">Кнопка «Назад» браузера уводит со страницы при открытом live</a></h3>
+<p><strong>Что наблюдалось.</strong> В touch-сценарии после открытия публичного live системный переход назад вернул главную страницу, вместо закрытия просмотрщика. Окно не представлено в истории маршрута. Это стандартное поведение текущей реализации, а не ошибка нативного dialog.</p>
+<p><strong>Влияние.</strong> На телефоне пользователь может ожидать сначала закрытия самого верхнего слоя. В формах несохранённый ввод дополнительно повышает цену такого ухода.</p>
+<p><strong>Как воспроизвести.</strong> Перейти с главной в турнир, открыть live, выполнить browser Back.</p>
+<p><strong>Предложение.</strong> Для важных просмотров рассмотреть состояние матча в URL/history: Back закрывает окно, повторный Back возвращает на предыдущую страницу. Для редактирования отдельно обеспечить защиту черновика. Не добавлять искусственные записи истории для каждого мелкого поповера.</p>
+<p><strong>Критерий приёмки.</strong> Поведение Back согласовано с продуктовой моделью и проверено на Android/iOS; нет ловушки истории или неожиданного повторного открытия окна.</p>
+<p class="sources"><strong>Код:</strong> <code>src/components/AppModal.vue:20</code>, <code>src/views/PublicTournamentView.vue:10</code></p>
+
+</article><article class="finding" id="M47" data-priority="P3" data-area="Производительность">
+<div class="finding-meta"><span class="badge P3">P3</span><span>M47 · Производительность · Код + измерение файлов · M</span></div>
+<h3><a class="permalink" href="#M47">3D имеет ощутимый бюджет загрузки, но нет явного выбора пользователя</a></h3>
+<p><strong>Что наблюдалось.</strong> Модель quaternius.glb занимает 2 266 136 байт; отдельный player-chunk сборки — 587 072 байта (расчётный gzip 147 434). При неизвестной сети выбирается characters; ограничение через Promise.race переключает сценарий по таймауту, но само по себе не отменяет исходный запрос. Уже есть полезные fallback, saveData, reduced-motion и остановка при скрытии страницы.</p>
+<p><strong>Влияние.</strong> На мобильной сети визуальная часть может конкурировать с основной задачей просмотра счёта. Реальная задержка, нагрев и расход батареи здесь не измерялись; размер файла не равен времени загрузки.</p>
+<p><strong>Как воспроизвести.</strong> Сопоставить локальные размеры сборки, алгоритм выбора уровня и загрузку сцены. Отдельно запланировать измерение на физических устройствах.</p>
+<p><strong>Предложение.</strong> Дать сохраняемый выбор «Анимация: включена / выключена», при необходимости уменьшить модель и отменять лишнюю загрузку. Сначала измерить сеть и плавность на устройствах. Существующую геометрию корта и камеру для этого менять не требуется.</p>
+<p><strong>Критерий приёмки.</strong> Счёт доступен независимо от готовности 3D; выбор пользователя сохраняется; бюджет загрузки и плавность проверены на целевых телефонах, а не оценены по размеру файла.</p>
+<p class="sources"><strong>Код:</strong> <code>src/lib/rally3d/networkTier.js:18</code>, <code>src/lib/rally3d/networkTier.js:31</code>, <code>src/components/LiveRallyScene3D.vue:133</code></p>
+</article><h2 id="причины-в-архитектуре-интерфейса">Причины в архитектуре интерфейса</h2>
+<p>Проблемы не выглядят следствием одного неудачного breakpoint. Видны несколько повторяющихся причин, которые важно устранить системно.</p>
+<div class="table-scroll" role="region" aria-label="Таблица отчёта" tabindex="0"><table><thead><tr><th scope="col">Причина</th><th scope="col">Проявления</th><th scope="col">Практическое изменение</th></tr></thead><tbody>
+<tr><td>Десктопная модель уменьшается целиком</td><td>Нечитаемая сетка, крошечные кнопки, множество карточек счёта</td><td>Отдельное компактное представление матчей для узкого контейнера; диаграмма остаётся дополнительным обзором</td></tr>
+<tr><td>Минимальные размеры заданы без учёта вложенных отступов</td><td>minmax(320px), пять колонок по 52 px, ряд действий без переноса</td><td>Общий контракт контейнера: min-width:0, minmax(0,1fr), осмысленный перенос и проверка содержимого</td></tr>
+<tr><td>Правила действия разнесены между вкладками, ролью и видом спорта</td><td>«Счёт» ничего не делает, футбол открывает теннисный live</td><td>Единый расчёт возможностей matchActions из role, sport, status и format; одинаковая логика видимости и обработчика</td></tr>
+<tr><td>Серверные данные и черновики формы смешаны</td><td>initializeRows обнуляет чужой ввод после сохранения/realtime</td><td>Независимые черновики по matchId, dirty-состояние и явное разрешение конфликтов</td></tr>
+<tr><td>Обратная связь живёт слишком низко или игнорирует результат</td><td>Исчезающий success, ложное copied, сырой Failed to fetch</td><td>Общий контракт операции: pending → success/error; результат живёт столько, сколько нужен пользователю</td></tr>
+<tr><td>Доступность добавляется отдельными атрибутами</td><td>tr с aria-expanded без кнопки, option с mousedown, drag-only</td><td>Использовать нативные элементы и полностью реализованные паттерны клавиатурного управления</td></tr>
+</tbody></table></div>
+<p>Разумно вынести общую валидацию и преобразование счёта из трёх редакторов в небольшие функции по семейству спорта, а общий статус асинхронной операции — в переиспользуемый механизм. Это уменьшит расхождения, но не требует переписывать проект или вводить новый UI-фреймворк. Большой AdminTournamentView лучше делить по законченным задачам — участники, пары, права действий, настройки — после фиксации проблемных сценариев, чтобы рефакторинг не смешался с незаметным изменением поведения.</p>
+<p>В package.json сейчас есть dev/build/preview, но нет отдельной команды автоматических проверок. Для исправлений P1 полезнее небольшой набор сценарных регрессий с реальной логикой ролей и счёта, чем множество тестов, повторяющих CSS-классы. Минимальный набор: сохранность черновика, пустой футбольный ввод, sport × role выбор редактора, подтверждение заявки и переходы мастера.</p>
+<h2 id="предлагаемый-мобильный-сценарий-по-ролям">Предлагаемый мобильный сценарий по ролям</h2>
+<h3 id="зритель-и-участник">Зритель и участник</h3>
+<p>Первый экран активного турнира должен отвечать на три вопроса: какой турнир, какие матчи сейчас идут и где найти своего игрока. Предлагаемая структура: компактное название и статус, поиск, список матчей с фильтрами «Сейчас / Предстоящие / Завершённые». У каждого матча — читаемые имена, счёт и явное действие просмотра. «Полная сетка», «Таблица», «Участники» и «О турнире» доступны как дополнительные представления.</p>
+<p>Во время регистрации главный блок меняется: условия участия, форма, затем устойчивое подтверждение заявки. После отправки показывать статус «Ожидает подтверждения», а не пустую форму. В «О турнире» нужны понятные контакты организатора и доступная информация о месте/времени, если продукт действительно хранит и поддерживает эти данные. Не следует показывать неподтверждённое расписание только ради заполнения карточки.</p>
+<p>Для кругового формата полезен компактный рейтинг с ключевыми колонками и раскрытием деталей игрока. Перекрёстная таблица может остаться горизонтально прокручиваемой, но с закреплёнными именами, видимым намёком на прокрутку и альтернативным списком матчей. Для двойного выбывания нужен переключатель «Верхняя / Нижняя / Финал», чтобы три диаграммы не конкурировали в одном длинном экране.</p>
+<h3 id="счётчик">Счётчик</h3>
+<p>После входа показывать назначенные турниры и готовые к работе матчи. Для начала счёта не должно требоваться искать крошечную иконку на уменьшенной сетке. Карточка матча должна содержать турнир, раунд, обе стороны, состояние и одну основную кнопку «Начать / Продолжить счёт».</p>
+<p>Внутри матча: устойчиво читаемые имена, крупный счёт, две большие кнопки добавления очка, доступная отмена, состояние синхронизации. Технические rev и размер очереди стоит заменить понятными фразами. При потере связи интерфейс должен честно объяснять, что уже сохранено, а что ожидает отправки. Автономную запись счёта нельзя обещать до реализации очереди, восстановления и разрешения конфликтов.</p>
+<p>Для футбола основной ввод — голы и, при подходящих правилах, пенальти. Теннисный live не должен появляться. Разницу между «исправить итоговый результат» и «вести матч сейчас» лучше показывать явно: эти действия имеют разный смысл и частоту.</p>
+<h3 id="организатор">Организатор</h3>
+<p>Кабинет должен помогать пройти жизненный цикл: создать → открыть регистрацию → обработать заявки → сформировать пары/сетку → начать → провести матчи → завершить. В каждом состоянии одна основная следующая задача и короткий список условий. Вторичные действия, такие как QR и изменение информации, остаются доступными, но не вытесняют основную задачу за экран.</p>
+<p>Участников удобнее обрабатывать карточками или компактными строками с поиском и фильтрами «Ожидают / Подтверждены / Отклонены». Для рискованных действий нужны понятные последствия и восстановление, где оно возможно. Повторные подтверждения каждого безобидного действия добавлять не стоит; защита нужна для потери ввода, удаления и изменения структуры.</p>
+<p>Вкладку счёта полезно превратить из длинной страницы всех форм в список матчей с раскрытием одного редактора. После сохранения оставлять человека в контексте выбранного матча и сохранять позицию списка. При одновременной работе нескольких операторов черновик не должен молча заменяться обновлением сервера.</p>
+<h2 id="доступность-проверенные-факты-и-границы-выводов">Доступность: проверенные факты и границы выводов</h2>
+<p>В качестве базы использовались первичные рекомендации W3C. Для reflow важна работа при ширине, эквивалентной 320 CSS px; у действительно двумерных таблиц и диаграмм есть исключения. Это не оправдывает переполнение обычной формы или ряда кнопок. <a href="https://www.w3.org/WAI/WCAG22/Understanding/reflow.html">WCAG 1.4.10 Reflow</a>.</p>
+<p>Минимальный размер цели WCAG 2.2 AA — 24×24 CSS px с предусмотренными исключениями, включая интервалы. Цель 44×44 удобна для основных мобильных действий и соответствует более строгому критерию AAA. Поэтому контроль размером 32×32 нельзя автоматически объявить нарушением AA; число элементов меньше 44 в диагностике не является числом нарушений. <a href="https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum.html">Target Size Minimum</a>, <a href="https://www.w3.org/WAI/WCAG22/Understanding/target-size-enhanced.html">Target Size Enhanced</a>.</p>
+<p>Перетаскивание должно иметь альтернативу одним указателем без drag, если оно не является необходимой сущностью действия. Клавиатурная доступность проверяется дополнительно. Именно отсутствие альтернативы назначения игроков делает M09 существенным. <a href="https://www.w3.org/WAI/WCAG22/Understanding/dragging-movements.html">Dragging Movements</a>.</p>
+<p>Ориентир контраста обычного текста — 4,5:1, крупного — 3:1. Для необходимых визуальных признаков активного контрола используется 3:1, но не каждая декоративная рамка обязана его иметь. <a href="https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html">Contrast Minimum</a>, <a href="https://www.w3.org/WAI/WCAG22/Understanding/non-text-contrast.html">Non-text Contrast</a>.</p>
+<div class="table-scroll" role="region" aria-label="Таблица отчёта" tabindex="0"><table><thead><tr><th scope="col">Измеренная пара токенов</th><th scope="col">Контраст</th><th scope="col">Вывод</th></tr></thead><tbody>
+<tr><td>Светлый основной текст #14201B / #FFFFFF</td><td>16,77:1</td><td>Хороший запас для основного текста</td></tr>
+<tr><td>Светлый вторичный текст #5E6B64 / #FFFFFF</td><td>5,58:1</td><td>Проходит ориентир обычного текста</td></tr>
+<tr><td>Светлый primary #0F7B4D / #FFFFFF</td><td>5,30:1</td><td>Хороший базовый контраст этой пары</td></tr>
+<tr><td>Тёмный основной текст #F2F5F1 / #17201B</td><td>15,18:1</td><td>Хороший запас</td></tr>
+<tr><td>Тёмный вторичный текст #96A39A / #17201B</td><td>6,36:1</td><td>Хорошая читаемость этой пары</td></tr>
+<tr><td>Тёмный primary #34C97F / #17201B</td><td>7,79:1</td><td>Хороший базовый контраст этой пары</td></tr>
+<tr><td>Светлая граница #E4E7E2 / #FFFFFF</td><td>1,25:1</td><td>Риск для пустых полей, распознаваемых по одной рамке</td></tr>
+<tr><td>Тёмная граница #263029 / #131A16</td><td>1,30:1</td><td>Аналогичный риск; проверять конкретный контрол</td></tr>
+</tbody></table></div>
+<p>Это вычисление заданных цветов, а не сертификат контрастности всего приложения: прозрачность, другие поверхности и отдельные состояния требуют проверки по месту.</p>
+<div class="table-scroll" role="region" aria-label="Таблица отчёта" tabindex="0"><table><thead><tr><th scope="col">Область</th><th scope="col">Результат сейчас</th><th scope="col">Следующая проверка</th></tr></thead><tbody>
+<tr><td>Фон и прокрутка под модальным окном</td><td>Touch-тест прошёл; нативный top layer и возврат фокуса есть в коде</td><td>iOS Safari, вложенное подтверждение, клавиатура на низком экране</td></tr>
+<tr><td>Язык документа</td><td>После EN остаётся lang=ru</td><td>Обновлять lang при инициализации и смене locale</td></tr>
+<tr><td>Переключатель языка</td><td>Клавиатурный сценарий не работает</td><td>Enter, стрелки/Tab согласно выбранному паттерну, Escape</td></tr>
+<tr><td>Поля счёта</td><td>Не хватает имён игрока и сета в доступной подписи</td><td>Проверить дерево доступности и озвучивание VoiceOver/TalkBack</td></tr>
+<tr><td>Списки и таблицы</td><td>Часть интерактивности назначена на неинтерактивные строки</td><td>Добавить явные кнопки и проверить порядок фокуса</td></tr>
+<tr><td>Drag-and-drop</td><td>Нет полноценной альтернативы назначения</td><td>Тап-выбор, поиск и клавиатура</td></tr>
+<tr><td>Увеличение текста</td><td>Полный сценарий не выполнен</td><td>200% и системный крупный текст без потери действий</td></tr>
+</tbody></table></div>
+<p>Язык страницы должен программно соответствовать содержимому; масштабирование текста требует отдельной проверки сохранности информации и функций. <a href="https://www.w3.org/WAI/WCAG22/Understanding/language-of-page.html">Language of Page</a>, <a href="https://www.w3.org/WAI/WCAG22/Understanding/resize-text.html">Resize Text</a>.</p>
+<h2 id="производительность-и-3d">Производительность и 3D</h2>
+<p>Текущий запрос — исследование, поэтому сцена, геометрия корта, камера и физика не изменялись. Мобильную скорость счёта можно улучшать независимо от композиции 3D: отделять готовность счёта от загрузки модели, сохранять выбор анимации и измерять стоимость визуального слоя.</p>
+<div class="table-scroll" role="region" aria-label="Таблица отчёта" tabindex="0"><table><thead><tr><th scope="col">Локальный артефакт</th><th scope="col">Размер файла</th><th scope="col">Расчётный gzip</th></tr></thead><tbody>
+<tr><td>quaternius.glb</td><td>2 266 136 байт</td><td>1 050 872 байта</td></tr>
+<tr><td>player-chunk</td><td>587 072 байта</td><td>147 434 байта</td></tr>
+<tr><td>index-chunk</td><td>445 020 байт</td><td>138 458 байт</td></tr>
+<tr><td>AdminTournamentView-chunk</td><td>107 766 байт</td><td>31 258 байт</td></tr>
+<tr><td>skinnedActor-chunk</td><td>50 443 байта</td><td>15 891 байт</td></tr>
+</tbody></table></div>
+<p>Gzip рассчитан локально. Сервер может использовать другое сжатие и кэширование; не все эти файлы загружаются на каждой странице. Сборка Vite завершилась успешно и выдала предупреждение о чанке больше 500 kB. Само предупреждение не доказывает плохой пользовательский опыт.</p>
+<p>Для следующего измерения: холодный и повторный вход на публичный турнир, открытие live, добавление очка и длинная прокрутка; отдельно с анимацией и без неё. Проверять средний Android и iPhone на реальной мобильной сети, а также ограниченный профиль в лаборатории. Снимать количество запросов, фактический transfer, время доступности счёта и задержку реакции на действие.</p>
+<p>Полевые ориентиры хороших Core Web Vitals: LCP не более 2,5 с, INP не более 200 мс и CLS не более 0,1 на 75-м перцентиле. В этом аудите такие значения <strong>не измерены</strong>. <a href="https://web.dev/articles/vitals">Официальное описание Web Vitals</a>.</p>
+<h2 id="очерёдность-работ">Очерёдность работ</h2>
+<p>Предлагается четыре самостоятельных этапа с проверяемым результатом. Это план изменений, а не выполненные исправления.</p>
+<div class="table-scroll" role="region" aria-label="Таблица отчёта" tabindex="0"><table><thead><tr><th scope="col">Этап</th><th scope="col">Что входит</th><th scope="col">Результат для пользователя</th></tr></thead><tbody>
+<tr><td>1. Корректность основных операций</td><td>M03–M06, M08, M10, M11, M20–M24; единые правила прав/спорта и асинхронных состояний</td><td>Можно создать турнир, подать заявку и записать результат, не теряя ввод и не получая ложный успех</td></tr>
+<tr><td>2. Мобильная компоновка и ввод</td><td>M01, M07, M12–M17, M18, M19, M33, M37, M38</td><td>Все действия помещаются, стороны различимы, ввод и клавиатура доступны на 320–430 px</td></tr>
+<tr><td>3. Мобильная работа с соревнованием</td><td>M02, M09, M25–M29, M31, M32, M34, M35, M36</td><td>Матч находится быстро, сетка не ловит обычную прокрутку, пары составляются без drag</td></tr>
+<tr><td>4. Устойчивость и согласованность</td><td>M30, M39–M47; тесты устройств и измерение производительности</td><td>Понятны связь, история, профиль и обещания продукта; визуальный слой имеет измеренный бюджет</td></tr>
+</tbody></table></div>
+<p>M30 имеет смысл поднять в первый этап, если live уже используется несколькими операторами в условиях нестабильной связи. M02 стоит начать проектировать сразу: это наиболее заметное изменение публичного мобильного опыта, но оно сложнее локального исправления CSS. Первые этапы не требуют менять внешний вид корта.</p>
+<p>Не рекомендуется маскировать выход за экран глобальным overflow-x:hidden, уменьшать весь интерфейс через transform или добавлять новые анимации до исправления ввода и прав действий. Эти меры могут скрыть симптом, сохранив недоступность действий. Также преждевременно обещать автономный счёт или начинать большой PWA-проект без решения конфликтов и восстановления данных.</p>
+<h2 id="приёмка-после-исправлений">Приёмка после исправлений</h2>
+<div class="table-scroll" role="region" aria-label="Таблица отчёта" tabindex="0"><table><thead><tr><th scope="col">Блок</th><th scope="col">Проверка</th><th scope="col">Критерий</th></tr></thead><tbody>
+<tr><td>Размеры</td><td>320, 360, 390, 430, 768 px; portrait/landscape</td><td>Нет горизонтального выхода обычных страниц, форм и панелей действий</td></tr>
+<tr><td>Длинные данные</td><td>Длинная фамилия, пара из двух людей, длинный email, длинное название турнира</td><td>Текст переносится или сокращается осмысленно; полные данные доступны</td></tr>
+<tr><td>Объём</td><td>0, 2, 8, 16, 32 и 64 участника</td><td>Пустые состояния понятны; большой список не требует поиска на огромном полотне</td></tr>
+<tr><td>Мастер</td><td>Далее/Назад, ошибка, возврат, русский и литовский slug</td><td>Видимый текущий шаг, корректный адрес, сохранённые данные</td></tr>
+<tr><td>Заявка</td><td>Успех, повтор, ошибка сети, оба режима пар</td><td>Устойчивое подтверждение и понятный следующий шаг</td></tr>
+<tr><td>Роли и спорт</td><td>Гость/owner/editor/counter × поддерживаемые виды спорта и форматы</td><td>Доступные действия работают; неправильный редактор не появляется</td></tr>
+<tr><td>Счёт</td><td>Пусто, 0:0, некорректное число, пять сетов, повторный тап</td><td>Валидация до отправки, однозначные стороны, одна операция на сохранение</td></tr>
+<tr><td>Черновики</td><td>Сохранить соседний матч, получить обновление, закрыть окно, уйти со страницы</td><td>Ввод сохраняется либо пользователь явно выбирает его потерю</td></tr>
+<tr><td>Live</td><td>Потерять/вернуть сеть, свернуть браузер, одновременно работать на двух клиентах</td><td>Состояние связи и конфликты видимы; нет молчаливого пропуска/дублирования</td></tr>
+<tr><td>Модальные окна</td><td>Touch-фон, Tab/Shift+Tab, Escape, Back, низкий экран и виртуальная клавиатура</td><td>Фон неподвижен, ввод достижим, фокус и история предсказуемы</td></tr>
+<tr><td>Доступность</td><td>Клавиатура, VoiceOver/TalkBack, 200% текст, RU/EN/LT</td><td>Все действия доступны; названия контролов и язык корректны</td></tr>
+<tr><td>Производительность</td><td>Реальные устройства, холодный/тёплый кэш, анимация вкл./выкл.</td><td>Счёт не зависит от готовности 3D; измерения укладываются в принятый бюджет</td></tr>
+</tbody></table></div>
+<p>Следующий полезный этап исследования — короткие наблюдаемые сессии с людьми разных ролей, например по два участника на зрителя, организатора и счётчика. Это предложенный состав для выявления затруднений, а не статистически репрезентативная выборка. Дать задачи без подсказок: найти матч знакомого, подать заявку и объяснить её статус, создать турнир, назначить пары, начать счёт, исправить ошибочное очко и восстановиться после обрыва связи. Фиксировать успех, время, неверные действия и необходимость помощи; затем сопоставить с приоритетами этого отчёта.</p>
+<h2 id="доказательства-и-воспроизводимость">Доказательства и воспроизводимость</h2>
+<p>Отчёт подготовлен по сохранённым во время исследования браузерным наблюдениям, локальным измерениям и анализу исходников. Численные результаты и выводы сохранены в тексте. Ссылки на строки кода относятся к состоянию на дату аудита и могут сдвинуться после изменений.</p><p>После исследования по просьбе пользователя удалены скриншоты, видеозаписи, логи, тестовые данные, временные копии, сценарии Playwright и вспомогательные JSON-файлы. Ссылки и кнопки скачивания удалённых материалов убраны. Это очистка исследовательских артефактов; исправления приложения в рамках очистки не выполнялись.</p><p>По финальной сверке во время аудита все 61 проверенный файл исходников и конфигурации совпадали с состоянием до исследования; гарды не отключались, тестовая подстановка данных была снята. Для нового воспроизведения потребуются отдельная тестовая сессия и изолированные данные.</p><footer class="footer">Локальный исследовательский отчёт. Синтетические данные. Код приложения и гарды сохранены. HTML не использует внешние библиотеки. Временные материалы удалены после исследования.</footer></main></div><script>
+const mq=matchMedia('(max-width:800px)');const contents=document.getElementById('contents');function adaptContents(){contents.open=!mq.matches}adaptContents();mq.addEventListener('change',adaptContents);
+const cards=[...document.querySelectorAll('.finding')],search=document.getElementById('search'),priority=document.getElementById('priority'),area=document.getElementById('area');
+function filter(){let count=0;const q=search.value.toLocaleLowerCase().trim();for(const card of cards){const show=(!priority.value||card.dataset.priority===priority.value)&&(!area.value||card.dataset.area===area.value)&&(!q||card.textContent.toLocaleLowerCase().includes(q));card.hidden=!show;if(show)count++}document.getElementById('result-count').textContent=`Показано ${count} из ${cards.length}`;document.getElementById('empty-results').hidden=count>0;}
+function reset(){search.value='';priority.value='';area.value='';filter()}
+search.addEventListener('input',filter);priority.addEventListener('change',filter);area.addEventListener('change',filter);document.getElementById('reset').addEventListener('click',reset);
+function showHash(){const card=document.getElementById(decodeURIComponent(location.hash.slice(1)));if(card?.classList.contains('finding')&&card.hidden){reset();card.scrollIntoView()}}
+window.addEventListener('hashchange',showHash);showHash();
+</script></body></html>

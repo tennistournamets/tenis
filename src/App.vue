@@ -6,6 +6,7 @@ import { useI18n } from 'vue-i18n'
 import ConfirmDialog from './components/ConfirmDialog.vue'
 import LanguageSwitcher from './components/LanguageSwitcher.vue'
 import ThemeToggle from './components/ThemeToggle.vue'
+import { confirmLeaveForms, withApprovedDeparture } from './lib/unsavedChanges'
 import { headerTitle } from './lib/headerTitle'
 import { useAuthStore } from './stores/auth'
 
@@ -49,8 +50,11 @@ function closeProfile() {
 
 async function handleSignOut() {
   profileOpen.value = false
-  await auth.signOut()
-  await router.push({ name: 'home' })
+  if (!(await confirmLeaveForms(t))) return
+  await withApprovedDeparture(async () => {
+    await auth.signOut()
+    await router.push({ name: 'home' })
+  })
 }
 
 function goToSettings() {

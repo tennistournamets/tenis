@@ -3,9 +3,11 @@
 // nothing is stored; the same modal serves the create wizard and the admin header.
 import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import AppModal from './AppModal.vue'
+import CopyTournamentLink from './CopyTournamentLink.vue'
 import QRCode from 'qrcode'
 
-import { tournamentShareUrl, copyTournamentLink } from '../lib/shareLink'
+import { tournamentShareUrl } from '../lib/shareLink'
 
 const props = defineProps({
   slug: { type: String, required: true },
@@ -17,7 +19,6 @@ const emit = defineEmits(['close'])
 const { t } = useI18n()
 
 const canvasEl = ref(null)
-const copyFeedback = ref(false)
 const canShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function'
 
 const url = tournamentShareUrl(props.slug)
@@ -32,18 +33,6 @@ const QR_OPTS = {
 onMounted(() => {
   QRCode.toCanvas(canvasEl.value, url, { ...QR_OPTS, width: 260 })
 })
-
-async function copyLink() {
-  try {
-    await copyTournamentLink(props.slug)
-  } catch {
-    /* still show feedback */
-  }
-  copyFeedback.value = true
-  setTimeout(() => {
-    copyFeedback.value = false
-  }, 2000)
-}
 
 async function downloadPng() {
   const dataUrl = await QRCode.toDataURL(url, { ...QR_OPTS, width: 1024 })
@@ -63,8 +52,8 @@ async function shareLink() {
 </script>
 
 <template>
-  <div class="modal-backdrop" @click="emit('close')">
-    <div class="modal-dialog qr-modal" role="dialog" aria-modal="true" @click.stop>
+  <AppModal :label="t('share.qrTitle')" @close="emit('close')">
+    <div class="modal-dialog qr-modal">
       <div class="modal-dialog__head">
         <div>
           <h2>{{ t('share.qrTitle') }}</h2>
@@ -82,9 +71,7 @@ async function shareLink() {
       <p class="qr-modal__url">{{ url }}</p>
 
       <div class="qr-modal__actions">
-        <button class="btn btn--outline btn--sm" type="button" @click="copyLink">
-          {{ copyFeedback ? t('share.copied') : t('share.copyLink') }}
-        </button>
+        <CopyTournamentLink :slug="slug" />
         <button class="btn btn--outline btn--sm" type="button" @click="downloadPng">
           {{ t('share.qrDownload') }}
         </button>
@@ -93,7 +80,7 @@ async function shareLink() {
         </button>
       </div>
     </div>
-  </div>
+  </AppModal>
 </template>
 
 <style scoped>

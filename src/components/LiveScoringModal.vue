@@ -1,12 +1,17 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { confirmDialog } from '../lib/confirmDialog'
+import AppModal from './AppModal.vue'
 
 import { normalizeTennisState, pointLabel } from '../lib/useTennisScoring'
 import { useDeferredChangeover } from '../lib/liveSides'
 import { supabase } from '../lib/supabase'
+import { liveRuleHint, tennisRulesSummary, scoringError } from '../lib/tennisRules'
 
 const props = defineProps({
+  canStopLive: { type: Boolean, default: false },
+  scoringConfig: { type: Object, default: () => ({}) },
   match: {
     type: Object,
     required: true,
@@ -62,7 +67,11 @@ const statusText = computed(() => {
 
 function completedSets(side) {
   return (norm.value?.sets || [])
-    .map((set) => (side === 'a' ? set.side_a_games : set.side_b_games))
+    .map((set) => {
+      if (set.score_kind === 'match_tiebreak') return `[${set[`side_${side}_tiebreak`]}]`
+      const tb = set[`side_${side}_tiebreak`]
+      return `${set[`side_${side}_games`]}${tb == null ? '' : `(${tb})`}`
+    })
     .join(' ')
 }
 
@@ -70,6 +79,8 @@ function completedSets(side) {
 // arrange the players; the pending values are flushed right after start.
 const pendingSwapped = ref(false)
 const pendingAuto = ref(true)
+const hasPendingSides = ref(false)
+const savingSides = ref(false)
 
 const baseSwapped = computed(() =>
   currentLiveScore.value ? Boolean(currentLiveScore.value.sides_swapped) : pendingSwapped.value,
@@ -89,45 +100,58 @@ function teamName(side) {
 }
 
 async function setSides({ swapped = null, auto = null }) {
+  if (savingSides.value) return
   pendingSwapped.value = swapped === null ? baseSwapped.value : swapped
   pendingAuto.value = auto === null ? autoSides.value : auto
 
-  if (!currentLiveScore.value) return
+  if (!currentLiveScore.value) { hasPendingSides.value = true; return }
 
+  savingSides.value = true
   errorText.value = ''
-  const { data, error } = await supabase.rpc('set_live_sides', {
-    p_match_id: props.match.id,
-    p_swapped: swapped,
-    p_auto: auto,
-  })
-
-  if (error) {
-    errorText.value = error.message
-    return
+  try {
+    const { data, error } = await supabase.rpc('set_live_sides', {
+      p_match_id: props.match.id,
+      p_swapped: swapped,
+      p_auto: auto,
+    })
+    if (error) throw error
+    if (!currentLiveScore.value || data.revision >= currentLiveScore.value.revision) currentLiveScore.value = data
+    hasPendingSides.value = false
+  } catch (error) {
+    errorText.value = scoringError(error?.message, t)
+  } finally {
+    savingSides.value = false
+    emit('changed')
   }
-
-  currentLiveScore.value = data
-  emit('changed')
 }
 
 function toggleSwapSides() {
   setSides({ swapped: !baseSwapped.value })
 }
 
-function toggleAutoSides(event) {
-  setSides({ auto: event.target.checked })
+async function toggleAutoSides(event) {
+  await setSides({ auto: event.target.checked })
+  event.target.checked = autoSides.value
 }
 
 async function flushPendingSides() {
   const live = currentLiveScore.value
-  if (!live) return
+  if (!live || !hasPendingSides.value) return
   const sameSwapped = Boolean(live.sides_swapped) === pendingSwapped.value
   const sameAuto = (live.sides_auto !== false) === pendingAuto.value
-  if (sameSwapped && sameAuto) return
+  if (sameSwapped && sameAuto) { hasPendingSides.value = false; return }
   await setSides({ swapped: pendingSwapped.value, auto: pendingAuto.value })
 }
 
-async function ensureStarted() {
+let starting = null
+function ensureStarted() {
+  if (!starting) starting = startSession().finally(() => { starting = null })
+  return starting
+}
+
+onMounted(() => { if (!props.liveScore) ensureStarted() })
+
+async function startSession() {
   if (currentLiveScore.value?.status === 'active' || currentLiveScore.value?.status === 'finished') {
     return
   }
@@ -136,94 +160,91 @@ async function ensureStarted() {
 
   const { data, error } = await supabase.rpc('start_live_match', {
     p_match_id: props.match.id,
+    p_expected_revision: props.match.score_revision,
   })
 
   loading.value = false
   if (error) {
-    errorText.value = error.message
-    return
-  }
-
-  currentLiveScore.value = data
-  await flushPendingSides()
-  emit('changed')
-}
-
-// Taps are serialized through a promise chain so fast consecutive taps
-// queue up instead of being dropped while a request is in flight.
-let tapQueue = Promise.resolve()
-
-function record(side) {
-  if (isFinished.value) return
-  pendingTaps.value += 1
-  tapQueue = tapQueue
-    .then(() => doRecord(side))
-    .catch(() => {})
-    .finally(() => {
-      pendingTaps.value = Math.max(0, pendingTaps.value - 1)
-    })
-}
-
-async function doRecord(side) {
-  if (isFinished.value) return
-
-  await ensureStarted()
-  if (!currentLiveScore.value || currentLiveScore.value.status !== 'active') {
-    return
-  }
-  if (side === 'undo' && !(currentLiveScore.value?.history || []).length) {
-    return
-  }
-
-  loading.value = true
-  errorText.value = ''
-
-  const { data, error } = await supabase.rpc('record_point', {
-    p_match_id: props.match.id,
-    p_side: side,
-    p_expected_revision: revision.value,
-  })
-
-  loading.value = false
-  if (error) {
-    errorText.value = error.message
+    errorText.value = scoringError(error.message, t)
     emit('changed')
     return
   }
 
-  currentLiveScore.value = data
+  if (!currentLiveScore.value || data.revision >= currentLiveScore.value.revision) currentLiveScore.value = data
+  await flushPendingSides()
   emit('changed')
 }
 
+// Keep the revision produced by our own queue. Realtime updates must never
+// silently rebase taps that were queued against a different score.
+let tapQueue = Promise.resolve()
+let queueEpoch = 0
+let queueRevision = null
+function record(side) {
+  if (!isActive.value || savingSides.value) return
+  if (pendingTaps.value === 0) queueRevision = revision.value
+  const epoch = queueEpoch
+  pendingTaps.value += 1
+  tapQueue = tapQueue.then(() => doRecord(side, epoch)).catch(() => {
+    queueEpoch += 1
+    errorText.value = t('scoringFlow.unavailable')
+    emit('changed')
+  }).finally(() => { pendingTaps.value = Math.max(0, pendingTaps.value - 1) })
+}
+async function doRecord(side, epoch) {
+  if (epoch !== queueEpoch || !isActive.value) return
+  loading.value = true
+  errorText.value = ''
+  try {
+    const { data, error } = await supabase.rpc('record_point', {
+      p_match_id: props.match.id, p_side: side, p_expected_revision: queueRevision,
+    })
+    if (error) {
+      queueEpoch += 1
+      errorText.value = scoringError(error.message, t)
+      emit('changed')
+      return
+    }
+    queueRevision = data.revision
+    if (!currentLiveScore.value || data.revision >= currentLiveScore.value.revision) currentLiveScore.value = data
+    emit('changed')
+  } finally { loading.value = false }
+}
+
 async function stopLive() {
-  if (loading.value || !currentLiveScore.value || isFinished.value) return
+  if (!props.canStopLive || loading.value || pendingTaps.value || !isActive.value) return
+  const expected = revision.value
+  if (!(await confirmDialog(t('scoringFlow.stopConfirm'), { danger: true }))) return
+  queueEpoch += 1
   loading.value = true
   errorText.value = ''
 
   const { data, error } = await supabase.rpc('stop_live_match', {
     p_match_id: props.match.id,
+    p_expected_revision: expected,
   })
 
   loading.value = false
   if (error) {
-    errorText.value = error.message
+    errorText.value = scoringError(error.message, t)
+    emit('changed')
     return
   }
 
-  currentLiveScore.value = data
+  if (!currentLiveScore.value || data.revision >= currentLiveScore.value.revision) currentLiveScore.value = data
   emit('changed')
 }
 </script>
 
 <template>
-  <div class="modal-backdrop" @click="emit('close')">
-    <div class="modal-dialog live-modal" role="dialog" aria-modal="true" @click.stop>
+  <AppModal :label="t('live.scoringTitle')" @close="emit('close')">
+    <div class="modal-dialog live-modal">
       <div class="modal-dialog__head">
         <div>
           <h2>{{ t('live.scoringTitle') }}</h2>
           <p class="live-modal__status">
             <span v-if="isActive" class="live-modal__badge"><span class="live-dot"></span>{{ t('live.live') }}</span>
-            <span v-if="isActive && norm" class="live-modal__set">{{ t('live.setN', { n: norm.currentSet }) }}</span>
+            <span v-if="isActive && norm" class="live-modal__set">{{ norm.isMatchTiebreak ? t('tennisRules.matchTiebreak') : t('live.setN', { n: norm.currentSet }) }}</span>
             <span v-if="!isActive" class="muted">{{ statusText }}</span>
           </p>
         </div>
@@ -232,7 +253,7 @@ async function stopLive() {
 
       <div class="live-sides">
         <label class="switch">
-          <input type="checkbox" :checked="autoSides" @change="toggleAutoSides" />
+          <input type="checkbox" :checked="autoSides" :disabled="savingSides || (currentLiveScore && loading) || pendingTaps > 0" @change="toggleAutoSides" />
           <span class="switch__track"><span class="switch__thumb"></span></span>
           <span class="switch__label">{{ t('live.autoSwap') }}</span>
         </label>
@@ -241,6 +262,7 @@ async function stopLive() {
           type="button"
           :aria-label="t('live.swapSides')"
           :title="t('live.swapSides')"
+          :disabled="savingSides || (currentLiveScore && loading) || pendingTaps > 0"
           @click="toggleSwapSides"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -256,14 +278,14 @@ async function stopLive() {
       <div class="live-board">
         <div v-for="side in ['a', 'b']" :key="side" class="live-board__row">
           <strong class="live-board__name">{{ teamName(side) }}</strong>
-          <span class="live-board__sets">{{ completedSets(side) }} {{ norm ? norm.games[side] : '' }}</span>
+          <span class="live-board__sets">{{ completedSets(side) }} {{ norm && !norm.winner && !norm.isMatchTiebreak ? norm.games[side] : '' }}</span>
           <span class="live-board__points">{{ pointLabel(state, side) }}</span>
         </div>
       </div>
 
-      <div v-if="state?.isTiebreak" class="alert alert--info" role="status">
-        {{ t('live.tiebreak') }}
-      </div>
+      <p v-if="!state" class="muted">{{ tennisRulesSummary(scoringConfig, t) }}</p>
+      <div v-if="liveRuleHint(state, t)" class="alert alert--info" role="status">{{ liveRuleHint(state, t) }}</div>
+      <p v-if="state?.isTiebreak" class="muted live-rule-hint">{{ t(state.isMatchTiebreak ? 'tennisRules.matchServingHint' : state.tiebreakMargin === 1 ? 'tennisRules.shortServingHint' : 'tennisRules.servingHint') }}</p>
 
       <template v-if="!isFinished">
         <p class="live-modal__question">{{ t('live.whoWon') }}</p>
@@ -274,7 +296,7 @@ async function stopLive() {
             :key="side"
             class="live-tap"
             type="button"
-            :disabled="isFinished"
+            :disabled="!isActive || savingSides"
             @click="record(side)"
           >
             <span class="live-tap__name">{{ teamName(side) }}</span>
@@ -283,36 +305,39 @@ async function stopLive() {
       </template>
 
       <div class="live-modal__footer">
-        <button class="btn btn--ghost btn--sm" type="button" :disabled="!canUndo || isFinished" @click="record('undo')">
+        <button class="btn btn--ghost btn--sm" type="button" :disabled="!canUndo || !isActive" @click="record('undo')">
           {{ t('live.undo') }}
         </button>
         <button
-          v-if="isStopped"
+          v-if="isStopped || !currentLiveScore"
           class="btn btn--ghost btn--sm"
           type="button"
           :disabled="loading"
           @click="ensureStarted"
         >
-          {{ t('live.start') }}
+          {{ t('scoringFlow.resume') }}
         </button>
         <button
-          v-else-if="!isFinished"
+          v-else-if="isActive && canStopLive"
           class="btn btn--ghost btn--sm"
           type="button"
-          :disabled="loading"
+          :disabled="loading || pendingTaps > 0"
           @click="stopLive"
         >
-          {{ t('live.stop') }}
+          {{ t('scoringFlow.stop') }}
         </button>
         <span class="live-modal__rev">rev {{ revision }}<template v-if="pendingTaps"> · +{{ pendingTaps }}</template></span>
       </div>
 
-      <p v-if="errorText" class="error-text">{{ errorText }}</p>
+      <p v-if="isStopped" class="alert alert--info" role="status">{{ t('scoringFlow.resumeRequired') }}</p>
+      <p v-if="isActive && !canStopLive" class="muted">{{ t('scoringFlow.counterStop') }}</p>
+      <p v-if="errorText" class="error-text" role="alert">{{ errorText }}</p>
     </div>
-  </div>
+  </AppModal>
 </template>
 
 <style scoped>
+.live-rule-hint { font-size: .8rem; line-height: 1.5; }
 .live-modal__status {
   display: flex;
   align-items: center;

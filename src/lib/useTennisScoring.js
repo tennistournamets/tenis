@@ -1,3 +1,4 @@
+import { formatSetScore } from './tennisRules.js'
 import { computed, ref } from 'vue'
 
 const POINT_LABELS = ['0', '15', '30', '40']
@@ -43,6 +44,10 @@ export function normalizeTennisState(state, setFormat = 'best_of_3') {
     sets: Array.isArray(source.sets) ? source.sets : [],
     currentSet: asNumber(source.currentSet, 1),
     isTiebreak: Boolean(source.isTiebreak),
+    isMatchTiebreak: Boolean(source.isMatchTiebreak),
+    tiebreakTo: asNumber(source.tiebreakTo, 7),
+    tiebreakMargin: asNumber(source.tiebreakMargin, 2),
+    rules: source.rules || null,
     tiebreakPoints: {
       a: sideValue(source.tiebreakPoints, 'a'),
       b: sideValue(source.tiebreakPoints, 'b'),
@@ -68,8 +73,11 @@ export function pointLabel(state, side) {
 
 export function scoreLine(state) {
   const normalized = normalizeTennisState(state)
-  const completed = normalized.sets.map((set) => `${set.side_a_games}:${set.side_b_games}`)
-  const current = `${normalized.games.a}:${normalized.games.b}`
+  const completed = normalized.sets.map(formatSetScore)
+  if (normalized.winner) return completed.join(' · ')
+  const current = normalized.isMatchTiebreak
+    ? `[${normalized.tiebreakPoints.a}:${normalized.tiebreakPoints.b}]`
+    : `${normalized.games.a}:${normalized.games.b}`
   return [...completed, current].join(' · ')
 }
 

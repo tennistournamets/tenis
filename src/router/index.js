@@ -1,5 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import { beforeUnload, confirmLeaveForms } from '../lib/unsavedChanges'
+import i18n from '../i18n'
 
 const HomeView = () => import('../views/HomeView.vue')
 const PublicTournamentView = () => import('../views/PublicTournamentView.vue')
@@ -65,7 +67,10 @@ const router = createRouter({
   ],
 })
 
-router.beforeEach(async (to) => {
+window.addEventListener('beforeunload', beforeUnload)
+
+router.beforeEach(async (to, from) => {
+  if (to.path !== from.path && !(await confirmLeaveForms(i18n.global.t))) return false
   const auth = useAuthStore()
 
   if (!auth.ready) {

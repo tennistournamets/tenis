@@ -1,7 +1,19 @@
-# ⚠️ HISTORICAL — superseded
+# Активные миграции
 
-These migration files (and `../rollbacks/`) belong to the **old org/multitenancy era** (clubs, organizations, memberships, invites) that was **removed** during the multi-sport rebuild.
+`20260906175207_current_model_baseline.sql` — состояние текущей модели после
+шагов 1–9, только для новой БД. Создан командой `supabase migration new`.
+Если уже существует tournaments или organizations, baseline отклоняется до DDL.
+Не удалять эту защиту для обновления существующего проекта.
 
-They are kept only for history. **Do not apply them.**
+- `../schema.sql` — каноническое состояние, не процедура обновления.
+- `../database-release.json` — SHA-256 baseline, исходника и 11 обновлений,
+  соответствие локальных и фактических версий TENIS.
+- `../upgrades/` — полная цепочка обновления ревизии 2863c88 без изменения SQL.
+- `../archive/organizations/` — несовместимая модель 202605 и её rollback.
+- [Установка, выпуск и восстановление](../../docs/RELEASE.md).
 
-The single canonical database definition is now **`../schema.sql`** — apply that whole file to a fresh database. `schema.sql` contains the current multi-sport schema (sports, formats, groups, standings, double-elim, football scoring, RLS, functions).
+В TENIS сохраняется прежний журнал: baseline там не зарегистрирован. Поэтому
+массовый `db push` в TENIS пока не является путём обновления. Применять новые
+изменения точечно либо сначала выполнить принятие baseline после резервной
+копии и сверки схемы, как описано в руководстве. Журнал рабочей БД в шаге 10
+не переписывался; перенос файлов не меняет его и не выполняет DDL.

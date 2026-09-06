@@ -10,6 +10,8 @@ dist/
 .env.*.local
 .claude/
 .mcp.json
+supabase/.temp/
+supabase/.branches/
 
 # Editor and IDE
 .vscode/
@@ -27,3 +29,7 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+
+# Local browser audit artifacts
+.playwright-cli/
+output/playwright/

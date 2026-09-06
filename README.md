@@ -1,6 +1,6 @@
 # Tenis Championship App
 
-Vue 3 + Supabase веб-приложение для управления теннисными чемпионатами.
+Vue 3 + Supabase: турниры по теннису, паделу и футболу.
 
 ## Возможности
 
@@ -9,10 +9,11 @@ Vue 3 + Supabase веб-приложение для управления тен�
 - Публичная страница `/tournaments/:slug` — только по ссылке от организатора: вкладки «Регистрация» и «Сетка», без логина
 - Создание турнира (`singles` / `doubles`)
 - Роли:
-  - `admin` (Google OAuth, полное управление)
-  - `spectator` (просмотр и регистрация по расшаренной ссылке)
+  - `owner` / `editor`: управление своим турниром и результатами
+  - `counter`: ведение LIVE-счёта в назначенном турнире
+  - зритель: публичная страница и регистрация по ссылке без входа
 - Саморегистрация участников с модерацией
-- Жеребьёвка `single elimination`:
+- Форматы: single/double elimination, round robin и группы с плей-офф. Жеребьёвка:
   - авто-рандом
   - ручной порядок
 - Авто-BYE до ближайшей степени 2
@@ -27,10 +28,10 @@ Vue 3 + Supabase веб-приложение для управления тен�
 
 ## Запуск
 
-1. Установите зависимости:
+1. Используйте Node из `.nvmrc` (24.20.0) и установите зафиксированные зависимости:
 
 ```bash
-npm install
+npm ci
 ```
 
 2. Скопируйте `.env.example` в `.env` и заполните:
@@ -39,7 +40,12 @@ npm install
 cp .env.example .env
 ```
 
-3. Примените SQL из `supabase/schema.sql` в SQL Editor вашего проекта Supabase.
+3. Подготовьте новую БД или обновите существующую по [руководству выпуска](docs/RELEASE.md).
+   В `supabase/migrations/` находится baseline только для новой БД; исходные
+   обновления сохранены в `supabase/upgrades/`, модель организаций — в архиве.
+   Не применять schema.sql повторно к рабочей БД. Настройте Google OAuth
+   и Redirect URLs своего origin. Пароли и secret/service_role keys не помещать
+   в переменные `VITE_`.
 
 4. Запустите dev-сервер:
 
@@ -52,7 +58,19 @@ npm run dev
 - `register_entry(p_slug, p_entry_type, p_phone_or_email, p_member_one, p_member_two, p_display_name)`
 - `generate_bracket(p_tournament_id, p_mode, p_manual_order)`
 - `rebuild_bracket(p_tournament_id, p_mode, p_manual_order)`
-- `update_match_sets(p_match_id, p_sets)`
+- `update_match_sets(p_match_id, p_sets, p_expected_revision)`
+- `get_tournament_sync_state(p_tournament_id)` — согласованный снимок с учётом RLS
+- LIVE: start/point/undo/stop с ожидаемой версией; коррекции результатов с preview
+
+## Проверки и выпуск
+
+`npm run test:sql` запускает 189 проверок без сети и рабочего `.env`.
+`TENIS_TEST_INSTALL_MODE=fresh` проверяет baseline, `upgrade` — полную цепочку.
+`npm run test:postgres` проверяет отдельный локальный PostgreSQL и восстановление.
+GitHub Actions выполняет три режима, сборку, audit и PostgreSQL/CLI-проверку.
+Команды, ограничения и backup/restore: [RELEASE.md](docs/RELEASE.md).
+Версии и достижимость advisory: [DEPENDENCIES.md](docs/DEPENDENCIES.md).
+Архитектура чтения/форм, мобильные замеры и их ограничения: [PERFORMANCE.md](docs/PERFORMANCE.md).
 
 ## Структура
 

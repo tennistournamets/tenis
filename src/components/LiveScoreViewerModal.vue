@@ -1,7 +1,9 @@
 <script setup>
 import { computed, defineAsyncComponent, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import AppModal from './AppModal.vue'
 
+import { liveRuleHint } from '../lib/tennisRules'
 import { pointLabel, scoreLine } from '../lib/useTennisScoring'
 import { displaySides, useDeferredChangeover } from '../lib/liveSides'
 import { GLB_TIMEOUT_MS, maxNetworkTier, withTimeout } from '../lib/rally3d/networkTier'
@@ -98,8 +100,8 @@ function teamName(side) {
 </script>
 
 <template>
-  <div class="modal-backdrop" @click="emit('close')">
-    <div class="modal-dialog live-modal" role="dialog" aria-modal="true" @click.stop>
+  <AppModal :label="t('live.viewerTitle')" @close="emit('close')">
+    <div class="modal-dialog live-modal">
       <div class="modal-dialog__head">
         <div>
           <h2>{{ t('live.viewerTitle') }}</h2>
@@ -134,9 +136,7 @@ function teamName(side) {
       </div>
 
       <p class="live-scoreboard__sets">{{ scoreLine(state) }}</p>
-      <div v-if="state?.isTiebreak" class="alert alert--info" role="status">
-        {{ t('live.tiebreak') }}
-      </div>
+      <div v-if="liveRuleHint(state, t)" class="alert alert--info" role="status">{{ liveRuleHint(state, t) }}</div>
     </div>
-  </div>
+  </AppModal>
 </template>

@@ -1,0 +1,71 @@
+{
+  "release": "2026-09-06-step10",
+  "forwardMigrations": [],
+  "baseline": {
+    "path": "supabase/migrations/20260906175207_current_model_baseline.sql",
+    "sha256": "1ee2c3e687208a9409b9cdd650468522feced9509e2203906397b71c55e7df3c"
+  },
+  "upgradeSource": {
+    "path": "supabase/upgrades/pre-stabilization.sql",
+    "sha256": "38c93578277b4add59de8f711dd19cc644a66ad01dc21043ed092b2c887aed6a",
+    "gitRevision": "2863c88"
+  },
+  "upgrades": [
+    {
+      "path": "supabase/upgrades/20260905194009_restrict_internal_rpc_execution.sql",
+      "sha256": "70df99d9d39ca0bff35fe1143201fd0101445239e3380a1959168e05a5a13901",
+      "tenisAppliedVersion": null,
+      "tenisNote": "Applied via SQL; no migration history entry. Verified by ACL checks."
+    },
+    {
+      "path": "supabase/upgrades/20260905201035_harden_external_rpc_boundaries.sql",
+      "sha256": "00bb2c1e64cff97a6b343c1e2e8ba1f28c844e9d1ea1701b1caee493f4831a13",
+      "tenisAppliedVersion": "20260905202103"
+    },
+    {
+      "path": "supabase/upgrades/20260905202739_protect_participant_privacy.sql",
+      "sha256": "ceb0f5b23561183e3107c090e06ae8c3856474d522aeaa8c46f308de51c01cff",
+      "tenisAppliedVersion": "20260905203428"
+    },
+    {
+      "path": "supabase/upgrades/20260905205404_fix_knockout_byes.sql",
+      "sha256": "8b38bccb528cb42a721d9203a60bc9bd6c0a1d23372b5337e13916727bd17cee",
+      "tenisAppliedVersion": "20260905210400"
+    },
+    {
+      "path": "supabase/upgrades/20260905211522_validate_match_set_results.sql",
+      "sha256": "112897af80bd74dfa4d3362fb762d4770a40c81fe4785164eb11d6308a051484",
+      "tenisAppliedVersion": "20260905212151"
+    },
+    {
+      "path": "supabase/upgrades/20260906065724_add_itf_2026_scoring.sql",
+      "sha256": "cc17647b3ec4d01c44a691d7573d039634aa3b0fd58a030187353db0c218b8a8",
+      "tenisAppliedVersion": "20260906071725"
+    },
+    {
+      "path": "supabase/upgrades/20260906073551_lock_started_tournament_sport.sql",
+      "sha256": "bb9f6b5fa420b31bbb1b6006aa36a12f3f98d04f26e0220c0fc05940f5c5bd16",
+      "tenisAppliedVersion": "20260906073711"
+    },
+    {
+      "path": "supabase/upgrades/20260906114558_prioritize_live_scoring.sql",
+      "sha256": "3c771078b34da8f8e309df7ead2459ed882af788074f76d17e16cbe5b62d0d27",
+      "tenisAppliedVersion": "20260906115845"
+    },
+    {
+      "path": "supabase/upgrades/20260906130008_safe_result_corrections.sql",
+      "sha256": "a58bdf1325de01306df110d32ea2664755f8097838241005047d3dc942ff96c3",
+      "tenisAppliedVersion": "20260906132026"
+    },
+    {
+      "path": "supabase/upgrades/20260906142758_protect_form_drafts.sql",
+      "sha256": "9ed96e51d949eb2cba69969a147c6fcbd71c3435c1e56a6e00ca0dfb0a6db4ac",
+      "tenisAppliedVersion": "20260906144655"
+    },
+    {
+      "path": "supabase/upgrades/20260906162739_synchronize_tournament_results.sql",
+      "sha256": "036f5c62b83f2da2c0bedb315b6fcdc694b7d625e064508c550907110fe25c43",
+      "tenisAppliedVersion": "20260906164230"
+    }
+  ]
+}

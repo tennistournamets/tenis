@@ -174,7 +174,7 @@ Planned/known gaps, roughly by priority. Not implemented yet.
 ## Dev Setup
 
 ```bash
-# Required: .env with VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY (+ VITE_SUPABASE_DB_PASSWORD for psql apply)
+# Required: .env with VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY (+ SUPABASE_DB_PASSWORD for psql apply)
 npm install
 npm run dev      # http://localhost:5173
 npm run build    # Production build to dist/
