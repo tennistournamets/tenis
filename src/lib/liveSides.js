@@ -1,6 +1,7 @@
 import { onScopeDispose, ref, watch } from 'vue'
 
-import { normalizeTennisState } from './useTennisScoring'
+import { normalizeTennisState } from './useTennisScoring.js'
+import { ruleForSet } from './tennisRules.js'
 
 // Tennis changeovers: ends are swapped after every odd game of a set
 // (1st, 3rd, 5th ...) and, inside a tiebreak, after every 6 points.
@@ -10,13 +11,29 @@ export function changeoverSwapped(state) {
   if (!state) return false
   const norm = normalizeTennisState(state)
 
+  const config = norm.rules ? { tennis: norm.rules } : { tiebreak_to: norm.tiebreakTo }
+  const format = norm.requiredSets === 3 ? 'best_of_5' : 'best_of_3'
+  const tbChanges = (points, short) => short ? (points >= 4 ? 1 : 0)
+    : norm.rules?.changeover === 'one_then_four' ? (points > 0 ? 1 + Math.floor((points - 1) / 4) : 0)
+      : Math.floor(points / 6)
   let changeovers = 0
   for (const set of norm.sets) {
-    const games = Number(set?.side_a_games || 0) + Number(set?.side_b_games || 0)
-    changeovers += Math.ceil(games / 2)
+    const rule = ruleForSet(config, set.set_index, format)
+    const total = Number(set.side_a_tiebreak || 0) + Number(set.side_b_tiebreak || 0)
+    if (set.score_kind === 'match_tiebreak') {
+      changeovers += tbChanges(Math.max(0, total - 1), false) + 1
+    } else {
+      const games = Number(set.side_a_games || 0) + Number(set.side_b_games || 0)
+      changeovers += Math.ceil(games / 2)
+      // Do not count a change on the final tiebreak point twice: that change
+      // belongs to the end of the set, already counted as the odd last game.
+      if (total) changeovers += tbChanges(total - 1, rule.margin === 1)
+    }
   }
-  changeovers += Math.ceil((norm.games.a + norm.games.b) / 2)
-  changeovers += Math.floor((norm.tiebreakPoints.a + norm.tiebreakPoints.b) / 6)
+  if (!norm.winner) {
+    if (!norm.isMatchTiebreak) changeovers += Math.ceil((norm.games.a + norm.games.b) / 2)
+    if (norm.isTiebreak) changeovers += tbChanges(norm.tiebreakPoints.a + norm.tiebreakPoints.b, norm.tiebreakMargin === 1)
+  }
 
   return changeovers % 2 === 1
 }
@@ -27,9 +44,9 @@ export const CHANGEOVER_DELAY_MS = 3200
 function totalGamesPlayed(state) {
   if (!state) return 0
   const norm = normalizeTennisState(state)
-  let games = norm.games.a + norm.games.b
+  let games = norm.winner || norm.isMatchTiebreak ? 0 : norm.games.a + norm.games.b
   for (const set of norm.sets) {
-    games += Number(set?.side_a_games || 0) + Number(set?.side_b_games || 0)
+    games += set.score_kind === 'match_tiebreak' ? 1 : Number(set?.side_a_games || 0) + Number(set?.side_b_games || 0)
   }
   return games
 }

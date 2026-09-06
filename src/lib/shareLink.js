@@ -12,9 +12,9 @@ export function tournamentShareUrl(slug) {
 
 export async function copyTournamentLink(slug) {
   const url = tournamentShareUrl(slug)
-  if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(url)
-    return url
+  if (typeof navigator === 'undefined' || typeof navigator.clipboard?.writeText !== 'function') {
+    throw new Error('Clipboard unavailable')
   }
+  await navigator.clipboard.writeText(url)
   return url
 }

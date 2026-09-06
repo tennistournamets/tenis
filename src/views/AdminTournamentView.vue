@@ -15,10 +15,18 @@ import { scoringFamily, getSportConfig } from '../lib/sportConfig'
 import LiveScoringModal from '../components/LiveScoringModal.vue'
 import TournamentQrModal from '../components/TournamentQrModal.vue'
 import ScoreEditor from '../components/ScoreEditor.vue'
+import ManualEntryForm from '../components/admin/ManualEntryForm.vue'
+import TournamentSettingsForm from '../components/admin/TournamentSettingsForm.vue'
+import { scoringError } from '../lib/tennisRules'
+import { sameForm, cloneForm, matchVersions } from '../lib/formDraft'
+import { useUnsavedChanges, confirmDiscard, withApprovedDeparture } from '../lib/unsavedChanges'
 import { entryMemberNames } from '../lib/entryDisplay'
 import { confirmDialog } from '../lib/confirmDialog'
 import { supabase } from '../lib/supabase'
-import { copyTournamentLink } from '../lib/shareLink'
+import { createSnapshotRefresh, subscribeTournament } from '../lib/tournamentSync'
+import { readAdminTournamentSnapshot } from '../lib/tournamentRepository'
+import { indexEntries, groupSetsByMatch, indexLiveScores, buildGroupsView } from '../lib/tournamentProjections'
+import CopyTournamentLink from '../components/CopyTournamentLink.vue'
 import { useAuthStore } from '../stores/auth'
 
 const props = defineProps({
@@ -48,28 +56,13 @@ const currentUserRole = ref(null)
 const loading = ref(false)
 const actionLoading = ref(false)
 const errorText = ref('')
-const copyFeedback = ref(false)
 const qrModalOpen = ref(false)
 
-const statusValue = ref('draft')
-const settingsForm = reactive({
-  name: '',
-  slug: '',
-  description: '',
-  category: 'singles',
-  set_format: 'best_of_3',
-  doubles_pairing_mode: 'pre_agreed',
-})
-const settingsBaseline = ref({
-  status: 'draft',
-  is_public: false,
-  name: '',
-  slug: '',
-  description: '',
-  category: 'singles',
-  set_format: 'best_of_3',
-  doubles_pairing_mode: 'pre_agreed',
-})
+const settingsSaving = ref(false)
+function acceptTournament(data) {
+  if (tournament.value && data.settings_revision < tournament.value.settings_revision) return
+  tournament.value = data
+}
 const drawMode = ref('auto-random')
 const bracketEditing = ref(false)
 const localMatches = ref([])
@@ -80,66 +73,28 @@ const addAdminForm = reactive({
   role: 'editor',
 })
 
-const addEntryForm = reactive({
-  memberOne: '',
-  memberTwo: '',
-  displayName: '',
-  phoneOrEmail: '',
-  asPending: false,
-})
-
-const addEntryError = ref('')
-const addEntrySuccess = ref('')
-const addEntryContactTouched = ref(false)
-const addEntryAccordionOpen = ref(false)
-
 const manualPairingOpen = ref(false)
+const pairingBaseline = ref(null)
+const pairingInitialSlots = ref([])
+const slotIds = slots => slots.map(s => [s.playerA?.memberId || null, s.playerB?.memberId || null])
+const pairingDirty = computed(() => manualPairingOpen.value && !sameForm(slotIds(manualPairSlots.value), pairingInitialSlots.value))
+const pairingConflict = computed(() => manualPairingOpen.value && pairingBaseline.value && (
+  isTournamentActive.value || isTournamentFinished.value ||
+  !sameForm(pairingBaseline.value.entries, entryEditState.value?.entries) ||
+  !sameForm(pairingBaseline.value.matches, matchVersions(matches.value)) ||
+  pairingBaseline.value.settings_revision !== tournament.value?.settings_revision))
 const manualPairSlots = ref([])
 const manualPairingDragOver = ref(null)
 const pairingEditMode = ref(false)
 const editModePlayers = ref([])
 
-const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-const phonePattern = /^\+?[\d\s\-()]{7,20}$/
+let stopRealtime = null
+let disposed = false
+const syncFailed = ref(false)
 
-function isValidContact(value) {
-  const trimmed = String(value).trim()
-  return emailPattern.test(trimmed) || phonePattern.test(trimmed)
-}
-
-const addEntryContactInvalid = computed(() => {
-  const v = addEntryForm.phoneOrEmail.trim()
-  return addEntryContactTouched.value && Boolean(v) && !isValidContact(addEntryForm.phoneOrEmail)
-})
-
-let addEntrySuccessTimer = null
-
-let channel = null
-let reloadTimer = null
-
-const entriesMap = computed(() => {
-  return entries.value.reduce((acc, entry) => {
-    acc[entry.id] = entry
-    return acc
-  }, {})
-})
-
-const setsByMatch = computed(() => {
-  return matchSets.value.reduce((acc, item) => {
-    if (!acc[item.match_id]) {
-      acc[item.match_id] = []
-    }
-    acc[item.match_id].push(item)
-    return acc
-  }, {})
-})
-
-const liveScoresByMatch = computed(() => {
-  return liveScores.value.reduce((acc, item) => {
-    acc[item.match_id] = item
-    return acc
-  }, {})
-})
+const entriesMap = computed(() => indexEntries(entries.value))
+const setsByMatch = computed(() => groupSetsByMatch(matchSets.value))
+const liveScoresByMatch = computed(() => indexLiveScores(liveScores.value))
 
 const pendingEntries = computed(() => entries.value.filter((entry) => entry.status === 'pending'))
 const approvedEntries = computed(() => entries.value.filter((entry) => entry.status === 'approved'))
@@ -209,22 +164,6 @@ const showPublicShareActions = computed(() => {
   return tournament.value?.status !== 'draft'
 })
 
-const hasTournamentSettingsChanges = computed(() => {
-  if (!tournament.value) {
-    return false
-  }
-  const b = settingsBaseline.value
-  return (
-    statusValue.value !== b.status ||
-    Boolean(tournament.value.is_public) !== b.is_public ||
-    settingsForm.name !== b.name ||
-    settingsForm.description !== b.description ||
-    settingsForm.category !== b.category ||
-    settingsForm.set_format !== b.set_format ||
-    settingsForm.doubles_pairing_mode !== b.doubles_pairing_mode
-  )
-})
-
 const canStartTournament = computed(
   () => tournament.value?.status === 'registration_closed' && matches.value.length > 0,
 )
@@ -247,341 +186,109 @@ const startBlockReason = computed(() => {
   return t('admin.startNeedBracket')
 })
 
-const isSettingsDropdownDisabled = computed(() => isTournamentActive.value || isTournamentFinished.value)
-
 async function startTournament() {
-  if (!(await confirmDialog(t('admin.startTournamentConfirm')))) {
-    return
-  }
-
+  if (actionLoading.value || settingsSaving.value) return
+  const revision = tournament.value.settings_revision
+  if (!(await confirmDialog(t('admin.startTournamentConfirm')))) return
   actionLoading.value = true
-  errorText.value = ''
-
-  const { error } = await supabase
-    .from('tournaments')
-    .update({ status: 'in_progress' })
-    .eq('id', props.id)
-
+  const { data, error } = await supabase.rpc('update_tournament_settings', {
+    p_tournament_id: props.id, p_patch: { status: 'in_progress' }, p_expected_revision: revision,
+  })
   actionLoading.value = false
-
-  if (error) {
-    errorText.value = error.message
-    return
-  }
-
-  await loadAll()
+  if (error) { errorText.value = scoringError(error.message, t); await loadTournament(); return }
+  acceptTournament(data)
+  await loadAll(true)
 }
 
 async function finishTournament() {
-  if (!(await confirmDialog(t('admin.finishTournamentConfirm')))) {
-    return
-  }
-
+  if (actionLoading.value || settingsSaving.value) return
+  const revision = tournament.value.settings_revision
+  if (!(await confirmDialog(t('admin.finishTournamentConfirm')))) return
   actionLoading.value = true
-  errorText.value = ''
-
-  const { error } = await supabase
-    .from('tournaments')
-    .update({ status: 'completed' })
-    .eq('id', props.id)
-
+  const { data, error } = await supabase.rpc('update_tournament_settings', {
+    p_tournament_id: props.id, p_patch: { status: 'completed' }, p_expected_revision: revision,
+  })
   actionLoading.value = false
-
-  if (error) {
-    errorText.value = error.message
-    return
-  }
-
-  await loadAll()
+  if (error) { errorText.value = scoringError(error.message, t); await loadTournament(); return }
+  acceptTournament(data)
+  await loadAll(true)
 }
 
 async function stopTournament() {
-  if (!(await confirmDialog(t('admin.stopTournamentConfirm')))) {
-    return
-  }
-
+  if (actionLoading.value || settingsSaving.value) return
+  const revision = tournament.value.settings_revision
+  if (!(await confirmDialog(t('admin.stopTournamentConfirm')))) return
   actionLoading.value = true
-  errorText.value = ''
-
-  const { error } = await supabase
-    .from('tournaments')
-    .update({ status: 'registration_closed' })
-    .eq('id', props.id)
-
+  const { data, error } = await supabase.rpc('update_tournament_settings', {
+    p_tournament_id: props.id, p_patch: { status: 'registration_closed' }, p_expected_revision: revision,
+  })
   actionLoading.value = false
-
-  if (error) {
-    errorText.value = error.message
-    return
-  }
-
-  await loadAll()
+  if (error) { errorText.value = scoringError(error.message, t); await loadTournament(); return }
+  acceptTournament(data)
+  await loadAll(true)
 }
 
-async function assertAccess() {
-  const { data, error } = await supabase.rpc('get_my_tournament_role', {
-    p_tournament_id: props.id,
-  })
-
-  if (error) {
-    throw error
-  }
-
-  if (!data) {
-    throw new Error(t('errors.noAccess'))
-  }
-
-  currentUserRole.value = data
-}
-
-async function loadTournament() {
-  const { data, error } = await supabase
-    .from('tournaments')
-    .select('id, name, slug, description, sport, format, category, status, set_format, is_public, doubles_pairing_mode, format_config, scoring_config')
-    .eq('id', props.id)
-    .maybeSingle()
-
-  if (error) {
-    throw error
-  }
-
-  if (!data) {
-    throw new Error(t('errors.notFound'))
-  }
-
-  tournament.value = data
-  statusValue.value = data.status
-  settingsForm.name = data.name
-  settingsForm.slug = data.slug || ''
-  settingsForm.description = data.description || ''
-  settingsForm.category = data.category
-  settingsForm.set_format = data.set_format
-  settingsForm.doubles_pairing_mode = data.doubles_pairing_mode || 'pre_agreed'
-  settingsBaseline.value = {
-    status: data.status,
-    is_public: Boolean(data.is_public),
-    name: data.name,
-    slug: data.slug || '',
-    description: data.description || '',
-    category: data.category,
-    set_format: data.set_format,
-    doubles_pairing_mode: data.doubles_pairing_mode || 'pre_agreed',
-  }
-}
-
-async function loadEntries() {
-  const { data, error } = await supabase
-    .from('entries')
-    .select('id, display_name, entry_type, status, created_at')
-    .eq('tournament_id', props.id)
-    .order('created_at', { ascending: true })
-
-  if (error) {
-    throw error
-  }
-
-  const entryRows = data || []
-  const ids = entryRows.map((e) => e.id)
-
-  if (ids.length) {
-    const { data: members } = await supabase
-      .from('entry_members')
-      .select('entry_id, member_name, member_order')
-      .in('entry_id', ids)
-      .order('member_order', { ascending: true })
-
-    const byEntry = {}
-    for (const m of members || []) {
-      ;(byEntry[m.entry_id] ??= []).push(m)
+const entryEditState = ref(null)
+let adminListStale = true
+const snapshotRefresh = createSnapshotRefresh({
+  read: () => readAdminTournamentSnapshot(supabase, props.id, { includeAdmins: adminListStale }),
+  apply: ({ data, role, adminRows }) => {
+    currentUserRole.value = role
+    if (!data || !role) {
+      syncFailed.value = true
+      errorText.value = t('errors.noAccess')
+      throw new Error(t('errors.noAccess'))
     }
-    for (const entry of entryRows) {
-      entry.entry_members = byEntry[entry.id] || []
-    }
-  }
+    if (errorText.value === t('errors.noAccess')) errorText.value = ''
+    if (adminRows) { admins.value = adminRows; adminListStale = false }
+    acceptTournament(data.tournament)
+    entries.value = data.entries
+    matches.value = data.matches
+    matchSets.value = data.sets
+    liveScores.value = data.live
+    if (selectedLiveMatch.value && !data.matches.some(m => m.id === selectedLiveMatch.value.id)) selectedLiveMatch.value = null
+    groups.value = data.groups
+    standings.value = data.standings
+    groupStandings.value = data.group_standings
+    entryEditState.value = { entries: [...data.entries].sort((a,b) => a.id.localeCompare(b.id)),
+      matches: matchVersions(data.matches), settings_revision: data.tournament.settings_revision }
+    syncFailed.value = false
+  },
+  onError: error => {
+    syncFailed.value = true
+    if (!tournament.value) errorText.value = error.message || t('errors.generic')
+  },
+})
 
-  entries.value = entryRows
-}
-
+async function refreshScoreData() { return snapshotRefresh.refresh() }
+function scheduleScoreReload() { snapshotRefresh.request() }
 async function loadMatchesAndSets() {
-  const { data: matchesData, error: matchesError } = await supabase
-    .from('matches')
-    .select(
-      'id, tournament_id, stage, group_id, round_number, match_number, side_a_entry_id, side_b_entry_id, winner_entry_id, side_a_score, side_b_score, side_a_pens, side_b_pens, status, next_match_id, next_slot, loser_next_match_id, loser_next_slot',
-    )
-    .eq('tournament_id', props.id)
-    .order('round_number', { ascending: true })
-    .order('match_number', { ascending: true })
-
-  if (matchesError) {
-    throw matchesError
-  }
-
-  matches.value = matchesData || []
-
-  if (!matches.value.length) {
-    matchSets.value = []
-    liveScores.value = []
-    return
-  }
-
-  const ids = matches.value.map((match) => match.id)
-
-  const { data: setsData, error: setsError } = await supabase
-    .from('match_sets')
-    .select('id, match_id, set_index, side_a_games, side_b_games')
-    .in('match_id', ids)
-    .order('set_index', { ascending: true })
-
-  if (setsError) {
-    throw setsError
-  }
-
-  matchSets.value = setsData || []
-
-  const { data: liveData, error: liveError } = await supabase
-    .from('live_scores')
-    .select('id, match_id, tournament_id, status, state, history, revision, created_at, updated_at')
-    .eq('tournament_id', props.id)
-
-  if (liveError) {
-    throw liveError
-  }
-
-  liveScores.value = liveData || []
+  if (!(await refreshScoreData())) throw new Error(t('sync.unavailable'))
 }
+async function loadTournament() { return loadMatchesAndSets() }
+async function loadEntries() { return loadMatchesAndSets() }
 
-async function loadAdmins() {
-  const { data, error } = await supabase.rpc('get_tournament_admins_with_email', {
-    p_tournament_id: props.id,
-  })
-
-  if (error) {
-    console.warn('loadAdmins:', error.message)
-    admins.value = []
-    return
-  }
-
-  admins.value = data || []
-}
-
-async function loadAll(silent = false) {
-  if (!auth.user) {
-    return
-  }
-
-  // Silent reloads (score saves, realtime pings) refresh data in place
-  // without unmounting the page — keeps the scroll position.
-  if (!silent) {
-    loading.value = true
-  }
-  errorText.value = ''
-
+async function loadAll() {
+  if (!auth.user || disposed) return
+  if (!tournament.value) loading.value = true
+  if (!stopRealtime) setupRealtime()
+  adminListStale = true
   try {
-    await assertAccess()
-    await loadTournament()
-    await Promise.all([
-      loadEntries(),
-      loadMatchesAndSets(),
-      isRoundRobin.value ? loadStandings() : Promise.resolve((standings.value = [])),
-      isGroupsPlayoff.value ? loadGroups() : Promise.resolve((groups.value = [])),
-      canManageTournament.value ? loadAdmins() : Promise.resolve((admins.value = [])),
-    ])
-    setupRealtime()
-  } catch (error) {
-    errorText.value = error.message || t('errors.generic')
-  } finally {
-    if (!silent) {
-      loading.value = false
-    }
-  }
-}
-
-function scheduleReload() {
-  clearTimeout(reloadTimer)
-  reloadTimer = setTimeout(() => {
-    loadAll(true)
-  }, 300)
-}
-
-function onMatchSetsChange(payload) {
-  if (payload.eventType === 'DELETE') {
-    // DELETE payloads may only carry the row id — remove by id, no
-    // tournament check (ids of other tournaments are simply not in the list).
-    if (!payload.old?.id) return
-    matchSets.value = matchSets.value.filter((row) => row.id !== payload.old.id)
-    return
-  }
-  const row = payload.new
-  if (!row?.id || !row.match_id) return
-  const belongsToTournament = matches.value.some((m) => m.id === row.match_id)
-  if (!belongsToTournament) {
-    return
-  }
-  const idx = matchSets.value.findIndex((item) => item.id === row.id)
-  if (idx >= 0) {
-    matchSets.value[idx] = row
-  } else {
-    // Drop any stale row occupying the same (match, set) slot before adding.
-    matchSets.value = [
-      ...matchSets.value.filter((item) => !(item.match_id === row.match_id && item.set_index === row.set_index)),
-      row,
-    ]
-  }
-}
-
-function onMatchesChange(payload) {
-  const tournamentId = payload.new?.tournament_id || payload.old?.tournament_id
-  if (tournamentId !== props.id) {
-    return
-  }
-  if (payload.eventType === 'DELETE') {
-    if (!payload.old?.id) return
-    matches.value = matches.value.filter((row) => row.id !== payload.old.id)
-    return
-  }
-  if (!payload.new?.id) return
-  const idx = matches.value.findIndex((row) => row.id === payload.new.id)
-  if (idx >= 0) {
-    matches.value[idx] = { ...matches.value[idx], ...payload.new }
-  } else {
-    matches.value = [...matches.value, payload.new]
-  }
-}
-
-function onLiveScoresChange(payload) {
-  const tournamentId = payload.new?.tournament_id || payload.old?.tournament_id
-  if (tournamentId !== props.id) {
-    return
-  }
-  if (payload.eventType === 'DELETE') {
-    if (!payload.old?.id) return
-    liveScores.value = liveScores.value.filter((row) => row.id !== payload.old.id)
-    return
-  }
-  if (!payload.new?.id) return
-  const idx = liveScores.value.findIndex((row) => row.id === payload.new.id)
-  if (idx >= 0) {
-    liveScores.value[idx] = payload.new
-  } else {
-    liveScores.value = [...liveScores.value, payload.new]
-  }
+    await refreshScoreData()
+  } finally { if (!disposed) loading.value = false }
 }
 
 function setupRealtime() {
-  if (channel) {
-    supabase.removeChannel(channel)
-  }
-
-  channel = supabase
-    .channel(`admin-${props.id}`)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'tournaments', filter: `id=eq.${props.id}` }, scheduleReload)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'entries', filter: `tournament_id=eq.${props.id}` }, scheduleReload)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'matches', filter: `tournament_id=eq.${props.id}` }, onMatchesChange)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'match_sets' }, onMatchSetsChange)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'live_scores', filter: `tournament_id=eq.${props.id}` }, onLiveScoresChange)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'tournament_admins', filter: `tournament_id=eq.${props.id}` }, scheduleReload)
-
-  channel.subscribe()
+  stopRealtime?.()
+  stopRealtime = subscribeTournament({
+    client: supabase, id: props.id, name: 'admin',
+    getState: () => ({ entries: entries.value, matches: matches.value, sets: matchSets.value, live: liveScores.value, groups: groups.value }),
+    refresh: payload => {
+      if (!payload || payload.table === 'tournament_admins') adminListStale = true
+      snapshotRefresh.request()
+    },
+    onStatus: status => { if (status !== 'SUBSCRIBED') syncFailed.value = true },
+  })
 }
 
 async function updateEntryStatus(entryId, status) {
@@ -627,146 +334,6 @@ async function approveAllPending() {
   await loadAll()
 }
 
-function resetAddEntryFeedback() {
-  addEntryError.value = ''
-  addEntrySuccess.value = ''
-  clearTimeout(addEntrySuccessTimer)
-  addEntrySuccessTimer = null
-}
-
-async function addEntryManually() {
-  resetAddEntryFeedback()
-  addEntryContactTouched.value = true
-
-  const category = tournament.value?.category
-  const pMode = tournament.value?.doubles_pairing_mode
-  const m1 = addEntryForm.memberOne.trim()
-  const m2 = addEntryForm.memberTwo.trim()
-
-  const requireBothMembers = category === 'doubles' && pMode !== 'pick_random'
-  if (!m1 || (requireBothMembers && !m2)) {
-    addEntryError.value = t('admin.addEntryInvalidMembers')
-    return
-  }
-
-  if (addEntryForm.phoneOrEmail.trim() && !isValidContact(addEntryForm.phoneOrEmail)) {
-    addEntryError.value = t('registrationForm.invalidContact')
-    return
-  }
-
-  let phoneOrEmail = addEntryForm.phoneOrEmail.trim()
-  if (!phoneOrEmail) {
-    phoneOrEmail = `admin-entry-${crypto.randomUUID()}@local.tenis`
-  }
-
-  const customName = addEntryForm.displayName.trim()
-  const displayName =
-    customName || (category === 'singles' ? m1 : (m2 ? `${m1} / ${m2}` : m1))
-
-  actionLoading.value = true
-
-  const { data: entryRow, error: insertError } = await supabase
-    .from('entries')
-    .insert({
-      tournament_id: props.id,
-      entry_type: category,
-      display_name: displayName,
-      phone_or_email: phoneOrEmail,
-      status: addEntryForm.asPending ? 'pending' : 'approved',
-    })
-    .select('id')
-    .single()
-
-  if (insertError || !entryRow) {
-    actionLoading.value = false
-    const msg = insertError?.message || ''
-    const dup =
-      /duplicate key|unique constraint|already exists/i.test(msg) ||
-      insertError?.code === '23505'
-    addEntryError.value = dup ? t('admin.addEntryDuplicateContact') : msg || t('errors.generic')
-    return
-  }
-
-  const memberRows = [{ entry_id: entryRow.id, member_name: m1, member_order: 1 }]
-  if (category === 'doubles' && m2) {
-    memberRows.push({ entry_id: entryRow.id, member_name: m2, member_order: 2 })
-  }
-
-  const { error: membersError } = await supabase.from('entry_members').insert(memberRows)
-
-  if (membersError) {
-    await supabase.from('entries').delete().eq('id', entryRow.id)
-    actionLoading.value = false
-    addEntryError.value = membersError.message || t('errors.generic')
-    return
-  }
-
-  actionLoading.value = false
-  addEntryForm.memberOne = ''
-  addEntryForm.memberTwo = ''
-  addEntryForm.displayName = ''
-  addEntryForm.phoneOrEmail = ''
-  addEntryForm.asPending = false
-  addEntryContactTouched.value = false
-
-  addEntrySuccess.value = t('admin.addEntrySuccess')
-  addEntrySuccessTimer = setTimeout(() => {
-    addEntrySuccess.value = ''
-    addEntrySuccessTimer = null
-  }, 5000)
-
-  await loadEntries()
-}
-
-async function saveTournamentSettings() {
-  actionLoading.value = true
-  errorText.value = ''
-
-  const categoryChanged = settingsForm.category !== settingsBaseline.value.category
-  const formatChanged = settingsForm.set_format !== settingsBaseline.value.set_format
-
-  const { error } = await supabase
-    .from('tournaments')
-    .update({
-      status: statusValue.value,
-      is_public: tournament.value.is_public,
-      name: settingsForm.name,
-      description: settingsForm.description || null,
-      category: settingsForm.category,
-      set_format: settingsForm.set_format,
-      doubles_pairing_mode:
-        settingsForm.category === 'doubles' ? settingsForm.doubles_pairing_mode : null,
-    })
-    .eq('id', props.id)
-
-  if (error) {
-    actionLoading.value = false
-    errorText.value = error.message
-    return
-  }
-
-  if (categoryChanged && hasBracket.value) {
-    const matchIds = matches.value.map((m) => m.id)
-    if (matchIds.length) {
-      await supabase.from('match_sets').delete().in('match_id', matchIds)
-      await supabase.from('matches').delete().eq('tournament_id', props.id)
-    }
-  } else if (formatChanged && hasBracket.value) {
-    const matchIds = matches.value.map((m) => m.id)
-    if (matchIds.length) {
-      await supabase.from('match_sets').delete().in('match_id', matchIds)
-      await supabase
-        .from('matches')
-        .update({ winner_entry_id: null, status: 'ready' })
-        .eq('tournament_id', props.id)
-        .neq('status', 'pending')
-    }
-  }
-
-  actionLoading.value = false
-  await loadAll()
-}
-
 const hasBracket = computed(() => matches.value.length > 0)
 const tournamentFormat = computed(() => tournament.value?.format || 'single_elimination')
 const isRoundRobin = computed(() => tournamentFormat.value === 'round_robin')
@@ -786,24 +353,7 @@ const allGroupMatchesFinished = computed(
   () => groupMatches.value.length > 0 && groupMatches.value.every((m) => m.status === 'finished'),
 )
 const groupsView = computed(() =>
-  [...groups.value]
-    .sort((a, b) => a.group_index - b.group_index)
-    .map((g) => {
-      const gMatches = groupMatches.value
-        .filter((m) => m.group_id === g.id)
-        .sort((a, b) => a.round_number - b.round_number || a.match_number - b.match_number)
-      const rounds = new Map()
-      for (const m of gMatches) {
-        if (!rounds.has(m.round_number)) rounds.set(m.round_number, [])
-        rounds.get(m.round_number).push(m)
-      }
-      return {
-        id: g.id,
-        name: g.name,
-        standings: groupStandings.value[g.id] || [],
-        rounds: [...rounds.entries()].sort((a, b) => a[0] - b[0]).map(([round, list]) => ({ round, list })),
-      }
-    }),
+  buildGroupsView(groups.value, matches.value, groupStandings.value),
 )
 const selectedRrMatch = ref(null)
 
@@ -845,6 +395,7 @@ async function formRandomPairs() {
 }
 
 function openManualPairing() {
+  if (manualPairingOpen.value || actionLoading.value || isTournamentActive.value || isTournamentFinished.value || !isPickRandomDoubles.value) return
   const count = unpairedEntries.value.length
   const slotCount = Math.ceil(count / 2)
   manualPairSlots.value = Array.from({ length: slotCount }, (_, i) => ({
@@ -852,24 +403,31 @@ function openManualPairing() {
     playerA: null,
     playerB: null,
   }))
+  pairingBaseline.value = cloneForm(entryEditState.value)
+  pairingInitialSlots.value = slotIds(manualPairSlots.value)
   manualPairingOpen.value = true
 }
 
-function closeManualPairing() {
+async function closeManualPairing(force = false) {
+  if (force !== true && !(await confirmDiscard(t, pairingDirty.value, actionLoading.value))) return
   manualPairingOpen.value = false
   manualPairSlots.value = []
   manualPairingDragOver.value = null
   pairingEditMode.value = false
   editModePlayers.value = []
+  pairingBaseline.value = null
+  pairingInitialSlots.value = []
 }
 
 function findEntryById(id) {
-  return allPairingPlayers.value.find((e) => e.id === id) || null
+  const entry = allPairingPlayers.value.find(e => e.id === id)
+  return entry ? { ...entry, memberId: entry.memberId || entry.entry_members?.[0]?.id } : null
 }
 
 const isDragging = ref(false)
 
 function onPlayerDragStart(event, entry, fromSlot, fromPosition) {
+  if (actionLoading.value) { event.preventDefault(); return }
   event.dataTransfer.setData(
     'application/json',
     JSON.stringify({
@@ -902,6 +460,7 @@ function onSlotDragLeave(event, slotIndex, position) {
 
 function onSlotDrop(event, slotIndex, position) {
   event.preventDefault()
+  if (actionLoading.value) return
   manualPairingDragOver.value = null
   isDragging.value = false
 
@@ -933,82 +492,43 @@ function onSlotDrop(event, slotIndex, position) {
 }
 
 function removeFromSlot(slotIndex, position) {
+  if (actionLoading.value) return
   const key = position === 'A' ? 'playerA' : 'playerB'
   manualPairSlots.value[slotIndex][key] = null
 }
 
+async function reloadPairingDraft() {
+  if (!(await confirmDiscard(t, pairingDirty.value, actionLoading.value))) return
+  const edit = pairingEditMode.value
+  actionLoading.value = true
+  try { await loadMatchesAndSets() }
+  catch { errorText.value = t('drafts.unavailable'); return }
+  finally { actionLoading.value = false }
+  await closeManualPairing(true)
+  if (edit) openEditPairing(); else openManualPairing()
+}
 async function saveManualPairs() {
-  const completePairs = manualPairSlots.value.filter((s) => s.playerA && s.playerB)
-  if (!completePairs.length) return
-
+  if (actionLoading.value || !pairingDirty.value) return
+  if (pairingConflict.value) { errorText.value = t('drafts.structureConflict'); return }
+  const pairs = manualPairSlots.value.filter(s => s.playerA && s.playerB).map(s => [s.playerA.memberId,s.playerB.memberId])
+  if (!pairs.length) return
+  const baseline = cloneForm(pairingBaseline.value)
+  if (matches.value.length && !(await confirmDialog(t('drafts.pairingReset'), { danger: true }))) return
   actionLoading.value = true
   errorText.value = ''
-
-  if (pairingEditMode.value) {
-    const { error: splitErr } = await supabase.rpc('split_pairs', {
-      p_tournament_id: props.id,
-    })
-    if (splitErr) {
-      actionLoading.value = false
-      errorText.value = splitErr.message
-      return
-    }
-    await loadEntries()
-
-    const nameToEntryId = {}
-    for (const e of entries.value) {
-      if (e.entry_members && e.entry_members.length === 1) {
-        nameToEntryId[e.entry_members[0].member_name] = e.id
-      }
-    }
-
-    const pairs = completePairs.map((s) => [
-      nameToEntryId[s.playerA._memberName],
-      nameToEntryId[s.playerB._memberName],
-    ]).filter((p) => p[0] && p[1])
-
-    if (!pairs.length) {
-      actionLoading.value = false
-      closeManualPairing()
-      await loadEntries()
-      return
-    }
-
-    const { error } = await supabase.rpc('form_manual_pairs', {
-      p_tournament_id: props.id,
-      p_pairs: pairs,
-    })
-
-    actionLoading.value = false
-    if (error) {
-      errorText.value = error.message
-      return
-    }
-  } else {
-    const pairs = completePairs.map((s) => [s.playerA.id, s.playerB.id])
-
-    const { error } = await supabase.rpc('form_manual_pairs', {
-      p_tournament_id: props.id,
-      p_pairs: pairs,
-    })
-
-    actionLoading.value = false
-    if (error) {
-      errorText.value = error.message
-      return
-    }
-  }
-
-  const wasEditMode = pairingEditMode.value
-  closeManualPairing()
-  if (wasEditMode) {
-    await loadAll()
-  } else {
-    await loadEntries()
-  }
+  const { error } = await supabase.rpc('save_tournament_pairs', {
+    p_tournament_id: props.id, p_pairs: pairs, p_replace: pairingEditMode.value,
+    p_expected_entries: baseline.entries, p_expected_matches: baseline.matches,
+    p_expected_revision: baseline.settings_revision,
+  })
+  actionLoading.value = false
+  if (error) { errorText.value = scoringError(error.message, t); await loadEntries(); return }
+  await closeManualPairing(true)
+  await loadAll(true)
 }
 
 function openEditPairing() {
+  if (manualPairingOpen.value || actionLoading.value || isTournamentActive.value || isTournamentFinished.value || !isPickRandomDoubles.value) return
   const players = []
   const slots = []
   let virtualId = 0
@@ -1019,12 +539,12 @@ function openEditPairing() {
     const m2 = members.find((m) => m.member_order === 2)
 
     if (m1 && m2) {
-      const playerA = { id: `edit-${virtualId++}`, display_name: m1.member_name, _sourceEntryId: entry.id, _memberName: m1.member_name, entry_members: [m1] }
-      const playerB = { id: `edit-${virtualId++}`, display_name: m2.member_name, _sourceEntryId: entry.id, _memberName: m2.member_name, entry_members: [{ ...m2, member_order: 1 }] }
+      const playerA = { id: `edit-${virtualId++}`, display_name: m1.member_name, memberId: m1.id, _sourceEntryId: entry.id, _memberName: m1.member_name, entry_members: [m1] }
+      const playerB = { id: `edit-${virtualId++}`, display_name: m2.member_name, memberId: m2.id, _sourceEntryId: entry.id, _memberName: m2.member_name, entry_members: [{ ...m2, member_order: 1 }] }
       players.push(playerA, playerB)
       slots.push({ slotIndex: slots.length, playerA, playerB })
     } else if (m1) {
-      const playerA = { id: entry.id, display_name: m1.member_name, _sourceEntryId: entry.id, _memberName: m1.member_name, entry_members: [m1] }
+      const playerA = { id: entry.id, display_name: m1.member_name, memberId: m1.id, _sourceEntryId: entry.id, _memberName: m1.member_name, entry_members: [m1] }
       players.push(playerA)
     }
   }
@@ -1039,22 +559,12 @@ function openEditPairing() {
   editModePlayers.value = players
   manualPairSlots.value = slots
   pairingEditMode.value = true
+  pairingBaseline.value = cloneForm(entryEditState.value)
+  pairingInitialSlots.value = slotIds(manualPairSlots.value)
   manualPairingOpen.value = true
   nextTick(() => {
     window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })
   })
-}
-
-async function loadStandings() {
-  const { data, error } = await supabase.rpc('get_standings', {
-    p_tournament_id: props.id,
-    p_group_id: null,
-  })
-  if (error) {
-    standings.value = []
-    return
-  }
-  standings.value = data ?? []
 }
 
 async function generateBracket() {
@@ -1081,27 +591,6 @@ async function generateBracket() {
   }
 
   await loadAll()
-}
-
-async function loadGroups() {
-  const { data: groupRows } = await supabase
-    .from('groups')
-    .select('id, name, group_index')
-    .eq('tournament_id', props.id)
-    .order('group_index', { ascending: true })
-  groups.value = groupRows ?? []
-
-  const map = {}
-  await Promise.all(
-    groups.value.map(async (g) => {
-      const { data } = await supabase.rpc('get_standings', {
-        p_tournament_id: props.id,
-        p_group_id: g.id,
-      })
-      map[g.id] = data ?? []
-    }),
-  )
-  groupStandings.value = map
 }
 
 async function generateGroups() {
@@ -1185,26 +674,35 @@ const displayMatches = computed(() =>
   bracketEditing.value ? localMatches.value : matches.value
 )
 
-const bracketHasChanges = computed(() => {
-  if (!bracketEditing.value) return false
-  return localMatches.value.some((lm) => {
-    const orig = matches.value.find((m) => m.id === lm.id)
-    if (!orig) return false
-    return orig.side_a_entry_id !== lm.side_a_entry_id || orig.side_b_entry_id !== lm.side_b_entry_id
-  })
-})
-
+const bracketBaseline = ref([])
+const bracketHasChanges = computed(() => bracketEditing.value && !sameForm(
+  localMatches.value.map(m => [m.id,m.side_a_entry_id,m.side_b_entry_id]),
+  bracketBaseline.value.map(m => [m.id,m.side_a_entry_id,m.side_b_entry_id])))
+const bracketConflict = computed(() => bracketEditing.value && (isTournamentActive.value || isTournamentFinished.value || !sameForm(matchVersions(bracketBaseline.value),matchVersions(matches.value))))
 function startBracketEditing() {
-  localMatches.value = matches.value.map((m) => ({ ...m }))
+  if (bracketEditing.value) return
+  bracketBaseline.value = cloneForm(matches.value)
+  localMatches.value = cloneForm(matches.value)
   bracketEditing.value = true
 }
-
-function cancelBracketEditing() {
+async function cancelBracketEditing(force = false) {
+  if (force !== true && !(await confirmDiscard(t, bracketHasChanges.value, actionLoading.value))) return
   bracketEditing.value = false
   localMatches.value = []
+  bracketBaseline.value = []
+}
+async function reloadBracketDraft() {
+  if (!(await confirmDiscard(t, bracketHasChanges.value, actionLoading.value))) return
+  actionLoading.value = true
+  try { await loadMatchesAndSets() }
+  catch { errorText.value = t('drafts.unavailable'); return }
+  finally { actionLoading.value = false }
+  await cancelBracketEditing(true)
+  startBracketEditing()
 }
 
 function swapBracketSlots(payload) {
+  if (actionLoading.value || isTournamentActive.value || isTournamentFinished.value) return
   if (!payload?.fromMatchId || !payload?.toMatchId || !payload?.fromSide || !payload?.toSide) {
     return
   }
@@ -1227,8 +725,10 @@ function swapBracketSlots(payload) {
 }
 
 async function saveBracketLayout() {
+  if (actionLoading.value) return
+  if (bracketConflict.value) { errorText.value = t('drafts.structureConflict'); return }
   const changed = localMatches.value.filter((lm) => {
-    const orig = matches.value.find((m) => m.id === lm.id)
+    const orig = bracketBaseline.value.find((m) => m.id === lm.id)
     if (!orig) return false
     return orig.side_a_entry_id !== lm.side_a_entry_id || orig.side_b_entry_id !== lm.side_b_entry_id
   })
@@ -1247,24 +747,26 @@ async function saveBracketLayout() {
     side_b_entry_id: m.side_b_entry_id || null,
   }))
 
-  const { error } = await supabase.rpc('apply_bracket_layout', {
+  const { error } = await supabase.rpc('save_bracket_layout', {
     p_tournament_id: props.id,
     p_layout: layout,
+    p_expected_matches: matchVersions(bracketBaseline.value),
   })
 
   actionLoading.value = false
 
   if (error) {
-    errorText.value = error.message
+    errorText.value = scoringError(error.message, t)
+    await loadMatchesAndSets()
     return
   }
 
-  bracketEditing.value = false
-  localMatches.value = []
+  await cancelBracketEditing(true)
   await loadAll()
 }
 
 async function addAdmin() {
+  if (actionLoading.value) return
   if (!addAdminForm.email) {
     return
   }
@@ -1309,21 +811,6 @@ async function removeAdmin(adminId) {
   await loadAll()
 }
 
-async function onCopyShareLink() {
-  if (!tournament.value?.slug) {
-    return
-  }
-  try {
-    await copyTournamentLink(tournament.value.slug)
-  } catch {
-    /* still show feedback */
-  }
-  copyFeedback.value = true
-  setTimeout(() => {
-    copyFeedback.value = false
-  }, 2000)
-}
-
 async function deleteTournament() {
   if (!(await confirmDialog(t('admin.deleteTournamentConfirm'), { danger: true }))) {
     return
@@ -1332,10 +819,7 @@ async function deleteTournament() {
   actionLoading.value = true
   errorText.value = ''
 
-  if (channel) {
-    supabase.removeChannel(channel)
-    channel = null
-  }
+  stopRealtime?.(); stopRealtime = null
 
   const { error } = await supabase.from('tournaments').delete().eq('id', props.id)
 
@@ -1346,7 +830,8 @@ async function deleteTournament() {
     return
   }
 
-  await router.replace({ name: 'admin-tournaments' })
+  unregisterDrafts()
+  await withApprovedDeparture(() => router.replace({ name: 'admin-tournaments' }))
 }
 
 function statusBadgeClass(status) {
@@ -1448,6 +933,10 @@ const selectedLiveScore = computed(() => (
   selectedLiveMatch.value ? liveScoresByMatch.value[selectedLiveMatch.value.id] : null
 ))
 
+const hasOtherDrafts = computed(() => Boolean(addAdminForm.email) || addAdminForm.role !== 'editor')
+const unregisterDrafts = useUnsavedChanges(() => hasOtherDrafts.value || bracketHasChanges.value || pairingDirty.value,
+  () => actionLoading.value || settingsSaving.value)
+
 onMounted(async () => {
   window.addEventListener('hashchange', onHashChange)
   await auth.init()
@@ -1466,11 +955,10 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('hashchange', onHashChange)
-  clearTimeout(reloadTimer)
-  clearTimeout(addEntrySuccessTimer)
-  if (channel) {
-    supabase.removeChannel(channel)
-  }
+  disposed = true
+  snapshotRefresh.dispose()
+  stopRealtime?.(); stopRealtime = null
+
 })
 </script>
 
@@ -1489,6 +977,7 @@ onBeforeUnmount(() => {
     </section>
 
     <template v-else-if="tournament && !loading">
+      <p v-if="syncFailed" class="alert alert--error" role="status">{{ t('sync.unavailable') }}</p>
       <div v-if="errorText" class="alert alert--error admin-page-alert" role="alert">
         {{ errorText }}
       </div>
@@ -1511,14 +1000,10 @@ onBeforeUnmount(() => {
             <p v-if="tournament.description" class="muted">{{ tournament.description }}</p>
           </div>
           <div v-if="canManageTournament" class="admin-tournament-overview__actions">
-            <button
+            <CopyTournamentLink
               v-if="showPublicShareActions"
-              class="btn btn--outline btn--sm"
-              type="button"
-              @click="onCopyShareLink"
-            >
-              {{ copyFeedback ? t('share.copied') : t('share.copyLink') }}
-            </button>
+              :slug="tournament.slug"
+            />
 
             <button
               v-if="showPublicShareActions"
@@ -1618,7 +1103,7 @@ onBeforeUnmount(() => {
       </div>
 
       <div
-        v-if="canManageTournament"
+        v-show="canManageTournament"
         id="panel-entries"
         role="tabpanel"
         aria-labelledby="tab-entries"
@@ -1630,124 +1115,13 @@ onBeforeUnmount(() => {
             {{ isTournamentActive ? t('admin.participantsList') : `${t('tournament.registration')} — ${t('admin.entriesSection')}` }}
           </h2>
 
-          <div v-if="!isTournamentActive" class="admin-add-entry" :class="{ 'admin-add-entry--open': addEntryAccordionOpen }">
-            <h3 class="admin-add-entry__heading">
-              <button
-                id="adm-add-entry-trigger"
-                type="button"
-                class="admin-add-entry__trigger"
-                :aria-expanded="addEntryAccordionOpen"
-                aria-controls="adm-add-entry-panel"
-                @click="addEntryAccordionOpen = !addEntryAccordionOpen"
-              >
-                <span class="admin-add-entry__trigger-text">{{ t('admin.addEntryTitle') }}</span>
-                <svg
-                  class="admin-add-entry__chevron"
-                  width="20"
-                  height="20"
-                  viewBox="0 0 20 20"
-                  fill="none"
-                  aria-hidden="true"
-                >
-                  <path
-                    d="M5 7.5 10 12.5 15 7.5"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                  />
-                </svg>
-              </button>
-            </h3>
-
-            <div
-              v-show="addEntryAccordionOpen"
-              id="adm-add-entry-panel"
-              class="admin-add-entry__panel stack stack--sm"
-              role="region"
-              aria-labelledby="adm-add-entry-trigger"
-            >
-              <p class="muted admin-add-entry__hint">{{ t('admin.addEntryHint') }}</p>
-
-              <form class="stack stack--sm" @submit.prevent="addEntryManually">
-                <div class="grid-2 grid-2--admin">
-                  <div class="form-field">
-                    <label for="adm-add-m1">{{ isGoalsSport ? t('registrationForm.teamName') : tournament.category === 'doubles' ? t('registrationForm.memberOne') : t('registrationForm.member') }}</label>
-                    <input
-                      id="adm-add-m1"
-                      v-model="addEntryForm.memberOne"
-                      class="input"
-                      type="text"
-                      autocomplete="name"
-                      :disabled="actionLoading"
-                      required
-                    />
-                  </div>
-                  <div v-if="tournament.category === 'doubles' && !isPickRandomDoubles" class="form-field">
-                    <label for="adm-add-m2">{{ t('registrationForm.memberTwo') }}</label>
-                    <input
-                      id="adm-add-m2"
-                      v-model="addEntryForm.memberTwo"
-                      class="input"
-                      type="text"
-                      autocomplete="name"
-                      :disabled="actionLoading"
-                      required
-                    />
-                  </div>
-                  <div v-if="isPickRandomDoubles" class="form-field">
-                    <label for="adm-add-m2">{{ t('registrationForm.memberTwoOptional') }}</label>
-                    <input
-                      id="adm-add-m2"
-                      v-model="addEntryForm.memberTwo"
-                      class="input"
-                      type="text"
-                      autocomplete="name"
-                      :disabled="actionLoading"
-                    />
-                  </div>
-                  <div v-if="tournament.category === 'doubles' || isGoalsSport" class="form-field">
-                    <label for="adm-add-display">{{ t('registrationForm.displayName') }}</label>
-                    <input
-                      id="adm-add-display"
-                      v-model="addEntryForm.displayName"
-                      class="input"
-                      type="text"
-                      :disabled="actionLoading"
-                    />
-                  </div>
-                  <div class="form-field">
-                    <label for="adm-add-contact">{{ t('admin.addEntryContactOptional') }}</label>
-                    <input
-                      id="adm-add-contact"
-                      v-model="addEntryForm.phoneOrEmail"
-                      class="input"
-                      type="text"
-                      inputmode="email"
-                      autocomplete="off"
-                      :class="{ 'input--error': addEntryContactInvalid }"
-                      :disabled="actionLoading"
-                      @blur="addEntryContactTouched = true"
-                    />
-                  </div>
-                </div>
-
-                <label class="checkbox-row" for="adm-add-pending">
-                  <input id="adm-add-pending" v-model="addEntryForm.asPending" type="checkbox" :disabled="actionLoading" />
-                  {{ t('admin.addEntryAsPending') }}
-                </label>
-
-                <div class="inline-actions">
-                  <button class="btn btn--primary btn--sm" type="submit" :disabled="actionLoading">
-                    {{ t('admin.addEntrySubmit') }}
-                  </button>
-                </div>
-
-                <div v-if="addEntrySuccess" class="alert alert--success" role="status">{{ addEntrySuccess }}</div>
-                <div v-if="addEntryError" class="alert alert--error" role="alert">{{ addEntryError }}</div>
-              </form>
-            </div>
-          </div>
+          <ManualEntryForm
+            :tournament="tournament"
+            :busy="actionLoading || settingsSaving"
+            :can-manage="canManageTournament"
+            @update:busy="actionLoading = $event"
+            @saved="refreshScoreData"
+          />
 
           <div v-if="!isTournamentActive" class="divider" />
 
@@ -1810,7 +1184,7 @@ onBeforeUnmount(() => {
                 v-if="hasPairedEntries"
                 class="btn btn--ghost btn--sm"
                 type="button"
-                :disabled="actionLoading"
+                :disabled="actionLoading || manualPairingOpen || isTournamentActive || isTournamentFinished"
                 @click="openEditPairing"
               >
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
@@ -1835,7 +1209,7 @@ onBeforeUnmount(() => {
             <p v-else class="muted">{{ t('admin.noApproved') }}</p>
           </div>
 
-          <template v-if="isPickRandomDoubles && unpairedCount > 0 && !pairingEditMode">
+          <template v-if="!pairingEditMode && ((isPickRandomDoubles && unpairedCount > 0) || manualPairingOpen)">
             <div class="divider" />
             <div class="pairing-banner">
               <div class="pairing-banner__info">
@@ -1851,7 +1225,7 @@ onBeforeUnmount(() => {
                 <button
                   class="btn btn--primary btn--sm"
                   type="button"
-                  :disabled="actionLoading || unpairedCount % 2 !== 0"
+                  :disabled="actionLoading || unpairedCount < 2 || unpairedCount % 2 !== 0 || isTournamentActive || isTournamentFinished"
                   @click="formRandomPairs"
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>
@@ -1860,7 +1234,7 @@ onBeforeUnmount(() => {
                 <button
                   class="btn btn--sm"
                   type="button"
-                  :disabled="actionLoading"
+                  :disabled="actionLoading || (!manualPairingOpen && (isTournamentActive || isTournamentFinished))"
                   @click="manualPairingOpen ? closeManualPairing() : openManualPairing()"
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3h7a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-7m0-18H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h7m0-18v18"/></svg>
@@ -1870,6 +1244,10 @@ onBeforeUnmount(() => {
             </div>
 
             <div v-if="manualPairingOpen" class="manual-pairing" :class="{ 'manual-pairing--dragging': isDragging }">
+              <div v-if="pairingConflict" class="alert alert--info" role="status">
+                {{ t('drafts.structureConflict') }}
+                <button class="btn btn--ghost btn--sm" type="button" :disabled="actionLoading" @click="reloadPairingDraft">{{ t('drafts.reload') }}</button>
+              </div>
               <div class="manual-pairing-pool">
                 <h4 class="manual-pairing-pool__title">{{ t('admin.manualPairingPool') }}</h4>
                 <div v-if="unassignedPlayers.length" class="manual-pairing-pool__list">
@@ -1946,7 +1324,7 @@ onBeforeUnmount(() => {
                 <button
                   class="btn btn--primary btn--sm"
                   type="button"
-                  :disabled="actionLoading || completePairsCount === 0"
+                  :disabled="actionLoading || !pairingDirty || pairingConflict || completePairsCount === 0"
                   @click="saveManualPairs"
                 >
                   {{ t('admin.savePairs') }} ({{ completePairsCount }})
@@ -1964,6 +1342,10 @@ onBeforeUnmount(() => {
           </template>
 
           <div v-if="manualPairingOpen && pairingEditMode" class="manual-pairing" :class="{ 'manual-pairing--dragging': isDragging }">
+              <div v-if="pairingConflict" class="alert alert--info" role="status">
+                {{ t('drafts.structureConflict') }}
+                <button class="btn btn--ghost btn--sm" type="button" :disabled="actionLoading" @click="reloadPairingDraft">{{ t('drafts.reload') }}</button>
+              </div>
               <div class="manual-pairing-pool">
                 <h4 class="manual-pairing-pool__title">{{ t('admin.manualPairingPool') }}</h4>
                 <div v-if="unassignedPlayers.length" class="manual-pairing-pool__list">
@@ -2040,7 +1422,7 @@ onBeforeUnmount(() => {
                 <button
                   class="btn btn--primary btn--sm"
                   type="button"
-                  :disabled="actionLoading || completePairsCount === 0"
+                  :disabled="actionLoading || !pairingDirty || pairingConflict || completePairsCount === 0"
                   @click="saveManualPairs"
                 >
                   {{ t('admin.savePairs') }} ({{ completePairsCount }})
@@ -2206,16 +1588,20 @@ onBeforeUnmount(() => {
           :sets-by-match="setsByMatch"
           :entries-map="entriesMap"
           :live-scores-by-match="liveScoresByMatch"
-          :editable-slots="canManageTournament && drawMode === 'manual' && !actionLoading"
+          :editable-slots="canManageTournament && drawMode === 'manual' && !actionLoading && !isTournamentActive && !isTournamentFinished"
           :can-live-score="canEditScores"
           @swap-slots="swapBracketSlots"
           @view-live="openLiveScoring"
         />
+          <div v-if="bracketConflict" class="alert alert--info" role="status">
+            {{ t('drafts.structureConflict') }}
+            <button class="btn btn--ghost btn--sm" type="button" :disabled="actionLoading" @click="reloadBracketDraft">{{ t('drafts.reload') }}</button>
+          </div>
           <div v-if="bracketEditing" class="inline-actions" style="margin-top: var(--space-2)">
             <button
               class="btn btn--primary btn--sm"
               type="button"
-              :disabled="actionLoading || !bracketHasChanges"
+              :disabled="actionLoading || bracketConflict || !bracketHasChanges"
               @click="saveBracketLayout"
             >
               {{ t('admin.saveBracketLayout') }}
@@ -2266,7 +1652,7 @@ onBeforeUnmount(() => {
           :matches="matches"
           :entries-map="entriesMap"
           :disabled="!canEditFinalScores"
-          @saved="() => loadAll(true)"
+          @saved="refreshScoreData"
         />
         <ScoreEditor
           v-else
@@ -2274,115 +1660,33 @@ onBeforeUnmount(() => {
           :sets-by-match="setsByMatch"
           :entries-map="entriesMap"
           :set-format="tournament.set_format"
+          :scoring-config="tournament.scoring_config || {}"
           :category="tournament.category"
           :disabled="!canEditFinalScores"
           :can-live-score="canEditScores"
           :live-scores-by-match="liveScoresByMatch"
-          @saved="() => loadAll(true)"
+          @saved="refreshScoreData"
           @start-live="openLiveScoring"
         />
       </div>
 
       <div
-        v-if="canManageTournament"
+        v-show="canManageTournament"
         id="panel-settings"
         role="tabpanel"
         aria-labelledby="tab-settings"
         class="tab-panel"
         :class="{ 'tab-panel--active': activeTab === 'settings' }"
       >
-        <section class="card admin-settings-card stack stack--sm" aria-labelledby="adm-settings-heading">
-          <div>
-            <h2 id="adm-settings-heading" class="section-title" style="margin-bottom: var(--space-2)">
-              {{ t('admin.tournamentSettings') }}
-            </h2>
-          </div>
-
-          <div class="form-field">
-            <label for="adm-name">{{ t('admin.name') }}</label>
-            <input
-              id="adm-name"
-              v-model="settingsForm.name"
-              class="input"
-              type="text"
-              required
-              :disabled="isSettingsDropdownDisabled"
-            />
-          </div>
-
-          <div class="form-field">
-            <label for="adm-desc">{{ t('admin.description') }}</label>
-            <textarea
-              id="adm-desc"
-              v-model="settingsForm.description"
-              class="input"
-              rows="3"
-              :disabled="isSettingsDropdownDisabled"
-            />
-          </div>
-
-          <p class="muted" style="font-size: var(--font-sm)">
-            {{ t('sport.' + (tournament.sport || 'tennis')) }} · {{ t('tournamentFormat.' + (tournament.format || 'single_elimination')) }}
-          </p>
-
-          <div v-if="sportCfg.supportsCategory || sportCfg.supportsSetFormat" class="grid-2">
-            <div v-if="sportCfg.supportsCategory" class="form-field">
-              <label for="adm-cat">{{ t('admin.category') }}</label>
-              <select id="adm-cat" v-model="settingsForm.category" class="input" :disabled="isSettingsDropdownDisabled">
-                <option value="singles">{{ t('tournament.singles') }}</option>
-                <option value="doubles">{{ t('tournament.doubles') }}</option>
-              </select>
-            </div>
-
-            <div v-if="sportCfg.supportsSetFormat" class="form-field">
-              <label for="adm-format">{{ t('admin.setFormat') }}</label>
-              <select id="adm-format" v-model="settingsForm.set_format" class="input" :disabled="isSettingsDropdownDisabled">
-                <option value="best_of_3">{{ t('format.best_of_3') }}</option>
-                <option value="best_of_5">{{ t('format.best_of_5') }}</option>
-              </select>
-            </div>
-          </div>
-
-          <label v-if="sportCfg.supportsDoublesPairing && settingsForm.category === 'doubles'" class="checkbox-row">
-            <input
-              v-model="settingsForm.doubles_pairing_mode"
-              type="checkbox"
-              true-value="pick_random"
-              false-value="pre_agreed"
-              :disabled="isSettingsDropdownDisabled"
-            />
-            {{ t('admin.pickRandomPairs') }}
-          </label>
-
-          <div class="admin-settings-fields">
-            <div class="form-field admin-settings-fields__status">
-              <label for="adm-status">{{ t('admin.status') }}</label>
-              <select id="adm-status" v-model="statusValue" class="input">
-                <option value="draft" :disabled="isSettingsDropdownDisabled">{{ t('tournament.draft') }}</option>
-                <option value="registration_open" :disabled="isSettingsDropdownDisabled">{{ t('tournament.registration_open') }}</option>
-                <option value="registration_closed" :disabled="isSettingsDropdownDisabled">{{ t('tournament.registration_closed') }}</option>
-                <option v-if="isTournamentActive" value="in_progress" disabled>{{ t('tournament.in_progress') }}</option>
-                <option v-if="isTournamentFinished" value="completed" disabled>{{ t('tournament.completed') }}</option>
-              </select>
-            </div>
-
-            <label class="checkbox-row admin-settings-fields__public" for="adm-public">
-              <input id="adm-public" v-model="tournament.is_public" type="checkbox" :disabled="isSettingsDropdownDisabled" />
-              {{ t('admin.isPublic') }}
-            </label>
-          </div>
-
-          <footer class="admin-settings-card__footer">
-            <button
-              class="btn btn--primary"
-              type="button"
-              :disabled="actionLoading || !hasTournamentSettingsChanges"
-              @click="saveTournamentSettings"
-            >
-              {{ t('admin.saveStatus') }}
-            </button>
-          </footer>
-        </section>
+        <TournamentSettingsForm
+          :tournament="tournament"
+          :matches="matches"
+          :busy="actionLoading"
+          :can-manage="canManageTournament"
+          :refresh="loadTournament"
+          v-model:saving="settingsSaving"
+          @saved="acceptTournament"
+        />
 
         <section class="card stack stack--sm" style="margin-top: var(--space-4)">
           <h2 class="section-title">{{ t('admin.admins') }}</h2>
@@ -2408,11 +1712,11 @@ onBeforeUnmount(() => {
           <div class="grid-2" style="margin-top: var(--space-3)">
             <div class="form-field">
               <label for="adm-email">{{ t('admin.adminEmail') }}</label>
-              <input id="adm-email" v-model="addAdminForm.email" class="input" type="email" :placeholder="t('admin.adminEmailPlaceholder')" />
+              <input id="adm-email" :disabled="actionLoading" v-model="addAdminForm.email" class="input" type="email" :placeholder="t('admin.adminEmailPlaceholder')" />
             </div>
             <div class="form-field">
               <label for="adm-role">{{ t('admin.role') }}</label>
-              <select id="adm-role" v-model="addAdminForm.role" class="input">
+              <select id="adm-role" :disabled="actionLoading" v-model="addAdminForm.role" class="input">
                 <option value="editor">{{ t('admin.editor') }}</option>
                 <option value="counter">{{ t('admin.counter') }}</option>
                 <option value="owner">{{ t('admin.owner') }}</option>
@@ -2449,11 +1753,14 @@ onBeforeUnmount(() => {
 
       <LiveScoringModal
         v-if="selectedLiveMatch"
-        :match="selectedLiveMatch"
+        :match="matches.find(m => m.id === selectedLiveMatch.id) || selectedLiveMatch"
+        :can-stop-live="canManageTournament"
         :live-score="selectedLiveScore"
+        :scoring-config="tournament.scoring_config || {}"
         :team-a="teamLabel(selectedLiveMatch.side_a_entry_id)"
         :team-b="teamLabel(selectedLiveMatch.side_b_entry_id)"
         @close="selectedLiveMatch = null"
+        @changed="scheduleScoreReload"
       />
 
       <TournamentQrModal
@@ -2465,16 +1772,18 @@ onBeforeUnmount(() => {
 
       <MatchScoreModal
         v-if="selectedRrMatch"
-        :match="selectedRrMatch"
+        :exists="matches.some(m => m.id === selectedRrMatch.id)"
+        :match="matches.find(m => m.id === selectedRrMatch.id) || selectedRrMatch"
         :entries-map="entriesMap"
         :family="tournamentScoringFamily"
         :set-format="tournament.set_format || 'best_of_3'"
+        :scoring-config="tournament.scoring_config || {}"
         :sets="setsByMatch[selectedRrMatch.id] || []"
         :can-edit-final="canEditFinalScores"
         :can-live-score="canEditScores && !isGoalsSport"
         :live-status="liveScoresByMatch[selectedRrMatch.id]?.status || null"
         @close="selectedRrMatch = null"
-        @saved="loadAll(true)"
+        @saved="refreshScoreData"
         @start-live="startLiveFromRrModal"
       />
     </template>

@@ -1,4 +1,5 @@
 <script setup>
+import { tennisRulesSummary } from '../lib/tennisRules'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
@@ -12,6 +13,9 @@ import RegistrationForm from '../components/RegistrationForm.vue'
 import { entryMemberNames } from '../lib/entryDisplay'
 import { getSportConfig } from '../lib/sportConfig'
 import { supabase } from '../lib/supabase'
+import { createSnapshotRefresh, subscribeTournament, subscribeRefreshTriggers } from '../lib/tournamentSync'
+import { createPublicTournamentReader } from '../lib/tournamentRepository'
+import { indexEntries, groupSetsByMatch, indexLiveScores, buildGroupsView } from '../lib/tournamentProjections'
 
 const props = defineProps({
   slug: {
@@ -32,69 +36,35 @@ const isDoubleElim = computed(() => tournament.value?.format === 'double_elimina
 const sportCfg = computed(() => getSportConfig(tournament.value?.sport || 'tennis'))
 const groups = ref([])
 const groupStandings = ref({})
-const groupMatches = computed(() => matches.value.filter((m) => m.stage === 'group'))
 const playoffMatches = computed(() =>
   matches.value.filter((m) => ['winners', 'grand_final', 'third_place'].includes(m.stage)),
 )
 const groupsView = computed(() =>
-  [...groups.value]
-    .sort((a, b) => a.group_index - b.group_index)
-    .map((g) => {
-      const gMatches = groupMatches.value
-        .filter((m) => m.group_id === g.id)
-        .sort((a, b) => a.round_number - b.round_number || a.match_number - b.match_number)
-      const rounds = new Map()
-      for (const m of gMatches) {
-        if (!rounds.has(m.round_number)) rounds.set(m.round_number, [])
-        rounds.get(m.round_number).push(m)
-      }
-      return {
-        id: g.id,
-        name: g.name,
-        standings: groupStandings.value[g.id] || [],
-        rounds: [...rounds.entries()].sort((a, b) => a[0] - b[0]).map(([round, list]) => ({ round, list })),
-      }
-    }),
+  buildGroupsView(groups.value, matches.value, groupStandings.value),
 )
 const matchSets = ref([])
 const liveScores = ref([])
 const selectedLiveMatchId = ref(null)
 
 const loading = ref(false)
-const errorText = ref('')
+const loadError = ref('')
 const activeTab = ref('registration')
+const registrationDirty = ref(false)
 
-let channel = null
-let activeTournamentId = null
+let stopRealtime = null
+let stopRecovery = null
+let refreshQueue = null
 let loadVersion = 0
+const syncFailed = ref(false)
 
-const entriesMap = computed(() => {
-  return entries.value.reduce((acc, entry) => {
-    acc[entry.id] = entry
-    return acc
-  }, {})
-})
+const entriesMap = computed(() => indexEntries(entries.value))
 
 const approvedEntries = computed(() => entries.value.filter((entry) => entry.status === 'approved'))
 /** Shown only after organizer approval; register_entry creates `pending` rows in `entries`. */
 const pendingEntries = computed(() => entries.value.filter((entry) => entry.status === 'pending'))
 
-const setsByMatch = computed(() => {
-  return matchSets.value.reduce((acc, set) => {
-    if (!acc[set.match_id]) {
-      acc[set.match_id] = []
-    }
-    acc[set.match_id].push(set)
-    return acc
-  }, {})
-})
-
-const liveScoresByMatch = computed(() => {
-  return liveScores.value.reduce((acc, item) => {
-    acc[item.match_id] = item
-    return acc
-  }, {})
-})
+const setsByMatch = computed(() => groupSetsByMatch(matchSets.value))
+const liveScoresByMatch = computed(() => indexLiveScores(liveScores.value))
 
 const selectedLiveMatch = computed(() => (
   selectedLiveMatchId.value ? matches.value.find((match) => match.id === selectedLiveMatchId.value) || null : null
@@ -162,7 +132,7 @@ const heroChips = computed(() => {
 
 function syncDefaultTab() {
   const s = tournament.value?.status
-  if (s === 'registration_open') {
+  if (s === 'registration_open' || registrationDirty.value) {
     activeTab.value = 'registration'
   } else {
     activeTab.value = 'bracket'
@@ -176,389 +146,71 @@ function resetTournamentData() {
   matchSets.value = []
   liveScores.value = []
   selectedLiveMatchId.value = null
-}
-
-function sortEntries(list) {
-  return [...list].sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')))
-}
-
-function sortMatches(list) {
-  return [...list].sort((a, b) => (
-    a.round_number - b.round_number || a.match_number - b.match_number
-  ))
-}
-
-function sortMatchSets(list) {
-  return [...list].sort((a, b) => (
-    String(a.match_id).localeCompare(String(b.match_id)) || a.set_index - b.set_index
-  ))
+  standings.value = []; groups.value = []; groupStandings.value = {}
 }
 
 function teardownRealtime() {
-  if (channel) {
-    supabase.removeChannel(channel)
-    channel = null
-  }
-  activeTournamentId = null
+  stopRealtime?.(); stopRealtime = null
+  stopRecovery?.(); stopRecovery = null
+  refreshQueue?.dispose(); refreshQueue = null
 }
 
-function applyTournamentMissing(message = t('errors.notFound')) {
-  errorText.value = message
-  resetTournamentData()
-  teardownRealtime()
-}
-
-async function loadEntryWithMembers(entryId) {
-  const { data: entryData, error: entryError } = await supabase
-    .from('entries')
-    .select('id, display_name, entry_type, status, created_at')
-    .eq('id', entryId)
-    .maybeSingle()
-
-  if (entryError) {
-    throw entryError
-  }
-
-  if (!entryData) {
-    return null
-  }
-
-  const { data: members, error: membersError } = await supabase
-    .from('entry_members')
-    .select('entry_id, member_name, member_order')
-    .eq('entry_id', entryId)
-    .order('member_order', { ascending: true })
-
-  if (membersError) {
-    throw membersError
-  }
-
-  return {
-    ...entryData,
-    entry_members: members || [],
-  }
-}
-
-async function loadEntriesAndMatches(tournamentId, expectedVersion = loadVersion) {
-  const [{ data: entriesData, error: entriesError }, { data: matchesData, error: matchesError }] = await Promise.all([
-    supabase
-      .from('entries')
-      .select('id, display_name, entry_type, status, created_at')
-      .eq('tournament_id', tournamentId)
-      .order('created_at', { ascending: true }),
-    supabase
-      .from('matches')
-      .select('id, tournament_id, stage, group_id, round_number, match_number, side_a_entry_id, side_b_entry_id, winner_entry_id, side_a_score, side_b_score, side_a_pens, side_b_pens, status, next_match_id, next_slot, loser_next_match_id, loser_next_slot')
-      .eq('tournament_id', tournamentId)
-      .order('round_number', { ascending: true })
-      .order('match_number', { ascending: true }),
-  ])
-
-  if (entriesError) {
-    throw entriesError
-  }
-
-  if (matchesError) {
-    throw matchesError
-  }
-
-  if (expectedVersion !== loadVersion) {
+function applySnapshot(data) {
+  syncFailed.value = false
+  if (!data) {
+    loadError.value = 'notFound'
+    resetTournamentData()
     return
   }
-
-  const entryRows = entriesData || []
-  const ids = entryRows.map((e) => e.id)
-
-  if (ids.length) {
-    const { data: members } = await supabase
-      .from('entry_members')
-      .select('entry_id, member_name, member_order')
-      .in('entry_id', ids)
-      .order('member_order', { ascending: true })
-
-    const byEntry = {}
-    for (const m of members || []) {
-      ;(byEntry[m.entry_id] ??= []).push(m)
-    }
-    for (const entry of entryRows) {
-      entry.entry_members = byEntry[entry.id] || []
-    }
-  }
-
-  if (expectedVersion !== loadVersion) {
-    return
-  }
-
-  entries.value = sortEntries(entryRows)
-  matches.value = sortMatches(matchesData || [])
-
-  if (isRoundRobin.value) {
-    const { data: standingsData } = await supabase.rpc('get_standings', {
-      p_tournament_id: tournamentId,
-      p_group_id: null,
-    })
-    if (expectedVersion === loadVersion) {
-      standings.value = standingsData ?? []
-    }
-  } else {
-    standings.value = []
-  }
-
-  if (isGroupsPlayoff.value) {
-    const { data: groupRows } = await supabase
-      .from('groups')
-      .select('id, name, group_index')
-      .eq('tournament_id', tournamentId)
-      .order('group_index', { ascending: true })
-    const rows = groupRows ?? []
-    const map = {}
-    await Promise.all(
-      rows.map(async (g) => {
-        const { data } = await supabase.rpc('get_standings', {
-          p_tournament_id: tournamentId,
-          p_group_id: g.id,
-        })
-        map[g.id] = data ?? []
-      }),
-    )
-    if (expectedVersion === loadVersion) {
-      groups.value = rows
-      groupStandings.value = map
-    }
-  } else {
-    groups.value = []
-    groupStandings.value = {}
-  }
-
-  if (!matches.value.length) {
-    matchSets.value = []
-    liveScores.value = []
-    return
-  }
-
-  const matchIds = matches.value.map((match) => match.id)
-
-  const { data: setsData, error: setsError } = await supabase
-    .from('match_sets')
-    .select('id, match_id, set_index, side_a_games, side_b_games')
-    .in('match_id', matchIds)
-    .order('set_index', { ascending: true })
-
-  if (setsError) {
-    throw setsError
-  }
-
-  if (expectedVersion !== loadVersion) {
-    return
-  }
-
-  matchSets.value = sortMatchSets(setsData || [])
-
-  const { data: liveData, error: liveError } = await supabase
-    .from('live_scores')
-    .select('id, match_id, tournament_id, status, state, history, revision, created_at, updated_at')
-    .eq('tournament_id', tournamentId)
-
-  if (liveError) {
-    throw liveError
-  }
-
-  if (expectedVersion !== loadVersion) {
-    return
-  }
-
-  liveScores.value = liveData || []
+  tournament.value = data.tournament
+  entries.value = data.entries
+  matches.value = data.matches
+  matchSets.value = data.sets
+  liveScores.value = data.live
+  groups.value = data.groups
+  standings.value = data.standings
+  groupStandings.value = data.group_standings
+  loadError.value = ''
 }
 
 async function initialLoad() {
-  const requestVersion = ++loadVersion
-  loading.value = true
-  errorText.value = ''
-
-  try {
-    const { data, error } = await supabase
-      .from('tournaments')
-      .select('id, name, slug, description, sport, format, category, status, set_format, doubles_pairing_mode, format_config, scoring_config')
-      .eq('slug', props.slug)
-      .maybeSingle()
-
-    if (error) {
-      throw error
-    }
-
-    if (requestVersion !== loadVersion) {
-      return
-    }
-
-    if (!data) {
-      applyTournamentMissing()
-      return
-    }
-
-    tournament.value = data
-    await loadEntriesAndMatches(data.id, requestVersion)
-    if (requestVersion !== loadVersion) {
-      return
-    }
-    syncDefaultTab()
-    setupRealtime(data.id)
-  } catch (error) {
-    if (requestVersion !== loadVersion) {
-      return
-    }
-    resetTournamentData()
-    errorText.value = error.message || t('errors.generic')
-    teardownRealtime()
-  } finally {
-    if (requestVersion === loadVersion) {
+  // Registration callbacks refresh in place, preserving the mounted form.
+  if (refreshQueue) {
+    loading.value = !tournament.value
+    return refreshQueue.refresh()
+  }
+  const request = ++loadVersion
+  const slug = props.slug
+  loading.value = !tournament.value
+  const read = createPublicTournamentReader(supabase, slug, {
+    onResolve: id => {
+      if (request !== loadVersion) return
+      stopRealtime?.(); stopRealtime = null
+      if (id) setupRealtime(id)
+      else applySnapshot(null)
+    },
+  })
+  refreshQueue = createSnapshotRefresh({
+    read,
+    apply: data => { applySnapshot(data); loading.value = false },
+    onError: () => {
+      syncFailed.value = true
+      if (!tournament.value) loadError.value = 'failed'
       loading.value = false
-    }
-  }
+    },
+  })
+  stopRecovery = subscribeRefreshTriggers({ refresh: () => refreshQueue?.request() })
+  await refreshQueue.refresh()
+  if (request === loadVersion) { loading.value = false; syncDefaultTab() }
 }
 
-function upsertById(list, row, sorter) {
-  const idx = list.findIndex((item) => item.id === row.id)
-  const next = idx >= 0
-    ? list.map((item, index) => (index === idx ? { ...item, ...row } : item))
-    : [...list, row]
-  return sorter ? sorter(next) : next
-}
-
-function removeById(list, rowId) {
-  return list.filter((item) => item.id !== rowId)
-}
-
-function onTournamentChange(payload) {
-  const tournamentId = payload.new?.id || payload.old?.id
-  if (tournamentId !== activeTournamentId) {
-    return
-  }
-
-  if (payload.eventType === 'DELETE') {
-    applyTournamentMissing()
-    return
-  }
-
-  if (!payload.new?.id) {
-    return
-  }
-
-  tournament.value = tournament.value
-    ? { ...tournament.value, ...payload.new }
-    : payload.new
-  errorText.value = ''
-  syncDefaultTab()
-}
-
-async function onEntriesChange(payload) {
-  const tournamentId = payload.new?.tournament_id || payload.old?.tournament_id
-  if (tournamentId !== activeTournamentId) {
-    return
-  }
-
-  if (payload.eventType === 'DELETE') {
-    if (!payload.old?.id) return
-    entries.value = removeById(entries.value, payload.old.id)
-    return
-  }
-
-  if (!payload.new?.id) {
-    return
-  }
-
-  try {
-    const entry = await loadEntryWithMembers(payload.new.id)
-    if (tournamentId !== activeTournamentId) {
-      return
-    }
-    if (!entry) {
-      entries.value = removeById(entries.value, payload.new.id)
-      return
-    }
-    entries.value = upsertById(entries.value, entry, sortEntries)
-  } catch (error) {
-    console.warn('public entries realtime:', error.message || error)
-  }
-}
-
-function onMatchesChange(payload) {
-  const tournamentId = payload.new?.tournament_id || payload.old?.tournament_id
-  if (tournamentId !== activeTournamentId) {
-    return
-  }
-
-  if (payload.eventType === 'DELETE') {
-    if (!payload.old?.id) return
-    matches.value = removeById(matches.value, payload.old.id)
-    matchSets.value = matchSets.value.filter((set) => set.match_id !== payload.old.id)
-    liveScores.value = liveScores.value.filter((score) => score.match_id !== payload.old.id)
-    return
-  }
-
-  if (!payload.new?.id) {
-    return
-  }
-
-  matches.value = upsertById(matches.value, payload.new, sortMatches)
-}
-
-function onMatchSetsChange(payload) {
-  if (payload.eventType === 'DELETE') {
-    // DELETE payloads may only carry the row id — remove by id, no
-    // tournament check (ids of other tournaments are simply not in the list).
-    if (!payload.old?.id) return
-    matchSets.value = removeById(matchSets.value, payload.old.id)
-    return
-  }
-
-  const row = payload.new
-  if (!row?.id || !row.match_id || !matches.value.some((match) => match.id === row.match_id)) {
-    return
-  }
-
-  // Drop any stale row occupying the same (match, set) slot before upserting.
-  const cleaned = matchSets.value.filter(
-    (item) => item.id === row.id || !(item.match_id === row.match_id && item.set_index === row.set_index),
-  )
-  matchSets.value = upsertById(cleaned, row, sortMatchSets)
-}
-
-function onLiveScoresChange(payload) {
-  const tournamentId = payload.new?.tournament_id || payload.old?.tournament_id
-  if (tournamentId !== activeTournamentId) {
-    return
-  }
-
-  if (payload.eventType === 'DELETE') {
-    if (!payload.old?.id) return
-    liveScores.value = removeById(liveScores.value, payload.old.id)
-    return
-  }
-
-  if (!payload.new?.id) {
-    return
-  }
-
-  liveScores.value = upsertById(liveScores.value, payload.new)
-}
-
-function setupRealtime(tournamentId) {
-  if (activeTournamentId === tournamentId && channel) {
-    return
-  }
-
-  teardownRealtime()
-  activeTournamentId = tournamentId
-
-  channel = supabase
-    .channel(`public-${tournamentId}`)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'tournaments', filter: `id=eq.${tournamentId}` }, onTournamentChange)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'entries', filter: `tournament_id=eq.${tournamentId}` }, onEntriesChange)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'matches', filter: `tournament_id=eq.${tournamentId}` }, onMatchesChange)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'match_sets' }, onMatchSetsChange)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'live_scores', filter: `tournament_id=eq.${tournamentId}` }, onLiveScoresChange)
-
-  channel.subscribe()
+function setupRealtime(id) {
+  stopRealtime = subscribeTournament({
+    client: supabase, id, name: 'public', recover: false,
+    getState: () => ({ entries: entries.value, matches: matches.value, sets: matchSets.value, live: liveScores.value, groups: groups.value }),
+    refresh: () => refreshQueue?.request(),
+    onStatus: status => { if (status !== 'SUBSCRIBED') syncFailed.value = true },
+  })
 }
 
 watch(selectedLiveMatchId, (matchId) => {
@@ -571,25 +223,31 @@ watch(matches, () => {
   if (selectedLiveMatchId.value && !matches.value.some((match) => match.id === selectedLiveMatchId.value)) {
     selectedLiveMatchId.value = null
   }
-}, { deep: true })
+})
 
 onMounted(initialLoad)
 
 watch(
   () => props.slug,
   () => {
+    loadVersion++
+    teardownRealtime()
+    registrationDirty.value = false
+    loadError.value = ''
+    resetTournamentData()
     initialLoad()
   },
 )
 
 watch(
-  () => tournament.value?.status,
+  () => [tournament.value?.status, registrationDirty.value],
   () => {
     syncDefaultTab()
   },
 )
 
 onBeforeUnmount(() => {
+  loadVersion++
   teardownRealtime()
 })
 </script>
@@ -600,13 +258,18 @@ onBeforeUnmount(() => {
       <p class="muted">{{ t('actions.loading') }}</p>
     </section>
 
-    <section v-else-if="errorText && !tournament" class="card empty-state">
+    <section v-else-if="loadError && !tournament" class="card empty-state" role="alert">
       <svg class="empty-state__icon" width="48" height="48" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="24" cy="24" r="20"/><path d="M16 16l16 16"/><path d="M32 16L16 32"/></svg>
-      <p class="empty-state__title">{{ errorText }}</p>
-      <p class="empty-state__hint">{{ t('errors.checkLink') }}</p>
+      <p class="empty-state__title">{{ t(loadError === 'failed' ? 'sync.loadFailed' : 'errors.notFound') }}</p>
+      <p class="empty-state__hint">{{ t(loadError === 'failed' ? 'sync.loadFailedHint' : 'errors.checkLink') }}</p>
+      <button class="btn btn--secondary" type="button" @click="initialLoad">{{ t('sync.retry') }}</button>
     </section>
 
     <template v-else-if="tournament">
+      <div v-if="syncFailed" class="alert alert--error" role="status">
+        {{ t('sync.unavailable') }}
+        <button class="btn btn--secondary btn--sm" type="button" @click="initialLoad">{{ t('sync.retry') }}</button>
+      </div>
       <section class="card card--elevated pub-hero">
         <span class="pub-hero__icon">{{ heroIcon }}</span>
         <div class="pub-hero__body">
@@ -622,10 +285,11 @@ onBeforeUnmount(() => {
             </span>
           </div>
           <p v-if="tournament.description" class="pub-hero__desc">{{ tournament.description }}</p>
+          <p v-if="tournament.sport === 'tennis'" class="pub-hero__desc">{{ tennisRulesSummary(tournament.scoring_config, t) }}</p>
         </div>
       </section>
 
-      <template v-if="tournament.status === 'registration_open'">
+      <template v-if="tournament.status === 'registration_open' || registrationDirty">
         <div class="tab-group" role="tablist" :aria-label="t('tournament.tabsLabel')">
           <button
             type="button"
@@ -655,7 +319,9 @@ onBeforeUnmount(() => {
           <div :class="approvedEntries.length || pendingEntries.length ? 'grid-2' : 'pub-reg-solo'">
             <div class="stack stack--sm">
               <RegistrationForm
+                :key="tournament.id"
                 :tournament="tournament"
+                @dirty="registrationDirty = $event"
                 @submitted="initialLoad"
               />
             </div>
@@ -675,6 +341,10 @@ onBeforeUnmount(() => {
           </div>
         </div>
       </template>
+
+      <div v-else-if="!matches.length && !groups.length" class="card empty-state" role="status">
+        <p>{{ t('bracket.empty') }}</p>
+      </div>
 
       <template v-else-if="isRoundRobin">
         <div v-if="standings.length" class="card">

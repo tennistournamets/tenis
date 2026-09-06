@@ -22,6 +22,18 @@ export const useAuthStore = defineStore('auth', {
     },
   },
   actions: {
+    applySession(session) {
+      const previousUserId = this.user?.id
+      this.session = session
+      this.user = session?.user ?? null
+      if (previousUserId !== this.user?.id || !session) {
+        this.currentPlayer = null
+        this.playerContextLoaded = false
+        this.platformRole = null
+        this.tournamentRoles = []
+        this.tournamentRolesLoaded = false
+      }
+    },
     async init() {
       if (this.ready) {
         return
@@ -32,21 +44,13 @@ export const useAuthStore = defineStore('auth', {
         throw error
       }
 
-      this.session = data.session
-      this.user = data.session?.user ?? null
+      this.applySession(data.session)
       this.ready = true
 
       if (!authSubscription) {
         const { data: subscriptionData } = supabase.auth.onAuthStateChange((_event, session) => {
-          this.session = session
-          this.user = session?.user ?? null
+          this.applySession(session)
           this.ready = true
-          if (!session) {
-            this.currentPlayer = null
-            this.playerContextLoaded = false
-            this.tournamentRoles = []
-            this.tournamentRolesLoaded = false
-          }
         })
         authSubscription = subscriptionData.subscription
       }
@@ -60,12 +64,16 @@ export const useAuthStore = defineStore('auth', {
       }
       if (this.playerContextLoaded && !force) return
 
-      const { data: player } = await supabase
+      const userId = this.user.id
+      const { data: player, error } = await supabase
         .from('players')
         .select('*')
-        .eq('user_id', this.user.id)
+        .eq('user_id', userId)
         .maybeSingle()
 
+      // A response from the previous account must not populate the new session.
+      if (this.user?.id !== userId) return
+      if (error) throw error
       this.currentPlayer = player ?? null
       this.playerContextLoaded = true
     },
@@ -85,8 +93,7 @@ export const useAuthStore = defineStore('auth', {
     async signUpWithEmail(email, password) {
       const { data, error } = await supabase.auth.signUp({ email, password })
       if (error) throw error
-      this.session = data.session
-      this.user = data.session?.user ?? null
+      this.applySession(data.session)
       return data
     },
 
@@ -116,10 +123,7 @@ export const useAuthStore = defineStore('auth', {
       if (error) {
         throw error
       }
-      this.user = null
-      this.session = null
-      this.tournamentRoles = []
-      this.tournamentRolesLoaded = false
+      this.applySession(null)
     },
   },
 })

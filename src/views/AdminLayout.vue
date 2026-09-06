@@ -3,5 +3,5 @@ import { RouterView } from 'vue-router'
 </script>
 
 <template>
-  <RouterView />
+  <RouterView v-slot="{ Component, route }"><component :is="Component" :key="route.path" /></RouterView>
 </template>

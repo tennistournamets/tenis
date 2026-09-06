@@ -4,7 +4,7 @@ import { RouterLink, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 
 import { supabase } from '../lib/supabase'
-import { copyTournamentLink } from '../lib/shareLink'
+import CopyTournamentLink from '../components/CopyTournamentLink.vue'
 import { getSportConfig } from '../lib/sportConfig'
 import { useAuthStore } from '../stores/auth'
 
@@ -14,8 +14,6 @@ const auth = useAuthStore()
 
 const loading = ref(false)
 const loadError = ref('')
-const copySlug = ref('')
-const copyFeedback = ref(false)
 
 const tournaments = ref([])
 const statusFilter = ref('active')
@@ -126,24 +124,6 @@ function hasPublicShareLink(status) {
   // The public page is live for every non-draft tournament —
   // spectators need the link most while matches are running.
   return status !== 'draft'
-}
-
-async function onCopyLink(slug, e) {
-  e?.stopPropagation?.()
-  try {
-    await copyTournamentLink(slug)
-    copySlug.value = slug
-    copyFeedback.value = true
-    setTimeout(() => {
-      copyFeedback.value = false
-    }, 2000)
-  } catch {
-    copySlug.value = slug
-    copyFeedback.value = true
-    setTimeout(() => {
-      copyFeedback.value = false
-    }, 2000)
-  }
 }
 
 function statusBadgeClass(status) {
@@ -268,14 +248,11 @@ onMounted(async () => {
             </div>
             <p class="t-card__meta">{{ itemSubtitle(item) }} · {{ formatDate(item.created_at) }}</p>
           </div>
-          <button
+          <CopyTournamentLink
             v-if="item.currentRole !== 'counter' && hasPublicShareLink(item.status)"
-            class="btn btn--outline btn--sm t-card__copy"
-            type="button"
-            @click.stop="onCopyLink(item.slug, $event)"
-          >
-            {{ copyFeedback && copySlug === item.slug ? t('share.copied') : t('share.copyLink') }}
-          </button>
+            class="t-card__copy"
+            :slug="item.slug"
+          />
         </div>
         <div v-if="nextStep(item)" class="t-card__next" :class="`t-card__next--${nextStep(item).tone}`">
           <span class="t-card__next-text">{{ nextStep(item).text }}</span>

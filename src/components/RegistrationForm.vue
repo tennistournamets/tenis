@@ -1,7 +1,9 @@
 <script setup>
-import { computed, reactive, ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
+import { useUnsavedChanges, confirmDiscard } from '../lib/unsavedChanges'
+import { cloneForm, sameForm } from '../lib/formDraft'
 import { supabase } from '../lib/supabase'
 import { scoringFamily } from '../lib/sportConfig'
 
@@ -12,7 +14,7 @@ const props = defineProps({
   },
 })
 
-const emit = defineEmits(['submitted'])
+const emit = defineEmits(['submitted', 'dirty'])
 
 const { t } = useI18n()
 const entryType = computed(() => props.tournament.category)
@@ -40,8 +42,23 @@ const form = reactive({
 
 const loading = ref(false)
 const errorText = ref('')
-const successText = ref('')
+const submitted = ref(false)
 const contactTouched = ref(false)
+
+const initialForm = cloneForm(form)
+const dirty = computed(() => !sameForm(form, initialForm))
+const conditions = () => ({ category: props.tournament.category, sport: props.tournament.sport, pairing: props.tournament.doubles_pairing_mode })
+const reviewedConditions = ref(conditions())
+const conditionsChanged = computed(() => dirty.value && !sameForm(conditions(), reviewedConditions.value))
+const registrationClosed = computed(() => props.tournament.status !== 'registration_open')
+useUnsavedChanges(() => dirty.value, () => loading.value)
+watch(dirty, value => emit('dirty', value), { flush: 'sync' })
+watch(conditions, value => { if (!dirty.value) reviewedConditions.value = cloneForm(value) }, { deep: true })
+async function discard() {
+  if (!(await confirmDiscard(t, dirty.value, loading.value))) return
+  Object.assign(form, cloneForm(initialForm))
+  reviewedConditions.value = conditions()
+}
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const phonePattern = /^\+?[\d\s\-()]{7,20}$/
@@ -54,9 +71,10 @@ function isValidContact(value) {
 const contactInvalid = computed(() => contactTouched.value && form.phoneOrEmail && !isValidContact(form.phoneOrEmail))
 
 async function submit() {
+  if (loading.value || registrationClosed.value || conditionsChanged.value) return
   loading.value = true
   errorText.value = ''
-  successText.value = ''
+  submitted.value = false
   contactTouched.value = true
 
   if (!isValidContact(form.phoneOrEmail)) {
@@ -85,7 +103,7 @@ async function submit() {
     return
   }
 
-  successText.value = t('registrationForm.success')
+  submitted.value = true
   form.displayName = ''
   form.phoneOrEmail = ''
   form.memberOne = ''
@@ -105,6 +123,11 @@ async function submit() {
       </p>
     </div>
 
+    <p v-if="registrationClosed" class="alert alert--info" role="status">{{ t('drafts.registrationClosed') }}</p>
+    <div v-else-if="conditionsChanged" class="alert alert--info" role="status">
+      {{ t('drafts.registrationChanged') }}
+      <button class="btn btn--ghost btn--sm" type="button" @click="reviewedConditions = conditions()">{{ t('drafts.review') }}</button>
+    </div>
     <div class="form-field">
       <label for="reg-member-one">{{ memberOneLabel }}</label>
       <input
@@ -170,12 +193,13 @@ async function submit() {
       />
     </div>
 
-    <button class="btn btn--primary" :disabled="loading" type="submit">
+    <button class="btn btn--primary" :disabled="loading || registrationClosed || conditionsChanged" type="submit">
       <span v-if="loading" class="spinner" aria-hidden="true" />
       {{ t('registrationForm.submit') }}
     </button>
 
-    <div v-if="successText" class="alert alert--success" role="status">{{ successText }}</div>
+    <button v-if="dirty" class="btn btn--ghost" type="button" :disabled="loading" @click="discard">{{ t('drafts.discardLeave') }}</button>
+    <div v-if="submitted" class="alert alert--success" role="status">{{ t('registrationForm.success') }}</div>
     <div v-if="errorText" class="alert alert--error" role="alert">{{ errorText }}</div>
   </form>
 </template>

@@ -3,6 +3,8 @@ import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { entryMemberNames } from '../lib/entryDisplay'
+import { isByeMatch } from '../lib/bracketDisplay'
+import { formatSetScore } from '../lib/tennisRules'
 import { pointLabel, scoreLine } from '../lib/useTennisScoring'
 
 const props = defineProps({
@@ -40,7 +42,7 @@ const dragOverKey = ref(null)
 
 function memberLines(entryId) {
   if (!entryId) {
-    return [t('bracket.tbd')]
+    return [t(isByeMatch(props.match) ? 'bracket.bye' : 'bracket.tbd')]
   }
   const names = entryMemberNames(props.entriesMap[entryId])
   return names.length ? names : [t('bracket.tbd')]
@@ -55,7 +57,7 @@ function setSummary(matchId) {
   if (!sets.length) {
     return '—'
   }
-  return sets.map((set) => `${set.side_a_games}:${set.side_b_games}`).join(' · ')
+  return sets.map(formatSetScore).join(' · ')
 }
 
 const matchFinished = () => props.match.status === 'finished'

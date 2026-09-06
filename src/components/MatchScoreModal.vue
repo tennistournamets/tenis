@@ -4,12 +4,21 @@
 // FootballScoreEditor.vue (goals) — keep the three in sync on scoring changes.
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import AppModal from './AppModal.vue'
 
 import { entryMemberNames } from '../lib/entryDisplay'
 import { supabase } from '../lib/supabase'
+import { useUnsavedChanges, confirmDiscard } from '../lib/unsavedChanges'
+import { sameForm, cloneForm } from '../lib/formDraft'
+import { saveMatchResult } from '../lib/saveMatchResult'
+import { confirmDialog } from '../lib/confirmDialog'
+import TennisSetInputs from './TennisSetInputs.vue'
+import { scoreRows, buildSetPayload, scoringError } from '../lib/tennisRules'
 
 const props = defineProps({
+  scoringConfig: { type: Object, default: () => ({}) },
   match: { type: Object, required: true },
+  exists: { type: Boolean, default: true },
   entriesMap: { type: Object, default: () => ({}) },
   family: { type: String, default: 'sets' },
   setFormat: { type: String, default: 'best_of_3' },
@@ -34,17 +43,10 @@ function teamLabel(entryId) {
 }
 
 // --- sets form ---
-const totalSetRows = props.setFormat === 'best_of_5' ? 5 : 3
-const setRows = ref(
-  Array.from({ length: totalSetRows }, (_, i) => {
-    const saved = props.sets.find((s) => s.set_index === i + 1)
-    return {
-      set_index: i + 1,
-      side_a_games: saved ? saved.side_a_games : '',
-      side_b_games: saved ? saved.side_b_games : '',
-    }
-  }),
-)
+const setRows = ref(scoreRows(props.sets, props.setFormat))
+const baseRevision = ref(props.match.score_revision)
+const conflict = computed(() => baseRevision.value !== props.match.score_revision)
+const manualBlocked = computed(() => !props.exists || props.liveStatus === 'active')
 
 // --- goals form ---
 const goals = ref({
@@ -54,44 +56,74 @@ const goals = ref({
   pb: props.match.side_b_pens ?? '',
 })
 
+const initialInput = ref({ sets: cloneForm(setRows.value), goals: cloneForm(goals.value) })
+const dirty = computed(() => !savedFlash.value && !sameForm({ sets: setRows.value, goals: goals.value }, initialInput.value))
+useUnsavedChanges(() => dirty.value, () => saving.value)
+async function close() {
+  if (await confirmDiscard(t, dirty.value, saving.value)) emit('close')
+}
+async function startLive() {
+  if (await confirmDiscard(t, dirty.value, saving.value)) emit('start-live', props.match)
+}
+
 const isSets = computed(() => props.family === 'sets')
 
+async function reloadResult() {
+  if (saving.value) return
+  if (!(await confirmDialog(t('scoringFlow.reloadConfirm')))) return
+  saving.value = true
+  try {
+    const { data, error } = await supabase.rpc('get_tournament_score_state', { p_tournament_id: props.match.tournament_id })
+    if (error) { errorText.value = t('scoringFlow.unavailable'); return }
+    const m = data.matches.find(m => m.id === props.match.id)
+    if (!m) { emit('close'); return }
+    setRows.value = scoreRows(data.sets.filter(s => s.match_id === m.id), props.setFormat)
+    goals.value = { a:m.side_a_score ?? '', b:m.side_b_score ?? '', pa:m.side_a_pens ?? '', pb:m.side_b_pens ?? '' }
+    initialInput.value = { sets: cloneForm(setRows.value), goals: cloneForm(goals.value) }
+    baseRevision.value = m.score_revision
+    errorText.value = ''
+    emit('saved')
+  } finally { saving.value = false }
+}
 async function save() {
   if (!props.canEditFinal || saving.value) return
   errorText.value = ''
-  let rpc
+  if (manualBlocked.value || conflict.value) { errorText.value = t(manualBlocked.value ? 'scoringFlow.liveBlocked' : 'scoringFlow.conflict'); return }
+  let rpcName, rpcPayload
 
   if (isSets.value) {
-    const payload = setRows.value
-      .filter((r) => r.side_a_games !== '' && r.side_b_games !== '' && r.side_a_games != null && r.side_b_games != null)
-      .map((r) => ({
-        set_index: r.set_index,
-        side_a_games: Number(r.side_a_games),
-        side_b_games: Number(r.side_b_games),
-      }))
-    rpc = supabase.rpc('update_match_sets', { p_match_id: props.match.id, p_sets: payload })
+    let payload
+    try { payload = buildSetPayload(setRows.value, props.scoringConfig, props.setFormat) }
+    catch (error) { errorText.value = scoringError(error.message, t); return }
+    rpcName = 'update_match_sets'
+    rpcPayload = { p_match_id: props.match.id, p_sets: payload, p_expected_revision: baseRevision.value }
   } else {
+    if (goals.value.a === '' || goals.value.b === '') { errorText.value=t('scoringFlow.finalRequired'); return }
     const a = Number(goals.value.a)
     const b = Number(goals.value.b)
     if (!Number.isInteger(a) || !Number.isInteger(b) || a < 0 || b < 0) {
       errorText.value = t('football.goals')
       return
     }
-    rpc = supabase.rpc('update_football_result', {
+    rpcName = 'update_football_result'
+    rpcPayload = {
       p_match_id: props.match.id,
+      p_expected_revision: baseRevision.value,
       p_a_goals: a,
       p_b_goals: b,
       p_a_pens: goals.value.pa === '' || goals.value.pa == null ? null : Number(goals.value.pa),
       p_b_pens: goals.value.pb === '' || goals.value.pb == null ? null : Number(goals.value.pb),
-    })
+    }
   }
 
   saving.value = true
-  const { error } = await rpc
+  const { error, cancelled } = await saveMatchResult(rpcName, rpcPayload, t)
   saving.value = false
 
+  if (cancelled) return
   if (error) {
-    errorText.value = error.message
+    errorText.value = scoringError(error.message, t)
+    emit('saved')
     return
   }
 
@@ -102,82 +134,59 @@ async function save() {
 </script>
 
 <template>
-  <div class="modal-backdrop" @click="emit('close')">
-    <div class="modal-dialog" role="dialog" aria-modal="true" @click.stop>
+  <AppModal :label="t('standings.matchScore')" @close="close">
+    <div class="modal-dialog">
       <div class="modal-dialog__head">
         <div>
           <h2>{{ t('standings.matchScore') }}</h2>
           <p class="muted">{{ teamLabel(match.side_a_entry_id) }} vs {{ teamLabel(match.side_b_entry_id) }}</p>
         </div>
-        <button class="modal-close" type="button" :aria-label="t('actions.close')" @click="emit('close')">×</button>
+        <button class="modal-close" type="button" :aria-label="t('actions.close')" @click="close">×</button>
       </div>
 
       <p v-if="!canEditFinal" class="alert alert--info" role="status">{{ t('admin.scoresLockedError') }}</p>
 
-      <!-- sets sports -->
-      <div v-if="isSets" class="msm-grid">
-        <div class="msm-grid__row msm-grid__row--head">
-          <span></span>
-          <span v-for="r in setRows" :key="`h-${r.set_index}`" class="msm-grid__set">{{ r.set_index }}</span>
-        </div>
-        <div class="msm-grid__row">
-          <span class="msm-grid__name">{{ teamLabel(match.side_a_entry_id) }}</span>
-          <input
-            v-for="r in setRows"
-            :key="`a-${r.set_index}`"
-            v-model="r.side_a_games"
-            class="input msm-grid__input"
-            type="number"
-            min="0"
-            max="7"
-            placeholder="—"
-            :disabled="!canEditFinal || saving"
-          />
-        </div>
-        <div class="msm-grid__row">
-          <span class="msm-grid__name">{{ teamLabel(match.side_b_entry_id) }}</span>
-          <input
-            v-for="r in setRows"
-            :key="`b-${r.set_index}`"
-            v-model="r.side_b_games"
-            class="input msm-grid__input"
-            type="number"
-            min="0"
-            max="7"
-            placeholder="—"
-            :disabled="!canEditFinal || saving"
-          />
-        </div>
+      <p v-if="!exists" class="alert alert--info" role="status">{{ t('drafts.matchRemoved') }}</p>
+      <p v-else-if="manualBlocked" class="alert alert--info" role="status">{{ t('scoringFlow.liveBlocked') }}</p>
+      <div v-else-if="conflict || errorText === t('scoringFlow.conflict')" class="alert alert--info" role="status">
+        {{ t('scoringFlow.conflict') }}
+        <button class="btn btn--ghost btn--sm" @click="reloadResult">{{ t('scoringFlow.reload') }}</button>
       </div>
+      <p v-else class="muted">{{ t('scoringFlow.hint') }}</p>
+      <!-- sets sports -->
+      <TennisSetInputs v-if="isSets" v-model="setRows" :scoring-config="scoringConfig" :set-format="setFormat"
+        :team-a="teamLabel(match.side_a_entry_id)" :team-b="teamLabel(match.side_b_entry_id)"
+        :id-prefix="`modal-${match.id}`" :disabled="!canEditFinal || manualBlocked || saving || savedFlash" />
 
       <!-- goals sports -->
       <div v-else class="stack stack--sm">
         <div class="msm-goals">
           <span class="msm-grid__name">{{ teamLabel(match.side_a_entry_id) }}</span>
-          <input v-model="goals.a" class="input msm-grid__input" type="number" min="0" :disabled="!canEditFinal || saving" :aria-label="t('football.goals')" />
+          <input v-model="goals.a" class="input msm-grid__input" type="number" min="0" :disabled="!canEditFinal || manualBlocked || saving || savedFlash" :aria-label="t('football.goals')" />
           <span class="muted">:</span>
-          <input v-model="goals.b" class="input msm-grid__input" type="number" min="0" :disabled="!canEditFinal || saving" :aria-label="t('football.goals')" />
+          <input v-model="goals.b" class="input msm-grid__input" type="number" min="0" :disabled="!canEditFinal || manualBlocked || saving || savedFlash" :aria-label="t('football.goals')" />
           <span class="msm-grid__name msm-goals__right">{{ teamLabel(match.side_b_entry_id) }}</span>
         </div>
         <div class="msm-goals">
           <span class="msm-goals__pens-label muted">{{ t('football.pens') }}</span>
-          <input v-model="goals.pa" class="input msm-grid__input" type="number" min="0" :disabled="!canEditFinal || saving" :aria-label="t('football.pens')" />
+          <input v-model="goals.pa" class="input msm-grid__input" type="number" min="0" :disabled="!canEditFinal || manualBlocked || saving || savedFlash" :aria-label="t('football.pens')" />
           <span class="muted">:</span>
-          <input v-model="goals.pb" class="input msm-grid__input" type="number" min="0" :disabled="!canEditFinal || saving" :aria-label="t('football.pens')" />
+          <input v-model="goals.pb" class="input msm-grid__input" type="number" min="0" :disabled="!canEditFinal || manualBlocked || saving || savedFlash" :aria-label="t('football.pens')" />
           <span class="msm-goals__right"></span>
         </div>
         <p class="muted" style="font-size: var(--font-sm)">{{ t('football.penHint') }}</p>
       </div>
 
       <div class="msm-actions">
-        <button class="btn btn--primary btn--sm" type="button" :disabled="!canEditFinal || saving" @click="save">
-          {{ t('admin.saveScore') }}
+        <button class="btn btn--primary btn--sm" type="button" :disabled="!canEditFinal || manualBlocked || conflict || saving || savedFlash" @click="save">
+          {{ t(match.status === 'finished' ? 'scoringFlow.correct' : 'scoringFlow.finish') }}
         </button>
         <button
-          v-if="canLiveScore"
+          v-if="canLiveScore && match.status !== 'finished'"
           class="btn btn--ghost btn--sm"
           type="button"
-          @click="emit('start-live', match)"
+          :disabled="saving || savedFlash || !exists"
+          @click="startLive"
         >
           {{ liveStatus === 'active' ? t('live.openLive') : t('live.start') }}
         </button>
@@ -195,7 +204,7 @@ async function save() {
 
       <p v-if="errorText" class="error-text">{{ errorText }}</p>
     </div>
-  </div>
+  </AppModal>
 </template>
 
 <style scoped>
@@ -206,7 +215,7 @@ async function save() {
 }
 .msm-grid__row {
   display: grid;
-  grid-template-columns: 1fr repeat(v-bind(totalSetRows), 52px);
+  grid-template-columns: 1fr repeat(var(--set-columns), 52px);
   gap: 8px;
   align-items: center;
 }

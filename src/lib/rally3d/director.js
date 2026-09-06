@@ -382,11 +382,43 @@ const CAM_AZ = Math.PI / 2
 const CAM_EL = 0.36
 const CAM_R = 16.5
 
+const CAM_TARGET = new THREE.Vector3(0, 0.35, 0)
+const CAM_DIRECTION = new THREE.Vector3(
+  Math.cos(CAM_AZ) * Math.cos(CAM_EL) * CAM_R,
+  Math.sin(CAM_EL) * CAM_R,
+  Math.sin(CAM_AZ) * Math.cos(CAM_EL) * CAM_R,
+).sub(CAM_TARGET)
+const CAM_MIN_DISTANCE = CAM_DIRECTION.length()
+CAM_DIRECTION.normalize()
+const CAM_RIGHT = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), CAM_DIRECTION).normalize()
+const CAM_UP = new THREE.Vector3().crossVectors(CAM_DIRECTION, CAM_RIGHT)
+
+// Conservative bounds for racket reach, celebrations and changeovers, in
+// meters. Fit the whole motion envelope so the camera stays still during play.
+const CAM_FRAME = []
+for (const bounds of [
+  { x: 14.1, z: 3.9, top: 2.4 },
+  { x: 13.4, z: 3.9, top: 3.5 },
+  { x: 8.5, z: 5.6, top: 2.5 },
+  { x: 11.885, z: 4.115, top: 0 },
+]) {
+  for (const x of [-bounds.x, bounds.x]) for (const y of [-0.25, bounds.top]) for (const z of [-bounds.z, bounds.z]) {
+    const point = new THREE.Vector3(x, y, z).sub(CAM_TARGET)
+    CAM_FRAME.push({ right: point.dot(CAM_RIGHT), up: point.dot(CAM_UP), depth: point.dot(CAM_DIRECTION) })
+  }
+}
+
 export function updateCamera(camera) {
-  camera.position.set(
-    Math.cos(CAM_AZ) * Math.cos(CAM_EL) * CAM_R,
-    Math.sin(CAM_EL) * CAM_R,
-    Math.sin(CAM_AZ) * Math.cos(CAM_EL) * CAM_R,
-  )
-  camera.lookAt(0, 0.35, 0)
+  // ResizeObserver updates camera.aspect from the actual canvas container.
+  // Preserve the original direction and lens; only back away when needed.
+  const tanV = Math.tan(THREE.MathUtils.degToRad(camera.getEffectiveFOV() / 2)) * 0.94
+  const tanH = tanV * Math.max(0.1, camera.aspect)
+  let distance = CAM_MIN_DISTANCE
+  for (const point of CAM_FRAME) {
+    distance = Math.max(distance,
+      point.depth + Math.abs(point.right) / tanH,
+      point.depth + Math.abs(point.up) / tanV)
+  }
+  camera.position.copy(CAM_TARGET).addScaledVector(CAM_DIRECTION, distance)
+  camera.lookAt(CAM_TARGET)
 }

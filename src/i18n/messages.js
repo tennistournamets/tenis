@@ -1,5 +1,18 @@
+import { draftMessages } from './drafts'
+import { scoringFlowMessages } from './scoringFlow'
+import { tennisRuleMessages } from './tennisRules'
+
 export const messages = {
   ru: {
+    sync: {
+      unavailable: 'Не удалось обновить данные. Показано последнее полученное состояние; повторяем подключение автоматически.',
+      loadFailed: 'Не удалось загрузить турнир',
+      loadFailedHint: 'Проверьте подключение к интернету и повторите попытку. Загрузка повторяется автоматически.',
+      retry: 'Повторить загрузку',
+    },
+    drafts: draftMessages.ru,
+    tennisRules: tennisRuleMessages.ru,
+    scoringFlow: scoringFlowMessages.ru,
     app: {
       title: 'Bracketa',
       subtitle: 'Организация турниров, жеребьёвка и live-сетка',
@@ -95,6 +108,8 @@ export const messages = {
     share: {
       copyLink: 'Копировать ссылку',
       copied: 'Скопировано!',
+      copyFailed: 'Не удалось скопировать ссылку.',
+      manualCopy: 'Выделите ссылку и скопируйте вручную:',
       hint: 'Отправьте эту ссылку зрителям: они увидят сетку и смогут зарегистрироваться, если регистрация открыта.',
       qrButton: 'QR-код',
       qrTitle: 'QR-код турнира',
@@ -133,6 +148,7 @@ export const messages = {
       quarterfinals: 'Четвертьфинал',
       roundN: 'Раунд {n}',
       tbd: 'Ожидается',
+      bye: 'Без игры (BYE)',
       vs: 'vs',
       empty: 'Сетка ещё не сформирована',
       scrollHint: 'Проведите пальцем влево, чтобы увидеть все раунды',
@@ -660,6 +676,15 @@ export const messages = {
     },
   },
   en: {
+    sync: {
+      unavailable: 'Unable to refresh. Showing the last received data; reconnecting automatically.',
+      loadFailed: 'Unable to load the tournament',
+      loadFailedHint: 'Check your internet connection and try again. Loading will retry automatically.',
+      retry: 'Try again',
+    },
+    drafts: draftMessages.en,
+    tennisRules: tennisRuleMessages.en,
+    scoringFlow: scoringFlowMessages.en,
     app: {
       title: 'Bracketa',
       subtitle: 'Run tournaments, draws, and live brackets',
@@ -755,6 +780,8 @@ export const messages = {
     share: {
       copyLink: 'Copy link',
       copied: 'Copied!',
+      copyFailed: 'Could not copy the link.',
+      manualCopy: 'Select the link and copy it manually:',
       hint: 'Share this link with spectators — they can follow the bracket and register while registration is open.',
       qrButton: 'QR code',
       qrTitle: 'Tournament QR code',
@@ -793,6 +820,7 @@ export const messages = {
       quarterfinals: 'Quarterfinals',
       roundN: 'Round {n}',
       tbd: 'TBD',
+      bye: 'Bye',
       vs: 'vs',
       empty: 'Bracket not generated yet',
       scrollHint: 'Swipe sideways to see all rounds',
@@ -1320,6 +1348,15 @@ export const messages = {
     },
   },
   lt: {
+    sync: {
+      unavailable: 'Nepavyko atnaujinti duomenų. Rodomi paskutiniai gauti duomenys; ryšys atkuriamas automatiškai.',
+      loadFailed: 'Nepavyko įkelti turnyro',
+      loadFailedHint: 'Patikrinkite interneto ryšį ir bandykite dar kartą. Įkėlimas kartojamas automatiškai.',
+      retry: 'Bandyti dar kartą',
+    },
+    drafts: draftMessages.lt,
+    tennisRules: tennisRuleMessages.lt,
+    scoringFlow: scoringFlowMessages.lt,
     app: {
       title: 'Bracketa',
       subtitle: 'Turnyrai, burtai ir gyvas tinklelis',
@@ -1415,6 +1452,8 @@ export const messages = {
     share: {
       copyLink: 'Kopijuoti nuorodą',
       copied: 'Nukopijuota!',
+      copyFailed: 'Nepavyko nukopijuoti nuorodos.',
+      manualCopy: 'Pažymėkite nuorodą ir nukopijuokite rankiniu būdu:',
       hint: 'Pasidalinkite šia nuoroda su žiūrovais — jie matys tinklelį ir galės registruotis, jei registracija atidaryta.',
       qrButton: 'QR kodas',
       qrTitle: 'Turnyro QR kodas',
@@ -1453,6 +1492,7 @@ export const messages = {
       quarterfinals: 'Ketvirtfinalis',
       roundN: '{n} raundas',
       tbd: 'Laukiama',
+      bye: 'Be kovos (BYE)',
       vs: 'prieš',
       empty: 'Tinklelis dar nesugeneruotas',
       scrollHint: 'Perbraukite į šoną, kad pamatytumėte visus raundus',

@@ -4,10 +4,14 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 
 import { supabase } from '../lib/supabase'
+import { useUnsavedChanges } from '../lib/unsavedChanges'
+import { cloneForm, sameForm } from '../lib/formDraft'
 import { useAuthStore } from '../stores/auth'
 import { getSportConfig, resolveCategory } from '../lib/sportConfig'
 import SportPicker from '../components/SportPicker.vue'
 import FormatPicker from '../components/FormatPicker.vue'
+import TennisRulesSettings from '../components/TennisRulesSettings.vue'
+import { DEFAULT_TENNIS_RULES, tennisRulesSummary } from '../lib/tennisRules'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -26,6 +30,7 @@ const form = reactive({
   category: 'singles',
   set_format: 'best_of_3',
   tiebreak_to: 7,
+  scoring_config: { tennis: { ...DEFAULT_TENNIS_RULES } },
   gender: 'men',
   contact_phone: '',
   contact_email: '',
@@ -33,6 +38,9 @@ const form = reactive({
   generate_qr: false,
   doubles_pairing_random: false,
 })
+
+const initialForm = cloneForm(form)
+const unregisterDraft = useUnsavedChanges(() => !sameForm(form, initialForm), () => saving.value)
 
 const cfg = computed(() => getSportConfig(form.sport))
 const effectiveCategory = computed(() => resolveCategory(form.sport, form.category))
@@ -77,7 +85,7 @@ function slugify(value) {
 }
 
 async function createTournament() {
-  if (!auth.user) {
+  if (!auth.user || saving.value) {
     return
   }
 
@@ -101,9 +109,9 @@ async function createTournament() {
         ? (form.doubles_pairing_random ? 'pick_random' : 'pre_agreed')
         : null,
     p_format_config: {},
-    p_scoring_config: cfg.value.supportsSetFormat
-      ? { tiebreak_to: Number(form.tiebreak_to), gender: form.gender }
-      : { gender: form.gender },
+    p_scoring_config: form.sport === 'tennis'
+      ? { ...form.scoring_config, gender: form.gender }
+      : cfg.value.supportsSetFormat ? { tiebreak_to: Number(form.tiebreak_to), gender: form.gender } : { gender: form.gender },
     p_contact_phone: form.contact_phone.trim() || null,
     p_contact_email: form.contact_email.trim() || null,
   })
@@ -115,6 +123,7 @@ async function createTournament() {
     return
   }
 
+  unregisterDraft()
   if (newId) {
     const query = form.is_public && form.generate_qr ? { qr: '1' } : undefined
     await router.replace({ name: 'admin-tournament', params: { id: newId }, query })
@@ -174,6 +183,7 @@ onMounted(async () => {
     <!-- Step 3: details + live preview -->
     <div v-else class="wizard__body wizard__body--split">
       <form id="wizard-form" class="wizard__form" @submit.prevent="createTournament">
+        <fieldset :disabled="saving" style="display: contents">
         <div class="wizard__lead">
           <h1 class="wizard__heading">{{ t('admin.stepDetails') }}</h1>
           <p class="muted">{{ t('admin.wizardPreviewHint') }}</p>
@@ -219,7 +229,7 @@ onMounted(async () => {
               </select>
             </div>
 
-            <div v-if="cfg.supportsSetFormat" class="form-field">
+            <div v-if="form.sport === 'padel'" class="form-field">
               <label for="create-tiebreak">{{ t('admin.tiebreakTo') }}</label>
               <select id="create-tiebreak" v-model.number="form.tiebreak_to" class="input">
                 <option :value="7">{{ t('admin.tiebreakTo7') }}</option>
@@ -235,6 +245,8 @@ onMounted(async () => {
               </select>
             </div>
           </div>
+
+          <TennisRulesSettings v-if="form.sport === 'tennis'" v-model="form.scoring_config" id-prefix="create-tennis" :disabled="saving" />
 
           <label v-if="effectiveCategory === 'doubles' && cfg.supportsDoublesPairing" class="wizard__toggle">
             <input v-model="form.doubles_pairing_random" type="checkbox" />
@@ -281,6 +293,7 @@ onMounted(async () => {
         </section>
 
         <p v-if="errorText" class="error-text">{{ errorText }}</p>
+      </fieldset>
       </form>
 
       <aside class="wizard__preview" aria-hidden="true">
@@ -292,6 +305,7 @@ onMounted(async () => {
           <h2 class="wizard__preview-name">{{ form.name || t('admin.wizardUntitled') }}</h2>
           <p class="wizard__preview-meta">{{ previewMeta }}</p>
           <p v-if="form.description" class="wizard__preview-desc">{{ form.description }}</p>
+          <p v-if="form.sport === 'tennis'" class="wizard__preview-desc">{{ tennisRulesSummary(form.scoring_config, t) }}</p>
         </div>
       </aside>
     </div>

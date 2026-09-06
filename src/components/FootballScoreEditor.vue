@@ -1,7 +1,12 @@
 <script setup>
 import { computed, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { scoringError } from '../lib/tennisRules'
+import { confirmDialog } from '../lib/confirmDialog'
 import { supabase } from '../lib/supabase'
+import { useUnsavedChanges } from '../lib/unsavedChanges'
+import { sameForm } from '../lib/formDraft'
+import { saveMatchResult } from '../lib/saveMatchResult'
 
 const props = defineProps({
   matches: { type: Array, default: () => [] },
@@ -16,23 +21,33 @@ const errorText = ref('')
 const savedFlash = reactive({})
 // local per-match input state, keyed by match id
 const draft = reactive({})
+const original = reactive({})
+const draftMatches = reactive({})
+const removed = id => !props.matches.some(m => m.id === id)
+useUnsavedChanges(() => Object.keys(draft).some(id => !sameForm(draft[id], original[id])), () => Boolean(savingId.value))
 
 // Matches with both sides assigned, ordered by round then match.
 const scorable = computed(() =>
-  props.matches
+  [...props.matches, ...Object.values(draftMatches).filter(m => removed(m.id) && !sameForm(draft[m.id], original[m.id]))]
     .filter((m) => m.side_a_entry_id && m.side_b_entry_id)
     .sort((a, b) => a.round_number - b.round_number || a.match_number - b.match_number),
 )
 
 function fieldsFor(m) {
+  if (draft[m.id] && savingId.value !== m.id && sameForm(draft[m.id], original[m.id]) && draft[m.id].revision < m.score_revision) {
+    delete draft[m.id]; delete original[m.id]
+  }
   if (!draft[m.id]) {
+    draftMatches[m.id] = { ...m, labelA: name(m.side_a_entry_id), labelB: name(m.side_b_entry_id) }
     draft[m.id] = {
+      revision: m.score_revision,
       a: m.side_a_score ?? '',
       b: m.side_b_score ?? '',
       pa: m.side_a_pens ?? '',
       pb: m.side_b_pens ?? '',
     }
   }
+  if (!original[m.id]) original[m.id] = { ...draft[m.id] }
   return draft[m.id]
 }
 
@@ -40,8 +55,26 @@ function name(id) {
   return props.entriesMap[id]?.display_name || '—'
 }
 
+async function reloadResult(m) {
+  if (savingId.value) return
+  if (!(await confirmDialog(t('scoringFlow.reloadConfirm')))) return
+  savingId.value = m.id
+  try {
+    const { data, error } = await supabase.rpc('get_tournament_score_state', { p_tournament_id: m.tournament_id })
+    if (error) { errorText.value=t('scoringFlow.unavailable'); return }
+    const latest=data.matches.find(row=>row.id===m.id)
+    delete draft[m.id]
+    delete original[m.id]
+    if(latest) fieldsFor(latest)
+    errorText.value=''
+    emit('saved')
+  } finally { savingId.value = '' }
+}
 async function save(m) {
+  if (props.disabled || savingId.value || removed(m.id)) return
   const f = fieldsFor(m)
+  if (f.revision !== m.score_revision) { errorText.value=t('scoringFlow.conflict'); return }
+  if (f.a === '' || f.b === '') { errorText.value=t('scoringFlow.finalRequired'); return }
   const a = Number(f.a)
   const b = Number(f.b)
   if (!Number.isInteger(a) || !Number.isInteger(b) || a < 0 || b < 0) {
@@ -52,21 +85,25 @@ async function save(m) {
   errorText.value = ''
   const payload = {
     p_match_id: m.id,
+    p_expected_revision: f.revision,
     p_a_goals: a,
     p_b_goals: b,
     p_a_pens: f.pa === '' ? null : Number(f.pa),
     p_b_pens: f.pb === '' ? null : Number(f.pb),
   }
-  const { error } = await supabase.rpc('update_football_result', payload)
+  const { error, cancelled } = await saveMatchResult('update_football_result', payload, t)
   savingId.value = ''
+  if (cancelled) return
   if (error) {
-    errorText.value = error.message
+    errorText.value = scoringError(error.message,t)
+    emit('saved')
     return
   }
   savedFlash[m.id] = true
   setTimeout(() => {
     savedFlash[m.id] = false
   }, 2000)
+  original[m.id] = { ...draft[m.id] }
   emit('saved')
 }
 </script>
@@ -81,14 +118,22 @@ async function save(m) {
       :key="m.id"
       class="fb-row card"
     >
-      <span class="fb-row__team">{{ name(m.side_a_entry_id) }}</span>
+      <div v-if="removed(m.id)" class="alert alert--info">
+        {{ t('drafts.matchRemoved') }}
+        <button class="btn btn--ghost btn--sm" @click="reloadResult(m)">{{ t('drafts.discardLeave') }}</button>
+      </div>
+      <div v-else-if="fieldsFor(m).revision !== m.score_revision" class="alert alert--info">
+        {{ t('scoringFlow.conflict') }}
+        <button class="btn btn--ghost btn--sm" @click="reloadResult(m)">{{ t('scoringFlow.reload') }}</button>
+      </div>
+      <span class="fb-row__team">{{ removed(m.id) ? m.labelA : name(m.side_a_entry_id) }}</span>
       <div class="fb-row__inputs">
         <input
           v-model="fieldsFor(m).a"
           class="input fb-input"
           type="number"
           min="0"
-          :disabled="disabled || savingId === m.id"
+          :disabled="disabled || removed(m.id) || savingId === m.id"
           :aria-label="t('football.goals')"
         />
         <span class="fb-colon">:</span>
@@ -97,11 +142,11 @@ async function save(m) {
           class="input fb-input"
           type="number"
           min="0"
-          :disabled="disabled || savingId === m.id"
+          :disabled="disabled || removed(m.id) || savingId === m.id"
           :aria-label="t('football.goals')"
         />
       </div>
-      <span class="fb-row__team fb-row__team--right">{{ name(m.side_b_entry_id) }}</span>
+      <span class="fb-row__team fb-row__team--right">{{ removed(m.id) ? m.labelB : name(m.side_b_entry_id) }}</span>
 
       <div class="fb-row__pens">
         <label class="fb-pen-label">{{ t('football.pens') }}</label>
@@ -110,7 +155,7 @@ async function save(m) {
           class="input fb-input fb-input--pen"
           type="number"
           min="0"
-          :disabled="disabled || savingId === m.id"
+          :disabled="disabled || removed(m.id) || savingId === m.id"
         />
         <span class="fb-colon">:</span>
         <input
@@ -118,17 +163,17 @@ async function save(m) {
           class="input fb-input fb-input--pen"
           type="number"
           min="0"
-          :disabled="disabled || savingId === m.id"
+          :disabled="disabled || removed(m.id) || savingId === m.id"
         />
       </div>
 
       <button
         class="btn btn--primary btn--sm fb-row__save"
         type="button"
-        :disabled="disabled || savingId === m.id"
+        :disabled="disabled || removed(m.id) || savingId === m.id || fieldsFor(m).revision !== m.score_revision"
         @click="save(m)"
       >
-        {{ t('football.save') }}
+        {{ t(m.status === 'finished' ? 'scoringFlow.correct' : 'scoringFlow.finish') }}
       </button>
       <Transition name="saved-pop">
         <span v-if="savedFlash[m.id]" class="score-saved-badge">
