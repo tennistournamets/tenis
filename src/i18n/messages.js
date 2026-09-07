@@ -39,6 +39,7 @@ export const messages = {
         note: 'Бесплатно · без карты · зрителям не нужен аккаунт',
       },
       features: {
+        eyebrow: 'Возможности',
         title: 'Всё что нужно организатору',
         subtitle: 'Мощные инструменты для проведения турнира любого масштаба',
         bracket: {
@@ -67,6 +68,7 @@ export const messages = {
         },
       },
       howItWorks: {
+        eyebrow: 'Как это работает',
         title: 'Три шага — и играем',
         subtitle: 'Никаких таблиц в Excel и пересылки скриншотов в чат.',
         step1: {
@@ -81,6 +83,14 @@ export const messages = {
           title: 'Ведите счёт — зрители видят всё',
           description: 'Live-табло обновляется мгновенно. Победитель сам проходит дальше по сетке.',
         },
+      },
+      sports: {
+        eyebrow: 'Виды спорта',
+        title: 'Три вида спорта. Одна сетка.',
+        subtitle: 'Теннис и падел считают сеты и геймы, футбол — голы. Bracketa знает правила каждого.',
+        tennis: 'Сеты, геймы, тай-брейки. Поочковый live-счёт и авто-подсчёт.',
+        padel: 'Всегда пары. Случайная или ручная жеребьёвка партнёров.',
+        football: 'Голы и ничьи в группах, пенальти в плей-офф.',
       },
       nav: {
         howItWorks: 'Как это работает',
@@ -711,6 +721,7 @@ export const messages = {
         note: 'Free · no card · spectators need no account',
       },
       features: {
+        eyebrow: 'Features',
         title: 'Everything an organizer needs',
         subtitle: 'Powerful tools to run a tournament of any scale',
         bracket: {
@@ -739,6 +750,7 @@ export const messages = {
         },
       },
       howItWorks: {
+        eyebrow: 'How it works',
         title: 'Three steps — and you play',
         subtitle: 'No Excel spreadsheets, no forwarding screenshots to a chat.',
         step1: {
@@ -753,6 +765,14 @@ export const messages = {
           title: 'Keep score — spectators see it all',
           description: 'The live scoreboard updates instantly. The winner advances through the bracket on its own.',
         },
+      },
+      sports: {
+        eyebrow: 'Sports',
+        title: 'Three sports. One bracket.',
+        subtitle: 'Tennis and padel count sets and games, football counts goals. Bracketa knows the rules of each.',
+        tennis: 'Sets, games, tiebreaks. Point-by-point live scoring with auto totals.',
+        padel: 'Always doubles. Random or manual partner draw.',
+        football: 'Goals and draws in groups, penalties in the knockouts.',
       },
       nav: {
         howItWorks: 'How it works',
@@ -1383,6 +1403,7 @@ export const messages = {
         note: 'Nemokama · be kortelės · žiūrovams paskyra nereikalinga',
       },
       features: {
+        eyebrow: 'Galimybės',
         title: 'Viskas, ko reikia organizatoriui',
         subtitle: 'Galingi įrankiai bet kokio masto turnyrui',
         bracket: {
@@ -1411,6 +1432,7 @@ export const messages = {
         },
       },
       howItWorks: {
+        eyebrow: 'Kaip tai veikia',
         title: 'Trys žingsniai — ir žaidžiame',
         subtitle: 'Jokių Excel lentelių ir ekrano nuotraukų persiuntimo į pokalbį.',
         step1: {
@@ -1425,6 +1447,14 @@ export const messages = {
           title: 'Veskite rezultatą — žiūrovai mato viską',
           description: 'Tiesioginė rezultatų lenta atsinaujina akimirksniu. Nugalėtojas pats keliauja toliau tinkleliu.',
         },
+      },
+      sports: {
+        eyebrow: 'Sporto šakos',
+        title: 'Trys sporto šakos. Vienas tinklelis.',
+        subtitle: 'Tenisas ir padelis skaičiuoja setus ir geimus, futbolas — įvarčius. Bracketa žino kiekvienos taisykles.',
+        tennis: 'Setai, geimai, pratęsimai. Tiesioginis rezultatas taškas po taško.',
+        padel: 'Visada dvejetai. Atsitiktinis arba rankinis porų sudarymas.',
+        football: 'Įvarčiai ir lygiosios grupėse, baudiniai atkrintamosiose.',
       },
       nav: {
         howItWorks: 'Kaip tai veikia',

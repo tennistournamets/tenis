@@ -1,0 +1,426 @@
+<title>Ревью лендинга Bracketa</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@500;600;700;800&family=Golos+Text:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap">
+<style>
+  :root {
+    --bg: #F7F7F4; --surface: #FFFFFF; --ink: #14201B; --muted: #5E6B64; --border: #E4E7E2; --border-strong: #D8DCD6;
+    --green: #0F7B4D; --green-soft: #E7F4EC; --lime: #C6F24E; --coral: #FF5A48; --coral-soft: #FEF0EE; --coral-text: #C43D2C;
+    --purple: #6941C6; --purple-soft: #F2ECFB; --ink-surface: #101512; --on-ink: #F2F5F1; --on-ink-muted: #96A39A;
+    --shadow: 0 12px 32px rgba(20, 32, 27, 0.08);
+    --display: 'Onest', system-ui, sans-serif; --body: 'Golos Text', system-ui, sans-serif; --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #101512; --surface: #17201B; --ink: #F2F5F1; --muted: #96A39A; --border: #263029; --border-strong: #33403A;
+      --green: #34C97F; --green-soft: rgba(52, 201, 127, 0.14); --coral: #FF6A59; --coral-soft: rgba(255, 106, 89, 0.12); --coral-text: #FF8A7C;
+      --purple: #B79CF6; --purple-soft: rgba(139, 92, 246, 0.14); --ink-surface: #0C100D; --shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #101512; --surface: #17201B; --ink: #F2F5F1; --muted: #96A39A; --border: #263029; --border-strong: #33403A;
+    --green: #34C97F; --green-soft: rgba(52, 201, 127, 0.14); --coral: #FF6A59; --coral-soft: rgba(255, 106, 89, 0.12); --coral-text: #FF8A7C;
+    --purple: #B79CF6; --purple-soft: rgba(139, 92, 246, 0.14); --ink-surface: #0C100D; --shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 16px; line-height: 1.6; -webkit-font-smoothing: antialiased; }
+  a { color: var(--green); text-underline-offset: 3px; }
+  code { font-family: var(--mono); font-size: 0.86em; background: var(--green-soft); color: var(--ink); padding: 0.08em 0.38em; border-radius: 6px; }
+  pre { background: var(--ink-surface); color: var(--on-ink); padding: 16px 18px; border-radius: 12px; overflow-x: auto; }
+  pre code { background: none; color: inherit; padding: 0; }
+  h1, h2, h3 { font-family: var(--display); letter-spacing: -0.02em; line-height: 1.12; text-wrap: balance; margin: 0; }
+  h2 { font-size: clamp(1.5rem, 2.6vw, 2rem); font-weight: 700; margin: 64px 0 16px; padding-top: 24px; border-top: 1px solid var(--border); }
+  h3 { font-size: 1.15rem; font-weight: 700; margin: 28px 0 10px; }
+  p { margin: 0 0 14px; }
+  ul, ol { margin: 0 0 16px; padding-left: 22px; }
+  li { margin: 0 0 6px; }
+  li::marker { color: var(--green); }
+  strong { font-weight: 600; }
+  .eyebrow { font-family: var(--mono); font-size: 0.72rem; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--green); margin: 0 0 10px; }
+  .eyebrow--lime { color: var(--lime); } .eyebrow--coral { color: var(--coral-text); } .eyebrow--green { color: var(--green); } .eyebrow--purple { color: var(--purple); }
+
+  .hero { max-width: 1180px; margin: 0 auto; padding: 56px 24px 24px; display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(280px, 0.9fr); gap: 40px; align-items: end; }
+  .hero h1 { font-size: clamp(2.2rem, 4.6vw, 3.6rem); font-weight: 800; letter-spacing: -0.03em; }
+  .hero h1 span { color: var(--green); }
+  .hero .sub { font-size: 1.1rem; color: var(--muted); max-width: 60ch; margin-top: 16px; }
+  .verdict { background: var(--ink-surface); color: var(--on-ink); border-radius: 16px; padding: 22px 24px; display: grid; grid-template-columns: auto 1fr; gap: 6px 22px; align-items: baseline; }
+  .verdict .score { font-family: var(--mono); font-size: 3.2rem; font-weight: 600; color: var(--lime); line-height: 1; grid-row: span 2; font-variant-numeric: tabular-nums; }
+  .verdict .label { font-family: var(--mono); font-size: 0.7rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--on-ink-muted); }
+  .verdict .text { font-size: 0.95rem; color: var(--on-ink); }
+  .facts { max-width: 1180px; margin: 0 auto; padding: 8px 24px 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+  .fact { border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; background: var(--surface); }
+  .fact b { display: block; font-family: var(--mono); font-size: 1.5rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .fact span { color: var(--muted); font-size: 0.85rem; }
+  .fact.blocker b { color: var(--coral-text); } .fact.major b { color: var(--green); } .fact.minor b { color: var(--muted); } .fact.opp b { color: var(--purple); }
+
+  .layout { max-width: 1180px; margin: 0 auto; padding: 32px 24px 96px; display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 48px; }
+  .toc { position: sticky; top: 24px; align-self: start; font-size: 0.86rem; }
+  .toc p { margin-bottom: 8px; }
+  .toc a { display: block; color: var(--muted); text-decoration: none; padding: 5px 0 5px 12px; border-left: 2px solid var(--border); }
+  .toc a:hover { color: var(--ink); border-color: var(--green); }
+  .toc a.status-link { color: var(--green); font-weight: 500; }
+  article.review { min-width: 0; max-width: 78ch; }
+  article.review > p, article.review > ul, article.review > ol { max-width: 68ch; }
+  .table-wrap { overflow-x: auto; margin: 0 0 22px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; font-size: 0.88rem; }
+  th, td { text-align: left; vertical-align: top; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+  th { font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); background: var(--bg); white-space: nowrap; }
+  tbody tr:last-child td { border-bottom: 0; }
+  td.num, .nums td:last-child { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+
+  .status { max-width: 1180px; margin: 0 auto; padding: 40px 24px 0; }
+  .status h2 { border: 0; padding: 0; margin: 0 0 12px; }
+  .status .lead { color: var(--muted); max-width: 72ch; font-size: 1.02rem; margin-bottom: 28px; }
+  .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-bottom: 16px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-bottom: 16px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 22px 22px 16px; min-width: 0; }
+  .card h3 { margin: 4px 0 10px; font-size: 1.25rem; }
+  .card ul { padding-left: 18px; font-size: 0.93rem; }
+  .card .table-wrap { margin-bottom: 4px; border: 0; background: transparent; }
+  .card table { font-size: 0.9rem; }
+  .card th { background: transparent; }
+  .card--ink { background: var(--ink-surface); color: var(--on-ink); border-color: transparent; }
+  .card--ink code { background: rgba(198, 242, 78, 0.16); color: var(--on-ink); }
+  .card--ink li::marker { color: var(--lime); }
+  .card--note { border-left: 4px solid var(--coral); margin-bottom: 16px; }
+  .card--note p { margin-bottom: 4px; }
+  ul.check li::marker { content: '✓  '; color: var(--green); font-weight: 700; }
+  ul.todo li::marker { content: '→  '; color: var(--purple); }
+  .files li { margin-bottom: 8px; }
+  .story td:first-child { white-space: nowrap; }
+
+  @media (max-width: 900px) {
+    .hero, .layout { grid-template-columns: 1fr; }
+    .toc { position: static; display: flex; flex-wrap: wrap; gap: 6px 14px; }
+    .toc a { border-left: 0; padding: 4px 0; }
+    .facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .grid-2, .grid-3 { grid-template-columns: 1fr; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<header class="hero">
+  <div>
+    <p class="eyebrow">Bracketa · дизайн-ревью · 3D при скролле</p>
+    <h1>Лендинг Bracketa: ревью и <span>3D-сцены при скролле</span></h1>
+    <p class="sub">Независимое ревью в семи оптиках (визуал, motion, WebGL, производительность, доступность, нарратив, референсы 2026), 36 находок с адверсарной проверкой, четыре концепции и вердикт судей — плюс статус того, что уже собрано в коде.</p>
+  </div>
+  <div class="verdict">
+    <div class="score">5<small style="font-size:1.2rem;color:var(--on-ink-muted)">/10</small></div>
+    <div class="label">Исходный лендинг</div>
+    <div class="text">Аккуратный, но шаблонный: плоский фон, три ряда одинаковых карточек, единственная анимация — пульс точки LIVE, на мобильных визуала нет вовсе.</div>
+  </div>
+</header>
+
+<div class="facts">
+  <div class="fact blocker"><b>8</b><span>блокеров</span></div>
+  <div class="fact major"><b>20</b><span>major-находок</span></div>
+  <div class="fact minor"><b>5</b><span>minor</span></div>
+  <div class="fact opp"><b>3</b><span>возможности</span></div>
+</div>
+
+
+<section class="status" id="status">
+  <p class="eyebrow">Статус на 6 сентября 2026</p>
+  <h2>Что уже реализовано в коде</h2>
+  <p class="lead">Ревью ниже — независимая оценка исходного лендинга и рекомендация. Параллельно с ним тематические 3D-элементы при скролле уже собраны в ветке <code>stabilization-2026-09</code> (не закоммичено). Здесь — что сделано, где реализация расходится с рекомендацией и что осталось.</p>
+
+  <div class="grid-2">
+    <article class="card card--ink">
+      <p class="eyebrow eyebrow--lime">Архитектура</p>
+      <h3>Один фиксированный WebGL-слой за контентом</h3>
+      <p>Прозрачный canvas <code>position: fixed</code> под контентом, <code>pointer-events: none</code>. 3D-объекты привязываются к пустым DOM-«сценам» (<code>data-stage</code>) и пересчитываются в мировые координаты на плоскости z&nbsp;=&nbsp;0, поэтому совпадают с раскладкой на любом viewport. Скролл управляет хореографией, курсор добавляет паралакс.</p>
+      <ul class="files">
+        <li><code>src/lib/landing3d/objects.js</code> — билдеры: теннисный мяч (лаймовый фетр, шов по формуле «бейсбольной кривой»), футбольный мяч (пятиугольники — взвешенный сферический Вороной в шейдере, без текстур), падел-ракетка (extrude с перфорацией), дерево сетки 8→4→2→1, теннисная сетка, линии корта по метрикам <code>COURT</code>, табло с лаймовым счётом</li>
+        <li><code>src/lib/landing3d/world.js</code> — сцена, свет без теней, якоря, хореография, adaptive DPR</li>
+        <li><code>src/lib/landing3d/palette.js</code> — цвета из CSS-токенов, следуют теме</li>
+        <li><code>src/components/landing/LandingScene3D.vue</code>, <code>src/lib/useReveal.js</code>, <code>src/lib/tilt.js</code></li>
+      </ul>
+    </article>
+    <article class="card">
+      <p class="eyebrow">Сториборд</p>
+      <div class="table-wrap"><table class="story">
+        <thead><tr><th>Секция</th><th>Что происходит при скролле</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Hero</strong></td><td>Большой лаймовый мяч выглядывает из-за demo-карточки, медленно вращается, реагирует на курсор; под карточкой — линии корта в перспективе. При прокрутке мяч «скатывается» влево, уменьшается и уходит. Карточка получает 3D-tilt. На мобильном карточка скрыта, мяч становится главным визуалом.</td></tr>
+          <tr><td><strong>Виды спорта</strong> (новая)</td><td>Три объекта — мяч, падел-ракетка, футбольный мяч — падают в плитки с отскоком, парят и вращаются; hover ускоряет вращение. Чинит битую ссылку «Виды спорта» в навигации.</td></tr>
+          <tr><td><strong>Возможности</strong></td><td>Без WebGL: карточки появляются каскадом, 3D-tilt от курсора.</td></tr>
+          <tr><td><strong>Три шага</strong></td><td>Шаги слева скроллятся, сцена справа sticky. Бит 1 — кольцо из трёх спортов, теннис «выбирается». Бит 2 — сетка собирается из разлетевшихся плашек, коннекторы прорисовываются. Бит 3 — мяч летит через сетку, табло меняет счёт (40–30 → 40–40 → AD…), пульсирует коралловая LIVE-точка. На мобильном каждый шаг получает свою inline-сцену.</td></tr>
+        </tbody>
+      </table></div>
+    </article>
+  </div>
+
+  <div class="grid-3">
+    <article class="card">
+      <p class="eyebrow">Производительность</p>
+      <ul>
+        <li>three.js грузится лениво, после <code>window.load</code> + <code>requestIdleCallback</code>; общий чанк с live-модалом</li>
+        <li>DPR ≤ 1.5 (мобайл/слабые устройства ≤ 1.25) и по бюджету ~2.6 Mpx; при среднем кадре &gt; 24 мс DPR снижается шагами до 1.0</li>
+        <li>Без shadow map — blob-тени; рендер пропускается, если в кадре нет ни одного объекта; в простое (3 с без ввода) — 30 fps</li>
+        <li>Пауза при скрытой вкладке; <code>failIfMajorPerformanceCaveat</code>; потеря контекста → откат к раскладке без 3D</li>
+      </ul>
+    </article>
+    <article class="card">
+      <p class="eyebrow">Доступность и деградация</p>
+      <ul>
+        <li><code>prefers-reduced-motion</code>: один статичный кадр на сцену, перерисовка только при скролле; <code>scroll-behavior: auto</code></li>
+        <li>Canvas <code>aria-hidden</code>, не перехватывает события; вся смысловая информация — в HTML</li>
+        <li>Гейты: save-data/2g → без 3D; <code>?no3d</code> и <code>localStorage champ_landing3d=off</code> — kill-switch; ошибка WebGL → <code>.landing--no3d</code></li>
+        <li>Якоря с <code>scroll-margin-top</code> под фикс-шапку; preconnect к Google Fonts</li>
+      </ul>
+    </article>
+    <article class="card">
+      <p class="eyebrow">Бандл (gzip)</p>
+      <div class="table-wrap"><table class="nums">
+        <tbody>
+          <tr><td>three.module (общий, lazy)</td><td>156,6 KB</td></tr>
+          <tr><td>LandingScene3D (сцена + объекты)</td><td>9,1 KB</td></tr>
+          <tr><td>HomeView</td><td>4,1 KB</td></tr>
+          <tr><td>Новых npm-зависимостей</td><td>0</td></tr>
+        </tbody>
+      </table></div>
+    </article>
+  </div>
+
+  <article class="card card--note">
+    <p class="eyebrow eyebrow--coral">Где реализация расходится с ревью</p>
+    <p>Победившая у судей концепция «Подача» предлагает <em>одну</em> WebGL-сцену в hero и CSS-анимации везде остальное — ради нулевого рендера в покое и минимального риска перегрева. Реализованный вариант ближе к концепции «Реквизит» (второе место): тематические 3D-объекты в трёх секциях, как и просил владелец. Цена — постоянный rAF-цикл, пока на экране есть объект (смягчено: DPR-бюджет, 30 fps в простое, отсечение невидимого). Это точка решения: если после проверки на ноутбуке без дискретной графики нагрев заметен — отключить 3D в секции «Виды спорта» и оставить hero + «Три шага» без переделки архитектуры.</p>
+  </article>
+
+  <div class="grid-2">
+    <article class="card">
+      <p class="eyebrow eyebrow--green">Закрыто из находок ревью</p>
+      <ul class="check">
+        <li>№4 палитра из токенов, dark-паритет; <code>rally3d/scene.js</code> не тронут</li>
+        <li>№3, №7 lazy three, без GLB, без теней, DPR-бюджет, IO/visibility-пауза</li>
+        <li>№5 reduced-motion как статичный кадр, WebGL-фолбэк, kill-switch</li>
+        <li>№9 секция «Виды спорта», eyebrow-лейблы, чередование материала секций</li>
+        <li>№10 LIVE → коралловый (пилюля, точка, live-пара), лайм — мяч и счёт</li>
+        <li>№12 <code>scroll-margin-top</code> под шапку; №13 мобильный визуал; №16 preconnect</li>
+        <li>№21 микро-хореография: reveal каскадом, tilt, живой счёт на табло</li>
+      </ul>
+    </article>
+    <article class="card">
+      <p class="eyebrow eyebrow--purple">Следующие шаги (не сделано)</p>
+      <ul class="todo">
+        <li>№8 display-типографика: h1 увеличен до 4rem, но полный тир (лайм-маркер акцента, h2 3.25rem) — впереди</li>
+        <li>№12 шапка: состояние <code>--scrolled</code>, <code>scrollBehavior</code> в роутере</li>
+        <li>№15 skip-link, <code>&lt;main&gt;</code> в HomeView, чипы-якоря ≤ 960</li>
+        <li>№17, №20 demo-строки в i18n, <code>lang</code> при смене локали, meta description / OG-image</li>
+        <li>№18 токен <code>--info</code> с dark-вариантом; №9 bento-раскладка фич</li>
+        <li>Замеры: Playwright-сценарий «/», бюджеты в CI, проверка на Intel Iris / iPad</li>
+      </ul>
+    </article>
+  </div>
+</section>
+
+
+<div class="layout">
+  <nav class="toc" aria-label="Содержание">
+    <p class="eyebrow">Содержание</p>
+    <a class="status-link" href="#status">Статус реализации</a>
+    <a href="#1-резюме">Резюме</a><a href="#2-что-сейчас">Что сейчас</a><a href="#3-находки-ревью">Находки ревью</a><a href="#4-рекомендуемая-концепция-подача-lean-25d-один-webgl-герой">Рекомендуемая концепция: «Подача» (Lean 2.5D + один WebGL-герой)</a><a href="#5-почему-эта-а-не-другие">Почему эта, а не другие</a><a href="#6-техническая-реализация">Техническая реализация</a><a href="#7-бюджет-производительности-и-guardrails">Бюджет производительности и guardrails</a><a href="#8-доступность-и-ux-правила-для-3d-скролла">Доступность и UX-правила для 3D-скролла</a><a href="#9-риски-и-как-снимаем">Риски и как снимаем</a><a href="#10-roadmap-по-фазам">Roadmap по фазам</a>
+  </nav>
+  <article class="review">
+    <p class="eyebrow">Независимое ревью</p>
+    <h2 id="1-резюме">1. Резюме</h2>
+<p>Текущий лендинг (<code>src/views/HomeView.vue</code>, CSS-блок <code>src/styles.css:270-950</code>) оцениваю на <strong>5/10</strong>: аккуратный, семантически корректный, с рабочей тёмной темой и i18n, но читается как шаблонный SaaS 2023 года — плоский кремовый фон, три ряда одинаковых белых карточек, единственная анимация — пульс точки LIVE (<code>styles.css:419-430</code>), на мобильных визуал скрыт полностью (<code>styles.css:932-934</code>). Главный вывод: «вау» не получить, просто вставив three.js в <code>.landing-hero__visual</code> — сначала нужно перестроить hero в трек-сцену со sticky, назначить фирменным цветам роли (lime = энергия/счёт, coral = только LIVE, purple = завершено), дать секциям ритм и добавить отсутствующую секцию «Виды спорта» (ссылка в nav сейчас ведёт на <code>#features</code>, <code>HomeView.vue:37</code>). Существующая 3D-инфраструктура <code>src/lib/rally3d</code> хороша для live-модала, но на лендинг напрямую не переносится: тёмная захардкоженная палитра, фиксированная камера без API прогресса, безусловный rAF-цикл, PCF-тени. Рекомендуемая концепция — <strong>«Подача» (Lean 2.5D + один WebGL-герой)</strong>: одна WebGL-сцена в hero (лаймовый мяч, скраббируемый скроллом, влетает в парящее табло), всё остальное — нативные CSS scroll-driven animations и CSS 3D, +0 npm-зависимостей. Победила у 2 из 3 судей (50 и 58 баллов) как единственная концепция, которую один разработчик реально доводит до продакшена. Оценка: <strong>10-12 рабочих дней</strong>, MVP-«вау» (hero) — 5 дней, точка принятия решения о фазе 2 — после показа прототипа.</p>
+<p>Важно: в рабочей копии уже лежит untracked-черновик другой архитектуры (<code>src/lib/landing3d/world.js</code> 411 строк, <code>src/components/landing/LandingScene3D.vue</code>, правки <code>HomeView.vue</code>/<code>styles.css</code>/<code>messages.js</code>) — fixed-канвас на весь вьюпорт с непрерывным rAF. Его нужно осознанно ужать до hero-сцены, а не достраивать.</p>
+<h2 id="2-что-сейчас">2. Что сейчас</h2>
+<p><strong>Сильные стороны</strong></p>
+<ul>
+<li>Семантика: один h1, h2 на секциях, h3 в карточках; demo-card с <code>aria-hidden</code> (<code>HomeView.vue:69</code>); глобальный focus-visible (<code>styles.css:195-203</code>); кнопки &gt;= 44px.</li>
+<li>Контраст AA: <code>--muted</code> #5E6B64 на <code>--bg</code> #F7F7F4 = 5.20:1; лайм #C6F24E на #101512 = 14.25:1; тёмная тема ещё лучше.</li>
+<li>Токены и тёмная тема через <code>:root[data-theme='dark']</code> (<code>styles.css:84-141</code>), pre-paint скрипт в <code>index.html</code>.</li>
+<li>Готовая 3D-база: three@0.185.1 уже в зависимостях и уже вынесен в отдельный чанк (three.module-*.js ~153-156 KB gzip); <code>COURT</code>, <code>makeBlobShadowTexture</code>, <code>buildRacket</code>, <code>maxNetworkTier/withTimeout</code>, паттерн монтирования/dispose в <code>LiveRallyScene3D.vue:77-144</code>.</li>
+<li>Untracked <code>src/lib/landing3d/objects.js</code> (465 строк) и <code>palette.js</code> — palette-aware билдеры мяча/сетки/корта/тени, переиспользуемы как есть.</li>
+</ul>
+<p><strong>Слабые стороны</strong></p>
+<ul>
+<li>Hero — grid 1fr/1fr, <code>min-height: min(92vh, 860px)</code>, статичная <code>.demo-card</code> 460px на плоском фоне (<code>styles.css:343-352, 433-441</code>): нет пола, света, горизонта — 3D-объект будет «стикером».</li>
+<li>Типографика без display-уровня: h1 максимум 56px (<code>styles.css:383-391</code>), h2 максимум 38px, акцент h1 в <code>--primary</code> (тот же цвет, что кнопка рядом), нет mono-eyebrow, три одинаковых центрированных хедера.</li>
+<li>Цвета спят: lime используется 1 раз (<code>styles.css:578</code>), LIVE-пилюля зелёная вместо coral (<code>styles.css:418-425, 457-468, 493-496</code>), <code>--info</code> #1570EF захардкожен без dark-варианта (<code>688-691</code>).</li>
+<li>Нет скролл-драматургии: ни sticky, ни IntersectionObserver, ни трека прогресса; CTA дословно повторяет hero (<code>messages.js:37</code> = <code>:93</code>).</li>
+<li>Мобильные &lt;= 640 не видят визуал вовсе; шапка не реагирует на скролл; якоря бьют под шапку; <code>&lt;nav&gt;</code>/<code>&lt;footer&gt;</code> внутри <code>&lt;main&gt;</code> (<code>App.vue:118-125</code>).</li>
+<li>Demo-строки захардкожены по-русски (<code>HomeView.vue:71-110</code>), нет <code>&lt;meta description&gt;</code>/OG-тегов, шрифты через <code>@import</code> без preconnect (<code>styles.css:1</code>).</li>
+</ul>
+<h2 id="3-находки-ревью">3. Находки ревью</h2>
+<p>Дубликаты между линзами объединены; все находки подтверждены проверкой кода. Опровергнутых находок нет; уточнения (номера строк, преувеличенные пункты) внесены в текст.</p>
+<div class="table-wrap"><table><thead><tr><th>#</th><th>Sev</th><th>Находка</th><th>Где</th><th>Почему важно для WOW</th><th>Что делать</th></tr></thead><tbody>
+<tr><td>1</td><td>blocker</td><td>Hero — статичная карточка на плоском фоне, нет сцены и трека для pin/scrub; <code>align-items:center</code> + capped min-height дают sticky нулевой ход</td><td><code>HomeView.vue:50-114</code>; <code>styles.css:343-352, 412-416, 433-441</code></td><td>Без слоя-сцены (пол/свет/горизонт) и трека прогресса камере некуда привязаться; hero уедет из кадра за один экран</td><td><code>.hero-track{height:150-200vh}</code> → <code>.hero-stage{position:sticky;top:0;height:100svh}</code> → <code>.hero-scene{position:absolute;inset:0 0 0 38%}</code>; убрать <code>min-height: min(92vh,860px)</code>; <code>.landing{overflow-x:clip}</code>; <code>::before 100vw</code> (<code>606-616</code>) → <code>margin-inline: calc(50% - 50dvw)</code></td></tr>
+<tr><td>2</td><td>blocker</td><td>Нет скролл-драматургии и нарративной арки: каталог из 6 равных карточек, CTA повторяет hero, главная фича (live для зрителей) не выбрана</td><td><code>HomeView.vue:49-232</code>; <code>messages.js:32-94</code></td><td>3D без сюжета — декор; скроллу нужна причина</td><td>Арка «подача → полёт → очко → турнир → ваш турнир»; scrub только для камеры/мяча/счётчиков, trigger — текст и карточки, pin — только hero и «Три шага» (&lt;= 200vh)</td></tr>
+<tr><td>3</td><td>blocker</td><td>three нельзя тянуть статически; GLB 2.27 MB и <code>maxNetworkTier()</code> на Safari → 'characters'</td><td><code>router/index.js:6</code>; <code>networkTier.js:18</code>; <code>skinnedActor.js:16</code>; dist: three-чанк ~153 KB gz, HomeView 2.5 KB gz</td><td>Удвоение JS первого экрана убьёт LCP — анти-вау</td><td>Ленивый <code>import()</code> из <code>requestIdleCallback</code> после <code>load</code> с гейтами; только процедурная геометрия, никакого GLB; <code>manualChunks {three:['three']}</code>; CI-гардрейл</td></tr>
+<tr><td>4</td><td>blocker</td><td>Палитра/туман/свет <code>rally3d/scene.js</code> захардкожены под тёмный модал; <code>createWorld(container)</code> без опций; <code>PALETTE</code> не экспортируется</td><td><code>scene.js:13-20, 37, 41, 152-161, 170, 185-191</code></td><td>На кремовом фоне грунт 32×15 м станет тёмной дырой</td><td>Не трогать scene.js (регресс модала); использовать <code>landing3d/objects.js</code> + <code>palette.js readPalette()</code> из CSS-токенов, <code>watch(theme)</code> из <code>lib/theme.js:4</code></td></tr>
+<tr><td>5</td><td>blocker</td><td>Reduced-motion/no-WebGL путь для 3D не покрыт: глобальное CSS-правило гасит только CSS-анимации, не rAF и не scroll-driven; smooth-scroll не отключается</td><td><code>styles.css:143-151, 159-161</code>; <code>HomeView.vue:15-17</code>; прецедент <code>LiveScoreViewerModal.vue:17-38</code></td><td>Пользователи с «Уменьшить движение» получат полную анимацию; пустой hero под reduce — сломанный вид</td><td><code>useMotionPrefs</code> (matchMedia + change, webgl, tier, lowPower, <code>champ_motion</code>); режимы full/static3d/css3d/static; явный <code>animation:none</code> для <code>.landing</code> под reduce; <code>html[data-motion]</code> в inline-скрипте</td></tr>
+<tr><td>6</td><td>major</td><td><code>updateCamera</code> — фиксированный ракурс, <code>RallyDirector</code> — необратимый dt-интегратор; API прогресса нет</td><td><code>director.js:109-126, 308-311, 381-424</code>; <code>LiveRallyScene3D.vue:82</code></td><td>Скролл-камера — суть эффекта; отмотка director рассыпается</td><td>Не импортировать director на лендинге; новый <code>cameraRig.js</code> (2 ключа az/el/r + smoothstep) и <code>ballFlight.js</code> (чистая функция от p)</td></tr>
+<tr><td>7</td><td>major</td><td>Рендерер на контейнер, безусловный rAF, DPR 2 + MSAA + PCF 1024, castShadow на каждом меше</td><td><code>scene.js:152-157, 175-182</code>; <code>player.js:61,114,126,134,164…</code>; <code>LiveRallyScene3D.vue:77-105</code></td><td>Full-viewport 5 Mpx + shadow-pass = провал fps на iGPU и нагрев</td><td>Один canvas в потоке hero, render-on-demand (0 кадров в покое), DPR ≤ 1.5 по пиксельному бюджету, shadowMap off, blob-тени, IO start/stop</td></tr>
+<tr><td>8</td><td>major</td><td>Типографика без display-тира и ритма; акцент h1 = цвет CTA</td><td><code>styles.css:383-395, 619-631, 734-742, 772-779</code></td><td>Сцена «съест» копирайт, страница останется шаблоном</td><td>h1 <code>clamp(3rem,7.5vw,6rem)/0.96/-0.035em</code>, accent <code>display:block</code> с лайм-маркером; <code>.landing-section__eyebrow</code> (JetBrains Mono, uppercase, <code>.14em</code>); h2 <code>clamp(2rem,4.5vw,3.25rem)</code>; двухколоночный хедер с чередованием</td></tr>
+<tr><td>9</td><td>major</td><td>Три секции одного материала; нет секции «Виды спорта»; иконки default/success идентичны, <code>--info</code> вне палитры</td><td><code>styles.css:595-617, 642-654, 715-727, 761-791</code>; <code>HomeView.vue:36-37</code></td><td>3D нужен «дом» — ритм тёмных/светлых полос; мультиспорт — центральное обещание, но не показан</td><td>Bento features (6 колонок, 2 героические плитки), новая <code>#sports</code>, тёмная полоса <code>--ink</code> для «Трёх шагов», лаймовая CTA-панель; токен <code>--info</code> + dark-вариант</td></tr>
+<tr><td>10</td><td>major</td><td>Цвета без ролей: lime 1 раз, LIVE зелёный, purple не для «завершено», <code>--glow-gold</code> no-op</td><td><code>styles.css:30, 33-35, 64 (+818, 1421), 393-395, 418-425, 457-468, 493-496, 508-511, 578</code></td><td>Без роли lime/coral сцена — «зелёный корт на кремовом», та же generic-картинка</td><td>lime = мяч/счёт/прогресс/CTA; coral только LIVE (<code>.demo-card__live</code>, <code>.live-dot</code>, <code>.demo-pair--live</code>); purple <code>.demo-slot--win</code>; токены <code>--ink/--on-ink/--glow-lime/--stage-light</code>; удалить <code>--glow-gold</code> вместе с 2 ссылками</td></tr>
+<tr><td>11</td><td>major</td><td>Нет глубины: одна постоянная тень, 0 градиентов, стекло только в nav; тени DOM вертикальные, свет сцены под углом</td><td><code>styles.css:61-63, 241, 287, 439, 648-659, 721-732</code>; <code>scene.js:173-174</code></td><td>Карточки и сцена спорят за один z-уровень</td><td>Три слоя: L0 сцена + <code>--stage-light</code>, L1 карточки с <code>--shadow-card</code> (многослойная + inset), L2 <code>.glass</code> для табло/LIVE; свет сцены слева-сверху</td></tr>
+<tr><td>12</td><td>major</td><td>Шапка не реагирует на скролл, blur над WebGL — двойной композитинг; якоря под шапку; smooth-scroll прогонит через пин; нет <code>scrollBehavior</code></td><td><code>styles.css:280-289, 159-161</code>; <code>HomeView.vue:15-17, 35-37</code>; <code>router/index.js:14-68</code></td><td>Пин + smooth якорь = «промотка кино» за 0.5 с; blur над canvas стоит GPU каждый кадр</td><td>Прозрачная база + sentinel/IO → <code>.landing-nav--scrolled</code>; <code>scroll-margin-top:88px</code>; <code>scrollBehavior</code> в роутере (instant до конца трека, затем smooth ≤ 1 экран); снять <code>scroll-behavior</code> с html</td></tr>
+<tr><td>13</td><td>major</td><td>Мобильные &lt;640 не видят визуал; на 640-960 сцена окажется под текстом и вытолкнет CTA</td><td><code>styles.css:875-909, 932-934</code></td><td>Мобильный трафик (ссылка в чат) — основной; «вау» увидит только десктоп</td><td>Tier css3d: компактная <code>.demo-card</code> с <code>order:-1; max-height:42svh</code>, CSS 3D по view(); 641-1024 — lite3d без envMap; three не грузится &lt;641</td></tr>
+<tr><td>14</td><td>major</td><td>iOS/мобильный GPU: resize-шторм при схлопывании тулбара, нет <code>webglcontextlost</code>/<code>failIfMajorPerformanceCaveat</code>, тиринг только по сети</td><td><code>scene.js:152, 200-205</code>; <code>LiveRallyScene3D.vue:131</code>; <code>networkTier.js:12-27</code></td><td>Рывки на каждом изменении innerHeight, чёрный прямоугольник при потере контекста</td><td><code>100svh</code>, denom из <code>offsetHeight</code>; фильтр resize &lt;150px по высоте на <code>(pointer:coarse)</code>; <code>webglcontextlost</code> → css3d; <code>deviceMemory</code>/<code>hardwareConcurrency</code> в тиринг</td></tr>
+<tr><td>15</td><td>major</td><td>Навигация/лендмарки: дублирующий якорь, <code>.prevent</code> без hash/фокуса, нет nav ≤ 960, <code>&lt;nav&gt;/&lt;footer&gt;</code> внутри <code>&lt;main&gt;</code>, нет skip-link</td><td><code>HomeView.vue:15-17, 23-47, 235</code>; <code>styles.css:902-904</code>; <code>App.vue:118-125</code></td><td>С длинным pinned-hero клавиатурный путь удлиняется на всю сцену</td><td>Чистые <code>href="#…"</code>, <code>&lt;section tabindex="-1"&gt;</code> + <code>focus({preventScroll:true})</code>, чипы-якоря под hero ≤ 960, <code>&lt;main id="main"&gt;</code> в HomeView, skip-link, бренд — ссылка на «/»</td></tr>
+<tr><td>16</td><td>major</td><td>Шрифты через <code>@import</code> без preconnect: трёххоповая цепочка, сдвиг h1 при swap</td><td><code>styles.css:1</code>; <code>index.html:3-21</code></td><td>Layout shift в hero → ResizeObserver пере-resize-ит WebGL после старта</td><td><code>&lt;link rel=preconnect&gt;</code> ×2 + <code>&lt;link rel=stylesheet&gt;</code> в head; далее self-host woff2 с size-adjust</td></tr>
+<tr><td>17</td><td>minor</td><td>Паритет: <code>.demo-card__bar</code> #101512 сливается с dark <code>--bg</code>; demo-тексты по-русски; <code>&lt;html lang&gt;</code> не меняется при смене locale; LT-заголовок в 1.5× длиннее</td><td><code>styles.css:557-583, 87</code>; <code>HomeView.vue:71-110</code>; <code>index.html:2</code>; <code>messages.js:1378-1379</code></td><td>При pinned 100svh LT-версия переполнит hero на 1280×720</td><td>Токены <code>--ink/--on-ink</code>, i18n <code>home.demo.*</code>, <code>document.documentElement.lang</code>, <code>:root:lang(lt) .landing-hero__title{font-size:clamp(2.2rem,4.8vw,3.1rem)}</code></td></tr>
+<tr><td>18</td><td>minor</td><td>Контраст/размер: LIVE-пилюля 10.4px, дефис 3.31:1, <code>--info</code> 3.65:1 в dark</td><td><code>styles.css:460, 581-583, 688-691</code></td><td>Табло станет 3D-объектом — ошибки запекутся</td><td><code>0.75rem</code>; <code>var(--disabled)</code>; токен <code>--info</code> + dark <code>#6FA8FF</code></td></tr>
+<tr><td>19</td><td>minor</td><td>Три CTA с разными подписями → один OAuth (полный редирект, не попап); <code>home.hero.note</code> дублируется</td><td><code>HomeView.vue:11-13, 42-44, 59-61, 66, 227-230</code></td><td>Первый экран должен вести в одну точку</td><td>Hero — primary + микрокопия «Вход через Google · без карты», шапка — outline «Войти», нижняя CTA — новый текст</td></tr>
+<tr><td>20</td><td>minor</td><td>Мёртвые i18n-строки (<code>home.description</code> про «теннисные турниры», <code>home.player.*</code>, <code>home.admin.title/description</code>), нет meta description/OG</td><td><code>messages.js:21-31</code>; <code>index.html</code> head</td><td>Ссылкой будут делиться — пустое превью убивает первый контакт</td><td>Переписать <code>home.description</code> под мультиспорт → <code>&lt;meta name=description&gt;</code> + <code>og:*</code>; og:image статичный PNG 1200×630</td></tr>
+<tr><td>21</td><td>opportunity</td><td>Нет микро-хореографии входа: всё появляется одним кадром, счёт 40 — 30 мёртв, <code>.btn</code> не анимирует transform</td><td><code>HomeView.vue:51-112</code>; <code>styles.css:433-441, 557-563, 1485-1500</code></td><td>Тяжёлая сцена рядом с «прыгнувшим» контентом читается как недоделка</td><td>Load-sequence (бейдж → h1 → sub → CTA → note, 600ms, delay 80ms шаг), слот-машина цифр, <code>.btn:active{scale(.97)}</code>, magnetic только в CTA</td></tr>
+<tr><td>22</td><td>opportunity</td><td>Нет доказательств продукта: рукописный мок, ни одного реального компонента, цифр</td><td><code>HomeView.vue:69-112</code></td><td>После эмоционального пика нужен бит «докажи»</td><td>Секция <code>#proof</code>: <code>BracketBoard.vue</code> на фикстурах + mono-счётчики «3 спорта · 4 формата · 3 языка · 0 ₽»</td></tr>
+<tr><td>23</td><td>opportunity</td><td>Нет измерений и CI-гардрейлов; Playwright не установлен; харнес только для <code>/tournaments/perf-cup</code></td><td><code>tests/manual/mobile-performance.playwright.js:65</code>; <code>.github/workflows/ci.yml</code> job build</td><td>Бюджет «размоется за месяц»</td><td><code>scripts/check-bundle-budgets.mjs</code> в ci.yml сразу; сценарий <code>/</code> в ручном харнесе; kill-switch <code>?no3d</code></td></tr>
+</tbody></table></div>
+<h2 id="4-рекомендуемая-концепция-подача-lean-25d-один-webgl-герой">4. Рекомендуемая концепция: «Подача» (Lean 2.5D + один WebGL-герой)</h2>
+<p><strong>Нарратив.</strong> Главный герой страницы — один мяч в фирменном лайме <code>--lime</code> #C6F24E. В hero он лежит у сетки (низкая камера, корт растворяется в кремовом фоне), и пользователь буквально ведёт его скроллом: мяч поднимается, перелетает сетку с трейлом, отскакивает и влетает в парящее табло — DOM-карточка <code>.demo-card</code> наклоняется, коралловая пилюля LIVE вспыхивает, чёрная плашка перебрасывает <code>40 — 30</code> в <code>Ad — 40</code>. Это единственная three.js-сцена. Дальше мяч «выходит» из WebGL и живёт в CSS: в bento-плитках — коралловая точка live и лаймовые цифры-одометр, рядом сама дорисовывается сетка; в <code>#sports</code> он расщепляется на теннисный, падел-паддл и футбольный; в тёмной полосе «Три шага» появляется на экране устройства как финальный лаймовый счёт; в CTA докатывается до кнопки «Собрать сетку за пять минут». Арка: подача → полёт → очко → турнир → ваш турнир. Правило: scrub — камера, мяч, прогресс-линии, счётчики; trigger — текст и карточки; pin — hero (150vh, сокращён по графту [1]) и «Три шага» (160vh).</p>
+<p><strong>Сториборд</strong> (пометка «graft [N]» — идея, пересаженная судьями из концепции N):</p>
+<div class="table-wrap"><table><thead><tr><th>Секция</th><th>Диапазон скролла</th><th>Что видит пользователь</th><th>Движение</th><th>3D-элементы</th><th>Мобильный (&lt;640)</th><th>Reduced-motion</th></tr></thead><tbody>
+<tr><td>0. Nav <code>.landing-nav</code></td><td>Вся страница, <code>scroll(root)</code></td><td>Прозрачная база над hero; после 24px — <code>.landing-nav--scrolled</code> (header-bg, blur 16px, border, padding 16→10px); 2px лаймовая полоса прогресса снизу; бренд — ссылка на «/»; «Виды спорта» → <code>#sports</code>. graft [3]: без backdrop-filter над WebGL</td><td>Полоса: <code>animation: grow linear both; animation-timeline: scroll(root)</code> — 0 JS. Состояние — <code>.nav-sentinel</code> (top 24px) + IO. Шапку не прятать, только компактить</td><td>Нет. Рядом с ThemeToggle — <code>MotionToggle</code> «Анимация: вкл/выкл» (graft [2])</td><td>Ссылки скрыты, под hero три чипа-якоря</td><td>Полоса остаётся, переходы только цвет/opacity 180ms</td></tr>
+<tr><td>1. Hero «Подача» <code>.hero-track</code></td><td>Трек 150vh, sticky 100svh; p 0-0.10 замах, 0.10-0.72 полёт, 0.72 удар в табло, 0.72-1 табло стыкуется; текст hero уходит opacity на p 0.7→0.9</td><td>Слева: badge, h1 display-размера с лайм-маркером на «за пять минут», sub, CTA, note. Справа/фон: <code>.hero-scene{position:absolute;inset:0 0 0 38%;z-index:0;pointer-events:none}</code> с canvas; скрим <code>linear-gradient(90deg,var(--bg) 0 46%,transparent 70%)</code> + <code>--stage-light</code>; светлая палитра из токенов (<code>readPalette()</code>: bg → clearColor, primary → линии, lime → мяч). L2: <code>.demo-card</code> как парящее табло — tilt <code>rotateX(6deg) rotateY(-8deg)</code>, тень <code>0 32px 64px -24px rgba(20,32,27,.25)</code>, LIVE в coral, сыгранный полуфинал в purple; тексты из <code>home.demo.*</code></td><td>Камера <code>cameraRig.js</code>: p=0 az π/2+0.10, el 0.16, r 10.0, target (0,0.6,0) → p=1 az π/2−0.30, el 0.32, r 11.5, target (0,0.9,1.2): yaw 23°, pitch 9°, dolly 15%. Демпфер <code>p += (t−p)·(1−exp(−8dt))</code>. Мяч <code>ballFlight.js</code>: парабола (−9.5,1.05,−1.2) → апекс (0,2.1,−0.2) → отскок (7.5,0.13,0.8) на p 0.72 → хоп к точке из <code>.demo-card__bar</code> через <code>camera.unproject</code> (graft [3]). Трейл InstancedMesh(24), scale 0.10→0.02, цвет lerp lime→bg. <code>.is-hit</code> при p ≥ 0.72 (гистерезис 0.68) → слот-машина цифр 220ms. Pointer (pointer:fine): орбита ±0.10/±0.05 рад. Load-sequence CSS: бейдж → h1 → sub → CTA → note, 600ms <code>cubic-bezier(.22,1,.36,1)</code>, delay 0/80/160/240/320. graft [1]: опционально ракетка <code>buildRacket(KITS.a)</code> падает и качается пружиной у столба на p 0-0.10</td><td>three: <code>makeTennisBall</code> (lime + шов, emissive 0x9BD02A ×0.3), трейл, <code>makeNet</code>, линии корта геометрией по <code>COURT</code>, <code>makeBlobShadow</code>. ≤ 8 draw calls, ≤ 15k треугольников, 0 теней, 0 GLB. CSS 3D: <code>.demo-card</code></td><td>three не грузится. Tier css3d (graft [2]): <code>.landing-hero__visual{order:-1;max-height:42svh}</code> — компактная <code>.demo-card</code> (head + live-pair + bar) с <code>perspective(1000px) rotateX</code> по view(), CSS-мяч 40px вкатывается в плашку, счёт переключается по IO once. 640-1024: lite3d — без envMap, DPR ≤ 1.25, static или без pin</td><td><code>html[data-motion=reduced]</code>: трек <code>height:auto</code>, sticky снят, один render при p=0.42 («пресс-кадр», graft [0]: мяч над сеткой с трейлом, табло уже <code>Ad — 40</code>), rAF не стартует; без WebGL — css3d в финальном состоянии</td></tr>
+<tr><td>2. Возможности <code>#features</code></td><td>Trigger; плитки <code>view()</code> entry 10%→70%, stagger 4% через <code>--i</code>; мини-сцены cover 20-60%</td><td>Двухколоночный хедер: eyebrow <code>01 — ВОЗМОЖНОСТИ</code> + h2 слева, subtitle справа. Bento <code>repeat(6,1fr)</code>, <code>perspective:1400px</code>: героические плитки span 3 / row 2 — «Автоматическая сетка» (SVG-дерево 8→4→2→1) и «Live-счёт» (<code>--ink</code> #101512, лаймовые цифры 6 : 5, coral LIVE — graft [2]); 4 обычные с <code>--shadow-card</code>. Иконки в ролях бренда</td><td><code>tile-in</code>: <code>translate3d(0,48px,-160px) rotateX(10deg)</code> → none. Сетка: <code>pathLength=1</code>, <code>stroke-dashoffset 1→0</code> по view(). Одометр цифр <code>steps(6)</code>. Пульс LIVE-точки <code>box-shadow 0 0 0 4px rgba(255,90,72,.18)</code> — единственная бесконечная анимация. Параллакс соседних плиток ±12px</td><td>Только CSS 3D</td><td>1 колонка (2 на 640-960), rotateX/translateZ → translateY 24px + opacity; одометр и сетка остаются</td><td><code>animation:none</code> — финальные состояния, LIVE-точка сплошная</td></tr>
+<tr><td>3. Виды спорта <code>#sports</code> (новая)</td><td>Trigger + лёгкий scrub: вращение по <code>view()</code> cover 0-100%</td><td>Eyebrow <code>02 — ВИДЫ СПОРТА</code>, h2 «Теннис, падел, футбол — одна сетка на всех» (выравнивание справа). Три плитки 3×1 (340px) с CSS-мячами 160px: теннис radial-gradient lime + SVG-шов; падел-паддл (SVG teardrop с hex-перфорацией); футбол #F4F5F2/#14201B с пятиугольниками. graft [2]: под мячами реальные форматы счёта — «6·4 7·5», «6·3 4·6 [10-7]», «2 : 2 · пен. 4:3» с подписью «итоговый счёт по голам, пенальти в плей-офф» (football <code>supportsLiveScoring:false</code>, <code>sportConfig.js:39</code>). Ниже <code>sportTagline</code>/<code>formatTagline</code> чипы (<code>messages.js:350-366</code>). graft [0]: чипы — реальные <code>&lt;button aria-pressed&gt;</code></td><td>Слой шва <code>rotate3d</code> 0→1turn по view(); паддл <code>rotateY −22°→22°</code> + float; hover bounce <code>translateY(-18px)</code> spring 600ms. Вход — <code>tile-in</code></td><td>Ноль WebGL в v1. graft [1] как фаза 2: настоящие мячи (<code>makeTennisBall/makePadelRacket/makeFootball</code> уже в <code>world.js:118-130</code>) через <code>setScissor</code> того же renderer, если radial-gradient на демо читается дёшево</td><td>Столбик, мячи 120px, вращение остаётся</td><td>Мячи в «красивом» ракурсе (шов 30°, паддл 15°), плитки видны сразу</td></tr>
+<tr><td>4. Три шага <code>#how-it-works</code></td><td>Трек 160vh, sticky top 88px; сегменты 01 = 0-0.30, 02 = 0.36-0.63, 03 = 0.69-1 (полки 6%)</td><td><code>.landing-section--dark{background:var(--ink);color:var(--on-ink);margin-inline:calc(50% − 50dvw)}</code>. Слева eyebrow <code>03 — КАК ЭТО РАБОТАЕТ</code>, h2 «Три шага, которые вы только что видели», три <code>.step-card</code> с фоновой цифрой <code>clamp(4rem,8vw,7rem)</code> stroke-only, лаймовый рейл 2px. Справа sticky устройство <code>.hiw-device</code> (glass на ink) с экранами: 01 спорт-чипы + формат, 02 ссылка + QR + имена впечатываются в слоты, 03 <code>.demo-card__bar</code> лайм <code>40 — 30 → Ad — 40</code> + coral LIVE</td><td>v1 (по замечанию feasibility): экраны переключаются IO <code>threshold .6</code> → `data-active="1</td><td>2</td><td>3"<code>, transition 400ms; named </code>view-timeline<code>/</code>timeline-scope<code> — фаза 2 после проверки Safari 26.x (в концепте была ошибка: </code>timeline-scope<code> на потомке трека не работает — если использовать, то на общем предке). Активная цифра stroke → залитая lime, остальные шаги opacity .35. graft [0]: шаги — </code>&lt;button aria-pressed&gt;`, переключают экран по клику/фокусу</td><td>Нет WebGL; CSS 3D устройство <code>perspective(1600px) rotateY(-6deg→0)</code></td><td>Без sticky: каждый шаг со своим мини-экраном в финальном состоянии; цифры 3.5rem</td><td>Sticky снят, три экрана рядом со шагами, рейл заполнен</td></tr>
+<tr><td>5. CTA <code>.landing-cta</code></td><td>Trigger <code>view()</code> entry 0-90%</td><td>Панель <code>background:var(--lime);color:var(--ink);border-radius:32px;padding:72px</code> + паттерн линий корта (dark: ink-панель с lime). h2 «Следующий чемпионат — ваш», кнопка «Собрать сетку за пять минут», note «Первый турнир — за 5 минут · вход через Google». CSS-мяч 56px слева от кнопки</td><td>Мяч <code>translateX(-60vw) rotate(-2turn)</code> → 0 с замедлением (70%: −6vw), blob-тень растёт; magnetic-кнопка (~20 строк, pointer:fine, радиус 80px, смещение ≤ 6px); <code>.btn:active{scale(.97)}</code></td><td>Нет. graft [1] фаза 2: кубок LatheGeometry + PMREM (только после замеров)</td><td>padding 40px, мяч 40px с −40vw, магнит off</td><td>Мяч у кнопки, панель видна сразу</td></tr>
+<tr><td>6. Доказательства <code>#proof</code> (graft [0]/[2], полдня, без 3D)</td><td>Trigger, IO once</td><td>Eyebrow <code>ДОКАЗАТЕЛЬСТВА</code>, h2 «Это не рендер — это ваш турнир в субботу»; реальный <code>BracketBoard.vue</code> на фикстурах (8 участников, 2 finished + 1 live) + mono-счётчики «3 спорта · 4 формата · 3 языка · 0 ₽ · зрителям — без аккаунта», фон <code>--bg-elevated</code></td><td>Счётчики 0→N за 600-900ms по IO once</td><td>Нет</td><td><code>StandingsTable</code> вместо BracketBoard</td><td>Счётчики стоят на финальных значениях</td></tr>
+</tbody></table></div>
+<p>Порядок секций: hero → features → sports → how-it-works (dark) → proof → CTA → footer.</p>
+<h2 id="5-почему-эта-а-не-другие">5. Почему эта, а не другие</h2>
+<div class="table-wrap"><table><thead><tr><th>Концепция</th><th>Судья 1 (wow/brand/feas/perf/mobile → total)</th><th>Судья 2</th><th>Судья 3</th><th>Вердикт</th></tr></thead><tbody>
+<tr><td>[0] «Один корт» — fixed-канвас за всей страницей, камера едет через весь турнир, морф корта теннис→падел→футбол</td><td>9/8/4/5/6 → 49</td><td>9/7/4/4/6 → 38</td><td>9/8/4/5/5 → 36</td><td>Самый «аввордовский» нарратив, но ~900vh, три пина, transmission-стекло, смешение систем координат, 22-26 дней без гарантии. Идеи пересажены: светлая «чертёжная» палитра, постеры из сцены, «пресс-кадр» под reduce</td></tr>
+<tr><td>[1] «Реквизит» — пять витрин с неподвижными камерами через scissor</td><td>7/7/8/8/7 → 51</td><td>7/8/7/8/7 → 52</td><td>8/8/7/8/8 → 47</td><td>Инженерно зрелый, лучший time-to-value (hero не пинится), но эстетика «спортивного магазина» (кубок, ракетка на столе), canvas НАД DOM ломает будущие модалки. Пересажено: не пинить hero/150vh, реквизит в load-sequence, stageRenderer/scissor как задел, DOM-подписи через <code>camera.project</code></td></tr>
+<tr><td>[2] «Сборка» — табло разбирается на CSS3D-слои и собирается в сетку</td><td>9/9/6/6/7 → 55 (победитель у судьи 1)</td><td>8/8/5/5/6 → 42</td><td>9/9/4/5/6 → 39</td><td>Лучший бренд-фит и «продукт как сцена», но CSS3DRenderer + WebGL от одной камеры: размытие текста, до 20 3D-слоёв, ненадёжный handoff «пиксель в пиксель», 22 дня. Пересажено: тёмная bento-плитка Live, tier-0 CSS 3D той же карточки, MotionToggle, форматы счёта в <code>#sports</code></td></tr>
+<tr><td><strong>[3] «Подача»</strong> — один WebGL-герой + CSS 2.5D</td><td>6/7/9/9/8 → 52</td><td><strong>6/8/9/9/8 → 58</strong></td><td><strong>6/8/9/9/9 → 50</strong></td><td>Победитель 2 из 3. Единственная, которую один разработчик доводит до продакшена за 10-12 дней с +0 зависимостей; мобильные получают живой DOM, а не картинки; архитектура допускает добавление WebGL-витрин через <code>setScissor</code> без переделки. Слабость — скромнее «вау» — закрывается графтами (реквизит в hero, форматы счёта, <code>#proof</code>) и фазой 2</td></tr>
+</tbody></table></div>
+<p>Итог: «Подача» — фундамент, а не потолок. Решение о расширении (WebGL-мячи в <code>#sports</code>, витрина «Сетка собирается сама», кубок) принимается после показа hero-прототипа владельцу с цифрами перф-оверлея.</p>
+<h2 id="6-техническая-реализация">6. Техническая реализация</h2>
+<h3 id="архитектура">Архитектура</h3>
+<ul>
+<li><strong>Одна WebGL-сцена в потоке hero</strong>, не fixed за всей страницей: <code>.hero-scene{position:absolute;inset:0 0 0 38%}</code> внутри sticky <code>.hero-stage</code>; размер canvas от контейнера. <code>WebGLRenderer({antialias:true, alpha:false, powerPreference:'high-performance', stencil:false, failIfMajorPerformanceCaveat:true})</code>, <code>setClearColor(palette.bg)</code>, DPR = <code>min(devicePixelRatio, 1.5, sqrt(2.0e6/(w·h)))</code> (≤ 1.25 при <code>hardwareConcurrency ≤ 4</code>), без shadowMap, <code>NeutralToneMapping</code>; <code>scene.environment = PMREM(RoomEnvironment)</code> только на ≥ 1025px и concurrency &gt; 4.</li>
+<li><strong>Скролл-прогресс</strong> — <code>src/lib/useScrollProgress.js</code> (~70 строк): passive <code>scroll</code> только ставит флаг; в rAF читается <code>window.scrollY</code>; <code>denom = track.offsetHeight − stage.offsetHeight</code> (не <code>innerHeight</code> — иначе скачки на iOS); <code>trackTop</code> кэшируется через <code>ResizeObserver(document.body)</code> и <code>document.fonts.ready</code>; демпфер <code>1 − exp(−8·dt)</code>; rAF живёт пока <code>|target − p| &gt; 5e-4</code> или idle-float (≤ 3 с после ввода, только pointer:fine, cap 30 fps), иначе <code>cancelAnimationFrame</code> — 0 кадров в покое; IO(<code>.hero-track</code>, rootMargin 100px) и <code>document.hidden</code> стартуют/останавливают. Подписчик пишет <code>demoCard.style.transform</code> напрямую (не CSS-переменную <code>--p</code> — та вызывает пересчёт стилей поддерева каждый кадр).</li>
+<li><strong>Палитра из токенов</strong> — <code>landing3d/palette.js readPalette()</code> через <code>getComputedStyle(documentElement)</code>; <code>watch(theme)</code> из <code>lib/theme.js:4</code> → <code>setPalette()</code> обновляет material.color/emissive/clearColor без пересоздания рендерера. В dark <code>--primary-muted</code> — rgba, парсить вручную.</li>
+<li><strong>Ленивая загрузка</strong> — <code>shallowRef</code> + ручной гейт (не <code>defineAsyncComponent</code> в шаблоне): после <code>window 'load'</code> → <code>requestIdleCallback</code> (fallback 1500ms) → гейты → <code>withTimeout(import('../components/landing/HeroScene3D.vue'), 4000)</code> → монтирование, если компонент ещё жив. <code>.demo-card</code> остаётся LCP-плейсхолдером, canvas проявляется cross-fade 400ms.</li>
+<li><strong>DOM-эффекты</strong> — CSS scroll-driven animations под <code>@supports (animation-timeline: view())</code> как прогрессивное улучшение для трёх scrub-эффектов (рисование сетки, вращение мячей, полоса прогресса); базовая ветка — IO (<code>useReveal.js</code>, <code>.is-in</code>, <code>data-active</code>). Порядок строго <code>animation</code> затем <code>animation-timeline</code>. Под reduce — явный <code>animation:none !important</code> для <code>.landing</code> (глобальное правило <code>143-151</code> не гасит progress-таймлайны, и его не трогаем — оно защищает админку).</li>
+</ul>
+<h3 id="что-переиспользуем-из-srclibrally3d">Что переиспользуем из <code>src/lib/rally3d</code></h3>
+<ul>
+<li><code>COURT</code> (<code>scene.js:4-11</code>) — метрики корта для линий; <code>makeBlobShadowTexture</code> (<code>scene.js:102</code>) — приём для тени.</li>
+<li><code>buildRacket(kit)</code>, <code>KITS</code> (<code>player.js:103, 11</code>) — опциональная ракетка в load-sequence (~2 KB gz; castShadow безвреден при выключенном shadowMap).</li>
+<li><code>maxNetworkTier()</code>, <code>withTimeout()</code> (<code>networkTier.js:12-37</code>) — гейт загрузки.</li>
+<li><code>webglAvailable()</code> — вынести из <code>LiveScoreViewerModal.vue:18-24</code> в <code>src/lib/rally3d/capabilities.js</code> с параметром <code>failIfMajorPerformanceCaveat</code> и <code>WEBGL_lose_context</code> после пробы; модал переключить на него.</li>
+<li>Паттерн монтирования/паузы/dispose из <code>LiveRallyScene3D.vue:77-144</code> (dt cap 0.05, <code>document.hidden</code>, проверка <code>if (!container.value) return</code> после await).</li>
+<li><strong>Не используем</strong>: <code>createWorld</code>, <code>updateCamera</code>, <code>RallyDirector</code>, <code>skinnedActor</code>/<code>quaternius.glb</code>. Из untracked <code>landing3d/objects.js</code>: <code>makeTennisBall</code> (добавить опцию <code>emissive</code>; снизить детализацию до <code>SphereGeometry(1,32,24)</code> + шов <code>TubeGeometry(120,8)</code>), <code>makeNet</code>, <code>makeCourtFloor</code> (или линии геометрией), <code>makeBlobShadow</code>, <code>disposeObject</code>; <code>makeBracketTree/makeScoreSlab</code> — резерв фазы 2. <code>world.js</code> и <code>LandingScene3D.vue</code> — удалить (fixed-слой <code>styles.css:3505-3515</code>, <code>3742-3749</code>).</li>
+</ul>
+<h3 id="новые-файлы">Новые файлы</h3>
+<pre><code>src/components/landing/HeroScene3D.vue        # host через ref, prop barEl, emit fallback
+src/components/landing/SportsSection.vue
+src/components/landing/HowItWorksStage.vue    # IO data-active, sticky устройство
+src/components/landing/ProofSection.vue
+src/components/landing/DemoBracketCard.vue    # один источник: hero-табло, bento, css3d
+src/components/landing/MotionToggle.vue
+src/lib/landing3d/heroStage.js                # renderer/lights/env/resize/contextlost/dispose(+forceContextLoss)
+src/lib/landing3d/cameraRig.js
+src/lib/landing3d/ballFlight.js
+src/lib/landing3d/motion.js                   # Spring, Bounce, smoothstep, segment (graft [1])
+src/lib/useScrollProgress.js
+src/lib/useMotionPrefs.js
+src/lib/rally3d/capabilities.js
+src/styles/landing.css                        # импорт только из HomeView → CSS-чанк HomeView
+scripts/check-bundle-budgets.mjs
+tests/manual/landing-performance.playwright.js</code></pre>
+<p>Правки: <code>HomeView.vue</code> (структура секций, гейт), <code>styles.css</code> (токены <code>--ink/--on-ink/--info/--shadow-card/--motion/--z-<em></code>, снятие <code>scroll-behavior</code> :160, удаление <code>display:none</code> :932-934), <code>index.html</code> (<code>data-motion</code>, preconnect, meta/og), <code>router/index.js</code> (<code>scrollBehavior</code>), <code>vite.config.js</code> (<code>manualChunks</code>), <code>i18n/messages.js</code> (<code>home.demo.</em></code>, <code>home.sports.<em></code>, <code>home.eyebrow.</em></code>, <code>home.cta.<em></code>, <code>home.proof.</em></code>), <code>App.vue</code> (без <code>&lt;main&gt;</code> для layout login), <code>.github/workflows/ci.yml</code>.</p>
+<h3 id="библиотеки">Библиотеки</h3>
+<div class="table-wrap"><table><thead><tr><th>Библиотека</th><th>Размер</th><th>Лицензия</th><th>Решение</th></tr></thead><tbody>
+<tr><td>three@0.185.1</td><td>уже в проекте; общий чанк ~153-156 KB gz (по dist)</td><td>MIT</td><td>Используем; <code>three/addons/environments/RoomEnvironment.js</code> ~2 KB gz</td></tr>
+<tr><td>GSAP + ScrollTrigger</td><td>~40 KB gz</td><td>Standard No Charge (бесплатен с 04.2025)</td><td>Не берём: pin делает sticky, scrub — CSS/lerp; вторая система тайминга</td></tr>
+<tr><td>Lenis</td><td>~4 KB gz</td><td>MIT</td><td>Исключён: лерпит виртуальный скролл → ломает sticky, IO, <code>scroll-margin</code>, view()</td></tr>
+<tr><td>TresJS</td><td>+зависимость</td><td>MIT</td><td>Не берём: вторая парадигма рядом с императивным rally3d</td></tr>
+<tr><td>scroll-timeline polyfill</td><td>~10 KB</td><td>Apache-2.0</td><td>Не берём: main-thread, конфликты с нативной поддержкой; Firefox → IO</td></tr>
+<tr><td>Playwright</td><td>devDependency</td><td>Apache-2.0</td><td>Только для CI-job <code>landing-budgets</code> (chromium) — единственная новая dev-зависимость</td></tr>
+</tbody></table></div>
+<p>Итого runtime: <strong>+0 npm-зависимостей</strong>.</p>
+<h3 id="пошаговый-poc-каждый-шаг-проверяем">Пошаговый PoC (каждый шаг проверяем)</h3>
+<ol>
+<li>Зафиксировать черновик: ветка <code>landing-3d-draft</code> с текущими untracked <code>src/lib/landing3d/<em></code>, <code>src/components/landing/</em></code>, <code>src/lib/tilt.js</code>, <code>src/lib/useReveal.js</code> и правками HomeView/styles/messages. Проверка: <code>git stash list</code>/ветка существует, main-ветка чистая.</li>
+<li>Гардрейлы до кода: <code>vite.config.js manualChunks {three:['three']}</code>; <code>scripts/check-bundle-budgets.mjs</code> (gz index ≤ 160 KB, three ≤ 160 KB, HomeView ≤ 8 KB, нет <code>'three.js r'</code> в index/HomeView); шаг в <code>ci.yml</code> job build. Проверка: <code>npm run build &amp;&amp; node scripts/check-bundle-budgets.mjs</code> зелёный; <code>grep -l 'three.js r' dist/assets/*.js</code> → только three-чанк.</li>
+<li>Снос черновика + tier css3d: удалить <code>world.js</code>, <code>LandingScene3D.vue</code>, CSS <code>.landing3d/.landing--3d</code>; снять <code>display:none</code> :932-934; компактная <code>DemoBracketCard</code> с CSS 3D по view() + IO-фоллбек. Проверка: на 390×844 нет запроса three*.js, LCP/CLS — базовая линия.</li>
+<li><code>heroStage.js</code>: renderer по спецификации, свет, объекты из <code>objects.js</code>, линии корта геометрией, dev-оверлей <code>?perf=1</code> (draw calls, треугольники, буфер Mpx, GPU через <code>EXT_disjoint_timer_query_webgl2</code>). Проверка: ≤ 8 draw calls, ≤ 15k треугольников, ≤ 6 мс GPU на Intel Iris; <code>renderer.info.memory</code> после dispose = 0.</li>
+<li><code>useScrollProgress.js</code> + <code>cameraRig.js</code> + <code>ballFlight.js</code>: hero-трек 150vh, парабола, отскок p=0.72, хоп к <code>.demo-card__bar</code>, трейл. Проверка: DevTools Performance — 0 rAF через 4 с покоя; попадание мяча в плашку ±0.15 м на ru/en/lt; iOS Simulator — p не скачет при схлопывании тулбара.</li>
+<li><code>HeroScene3D.vue</code> + гейт в HomeView (<code>shallowRef</code>, idle после load, гейты, <code>withTimeout</code>); init в 3 кадра (renderer → <code>compileAsync</code> → render + cross-fade); <code>webglcontextlost</code> → css3d; <code>watch(theme)</code>; dispose с <code>forceContextLoss</code>. Проверка: <code>PerformanceObserver('longtask')</code> — 0 задач &gt; 50 мс после load; 10 HMR-сохранений без «Too many active WebGL contexts»; переход <code>/</code> → <code>/admin</code> без ошибок.</li>
+<li><code>useMotionPrefs.js</code> + <code>MotionToggle.vue</code> + <code>data-motion</code> в inline-скрипте <code>index.html</code>; явный reduce-блок для <code>.landing</code>; sr-only описание сцены. Проверка: <code>emulateMedia({reducedMotion:'reduce'})</code> → <code>document.getAnimations().length === 0</code> в <code>.landing</code>, один render при p=0.42, переключение на лету без перезагрузки.</li>
+<li>Навигация: чистые <code>href</code>, <code>scrollBehavior</code> в роутере (instant через пин, затем smooth ≤ 1 экран, top 88, behavior по reduce), <code>scroll-margin-top</code>, снять <code>scroll-behavior</code> с html, <code>.landing-nav--scrolled</code> через sentinel/IO, <code>#sports</code> секция-заглушка. Проверка: Tab с шапки → Enter на «Возможности» → фокус на <code>&lt;section tabindex=-1&gt;</code>, hash обновлён, кнопка «Назад» возвращает.</li>
+<li>Демо владельцу (конец недели 1): hero в режимах full/lite3d/css3d/static, цифры оверлея, результаты CI. Точка принятия решения о фазе 2.</li>
+</ol>
+<p><strong>v1 (после «да»)</strong>: bento <code>#features</code> (IO-основа + view() для stroke-dashoffset и одометра), <code>#sports</code> с CSS-мячами и форматами счёта, «Три шага» (IO <code>data-active</code>, тёмная полоса), CTA-панель + магнит, <code>#proof</code>, i18n demo-строк, meta/og, шрифты в head, типографика display-уровня, цветовые роли.</p>
+<p><strong>Polish</strong>: постеры из сцены (<code>scripts/render-landing-posters.mjs</code>, <code>?poster=1</code>, <code>toDataURL</code> → WebP light/dark + og-image), named <code>view-timeline</code> для «Трёх шагов» после проверки Safari 26.5, envMap на lite3d по замерам, WebGL-витрины через <code>setScissor</code> (мячи <code>#sports</code>, «Сетка собирается сама» с <code>makeBracketTree.setAssembly</code> из <code>objects.js:194-270</code>), кубок в CTA, self-host шрифтов с size-adjust.</p>
+<h2 id="7-бюджет-производительности-и-guardrails">7. Бюджет производительности и guardrails</h2>
+<div class="table-wrap"><table><thead><tr><th>Метрика</th><th>Порог</th><th>Как проверяем</th></tr></thead><tbody>
+<tr><td>gz(index-*.js)</td><td>≤ 160 KB (сейчас ~152-156)</td><td><code>scripts/check-bundle-budgets.mjs</code> в CI</td></tr>
+<tr><td>gz(three-*.js)</td><td>≤ 160 KB, порог уточнить после первой сборки hero (+3…8 KB от InstancedMesh/PMREM ожидаемо; при необходимости 165)</td><td>CI</td></tr>
+<tr><td>gz(HomeView-*.js) / landing3d+HeroScene3D / landing.css</td><td>≤ 8 KB / ≤ 12 KB / ≤ 8 KB</td><td>CI</td></tr>
+<tr><td>three в index/HomeView</td><td>строка <code>'three.js r'</code> отсутствует</td><td>CI grep</td></tr>
+<tr><td>three не запрашивается</td><td>viewport &lt; 641, reduce, <code>?no3d</code>, <code>champ_motion=off</code></td><td>Playwright network</td></tr>
+<tr><td>LCP</td><td>≤ 2.5 с Slow 4G + 4× CPU; ≤ 1.8 с desktop; LCP-элемент — h1/<code>.demo-card</code>, не canvas</td><td>Playwright PerformanceObserver</td></tr>
+<tr><td>CLS</td><td>≤ 0.02 (0 от hero)</td><td>Playwright</td></tr>
+<tr><td>INP / long tasks</td><td>≤ 200 мс; ни одной &gt; 50 мс после load</td><td><code>PerformanceObserver('longtask')</code></td></tr>
+<tr><td>Кадр при скролле</td><td>JS ≤ 3 мс, GPU ≤ 6 мс (Intel Iris Xe 1440×900) / ≤ 8 мс (iPad DPR 1.5), медиана ≤ 12 мс</td><td>dev-оверлей <code>?perf=1</code>, Playwright трейс</td></tr>
+<tr><td>Геометрия</td><td>≤ 8 draw calls, ≤ 15k треугольников, буфер ≤ 2.0 Mpx</td><td><code>renderer.info</code>, <code>getDrawingBufferSize()</code></td></tr>
+<tr><td>Покой</td><td>0 кадров/с через 3 с после последнего scroll/pointer</td><td>Playwright rAF-счётчик</td></tr>
+<tr><td>WebGL-память</td><td>≤ 40 MB; после dispose <code>renderer.info.memory</code> = 0</td><td>dev</td></tr>
+<tr><td>Шрифты</td><td>preconnect ×2, <code>&lt;link&gt;</code> в head; ≤ 4 файла above-the-fold</td><td>Lighthouse</td></tr>
+<tr><td>Kill-switch</td><td><code>?no3d</code>, <code>localStorage champ_landing3d=off</code></td><td>ручной</td></tr>
+</tbody></table></div>
+<p><strong>Тиры устройств</strong> (<code>useMotionPrefs</code>):</p>
+<ul>
+<li><strong>full</strong> — ≥ 1025px, WebGL с <code>failIfMajorPerformanceCaveat</code>, не reduce, tier ≠ '2d', <code>deviceMemory ≥ 4</code>: полная сцена + envMap + pointer-орбита.</li>
+<li><strong>lite3d</strong> — 641-1024 или <code>hardwareConcurrency ≤ 4</code>: без envMap, DPR ≤ 1.25, трейл 12, без орбиты, hero без pin на ≤ 960.</li>
+<li><strong>css3d</strong> — &lt; 641, нет WebGL, контекст потерян, таймаут импорта, <code>deviceMemory &lt; 4</code>, saveData/2g: three не грузится, компактная <code>.demo-card</code> с CSS 3D по view()/IO, CSS-мяч; LCP — текст.</li>
+<li><strong>static</strong> — prefers-reduced-motion или <code>champ_motion=off</code>: те же DOM-элементы в финальном состоянии, <code>animation:none</code> на scroll-driven классах, livePulse off, полоса прогресса остаётся; если WebGL уже создан и reduce включён на лету — один кадр p=0.42 без rAF.</li>
+</ul>
+<p><strong>Адаптивная деградация в рантайме</strong>: скользящее среднее dt по 30 кадрам &gt; 24 мс → DPR −0.25 → трейл off → static (один кадр) → css3d. iOS: <code>100svh</code>, denom из <code>offsetHeight</code>, игнор resize с изменением только высоты &lt; 150px на <code>(pointer:coarse)</code>, остальные debounce 150 мс; canvas без <code>border-radius+overflow:hidden</code>.</p>
+<h2 id="8-доступность-и-ux-правила-для-3d-скролла">8. Доступность и UX-правила для 3D-скролла</h2>
+<ol>
+<li><strong>Никакого scroll-hijack</strong>: нет wheel-listener с preventDefault, нет Lenis/smooth-библиотек; нативный скролл + <code>position:sticky</code>; прогресс — функция от scrollY с демпфером.</li>
+<li><strong>Лимиты амплитуд</strong> (WCAG 2.3.3): камера ≤ 23° yaw, ≤ 9° pitch, dolly ≤ 15%, без roll; масштаб объектов ≤ 1.3×; пины ≤ 200vh (hero 150, hiw 160), на ≤ 960 отключены.</li>
+<li><strong>Текст всегда на сплошном фоне</strong>: hero-контент слева под скримом <code>linear-gradient(90deg,var(--bg) 0 46%,transparent 70%)</code> в обеих темах; контраст пар фиксирован: лайм на <code>--ink</code> (14.25:1), никогда лайм на <code>--primary</code> (4.09:1); <code>.demo-card__live ≥ 0.75rem</code>, дефис <code>var(--disabled)</code>.</li>
+<li><strong>Три уровня движения</strong>: токен <code>--motion</code> для новых длительностей внутри <code>.landing</code>; <code>html[data-motion]</code> до первой отрисовки; <code>matchMedia('change')</code> → static на лету; <code>MotionToggle</code> (<code>aria-pressed</code>, <code>localStorage champ_motion</code>) рядом с ThemeToggle; <code>@media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}}</code>.</li>
+<li><strong>Reduce = пресс-кадр</strong>, не пустота: для каждой секции выбран самый богатый статичный кадр; появление только opacity 180-300ms.</li>
+<li><strong>Разметка сцены</strong>: <code>&lt;div class="hero-scene" aria-hidden="true"&gt;&lt;canvas role="presentation" tabindex="-1"&gt;</code> + sr-only абзац с описанием рядом (не внутри aria-hidden); вся смысловая информация (счёт, названия) — в HTML-тексте; DOM-порядок content → visual сохранён.</li>
+<li><strong>Навигация</strong>: чистые <code>href="#…"</code>, <code>scrollBehavior</code> роутера с top 88 и behavior по reduce, instant-прыжок через пин; <code>&lt;section tabindex="-1"&gt;</code> + <code>focus({preventScroll:true})</code>; skip-link; <code>&lt;main id="main"&gt;</code> в HomeView, <code>App.vue</code> без <code>&lt;main&gt;</code> для layout login; чипы-якоря ≤ 960; бренд — ссылка.</li>
+<li><strong>Управление без скролла</strong>: чипы спорта и шаги — <code>&lt;button aria-pressed&gt;</code>, переключают состояние по клику/фокусу (graft [0]).</li>
+<li><strong>Бесконечные анимации</strong>: только пульс LIVE-точки, гаснет под reduce; ничего не мигает чаще 3 Гц.</li>
+<li><strong>i18n/язык</strong>: <code>document.documentElement.lang</code> при смене locale; demo-строки в i18n с нейтральными именами; <code>:root:lang(lt) .landing-hero__title</code> уменьшен; проверка 3 локали × 2 темы на 1280×720.</li>
+<li><strong>CTA</strong>: одна ясная точка на первом экране — hero primary с микрокопией «Вход через Google · без карты», шапка outline «Войти», spinner-состояние и <code>aria-label</code> при редиректе на OAuth.</li>
+</ol>
+<h2 id="9-риски-и-как-снимаем">9. Риски и как снимаем</h2>
+<div class="table-wrap"><table><thead><tr><th>Риск</th><th>Митигация</th></tr></thead><tbody>
+<tr><td>Untracked-черновик fixed-канваса (<code>world.js</code>, <code>LandingScene3D.vue</code>) конфликтует с концептом; команда начнёт с чистого листа или достроит черновик</td><td>Шаг 1 PoC: ветка <code>landing-3d-draft</code>, явное решение; из черновика берём только <code>objects.js</code>/<code>palette.js</code></td></tr>
+<tr><td>CSS scroll-driven animations: Firefox 152 за флагом, Safari 26.0-26.4 баги именованных диапазонов (исправлены в 26.5)</td><td>IO — базовая ветка, view() — прогрессивное улучшение трёх эффектов; from-кадры оставляют контент читаемым (min opacity .35); named timelines — фаза 2; матрица QA включает Safari 26.0/26.5 и Firefox</td></tr>
+<tr><td><code>animation-timeline</code> после <code>animation</code> — легко сломать при рефакторинге</td><td>Комментарий/stylelint-правило в <code>landing.css</code>, тест-скриншот</td></tr>
+<tr><td>Глобальное reduce-правило не гасит progress-таймлайны; при сужении оживит анимации админки</td><td>Правило <code>143-151</code> не трогаем; отдельный явный reduce-блок для <code>.landing</code> с <code>animation:none !important</code></td></tr>
+<tr><td>iOS: innerHeight меняется при схлопывании тулбара → p скачет</td><td>denom из <code>offsetHeight</code> + <code>100svh</code>, фильтр resize по высоте</td></tr>
+<tr><td>Хоп мяча промахивается мимо <code>.demo-card__bar</code> при resize/шрифтах/локали</td><td>Пересчёт якоря в ResizeObserver и <code>fonts.ready</code>, допуск ±0.15 м, фиксированная точка при промахе</td></tr>
+<tr><td>Утечка WebGL-контекстов при HMR («Too many active WebGL contexts»)</td><td><code>renderer.forceContextLoss()</code> в dispose (и точечно в <code>scene.js:207</code>), проверка после каждого await</td></tr>
+<tr><td>Long task при инициализации three (PMREM + компиляция шейдеров на Mali/Iris)</td><td>envMap только на десктопе ≥ 1025 и concurrency &gt; 4; init в 3 кадра; <code>compileAsync</code>; замер longtask</td></tr>
+<tr><td>Бюджет three-чанка на пороге (~153-156 из 160 KB)</td><td>Порог выставить по замеру после hero (+5%), tree-shaking проверить; <code>manualChunks</code> для стабильного имени</td></tr>
+<tr><td>«Вау» Lean-подхода скромнее ожиданий владельца</td><td>Показ прототипа на 5-й день с фиксированной точкой решения; заготовлены графты фазы 2 (WebGL-мячи, витрина сетки, кубок, реквизит в hero) без смены архитектуры</td></tr>
+<tr><td>LT/EN-заголовки переполняют pinned hero на 1280×720</td><td><code>:lang(lt)</code> clamp, min-height контента под 4 строки, проверка 3 локали × 2 темы</td></tr>
+<tr><td>Playwright не установлен, CI без браузера</td><td>Разделить: node-скрипт бюджетов в CI сразу (0 стоимости); Playwright — отдельный job <code>landing-budgets</code> с chromium, 1 день инфраструктуры заложен явно</td></tr>
+<tr><td>Смена темы на лету — мерцание на кремовом</td><td><code>setPalette</code> обновляет только цвета/clearColor, батчится в один render через <code>watch(theme)</code></td></tr>
+</tbody></table></div>
+<h2 id="10-roadmap-по-фазам">10. Roadmap по фазам</h2>
+<div class="table-wrap"><table><thead><tr><th>Фаза</th><th>Дни</th><th>Содержание</th><th>Критерии готовности</th></tr></thead><tbody>
+<tr><td><strong>0. Фундамент и гардрейлы</strong></td><td>1-2</td><td>Ветка черновика; <code>manualChunks</code>; <code>check-bundle-budgets.mjs</code> в CI; снос fixed-слоя; токены (<code>--ink/--on-ink/--info/--shadow-card/--motion/--z-*</code>); <code>data-motion</code> inline; <code>useMotionPrefs/useScrollProgress/useReveal</code>; шапка (sentinel, полоса, <code>--scrolled</code>); чистые якоря + <code>scrollBehavior</code>; структура секций (<code>hero-track</code>, <code>#sports</code>-заглушка, dark strip, CTA, <code>#proof</code>); i18n-ключи; шрифты в head + preconnect; meta/og; css3d-карточка для мобильных</td><td>CI зелёный с бюджетами; на 390×844 нет запроса three; <code>.landing-hero__visual</code> виден на мобильном; якоря обновляют hash и фокус; LCP/CLS базовая линия зафиксирована</td></tr>
+<tr><td><strong>1. Hero MVP</strong></td><td>3-5</td><td><code>heroStage.js</code>, <code>cameraRig.js</code>, <code>ballFlight.js</code>, <code>motion.js</code>; <code>HeroScene3D.vue</code> с гейтом; палитра из токенов + <code>watch(theme)</code>; <code>.demo-card</code> как табло с флипом счёта и i18n; load-sequence; режимы full/lite3d/static; <code>MotionToggle</code>; dev-оверлей <code>?perf=1</code></td><td>≤ 8 draw calls, ≤ 6 мс GPU Iris, 0 rAF в покое, 0 long tasks &gt; 50 мс после load, <code>getAnimations().length === 0</code> под reduce, 10 HMR без потери контекстов, мяч попадает в плашку на ru/en/lt; <strong>показ владельцу, решение о фазе 2</strong></td></tr>
+<tr><td><strong>2. CSS 2.5D секции</strong></td><td>6-8</td><td>Bento <code>#features</code> (tile-in, рисование сетки, одометр, тёмная Live-плитка); <code>#sports</code> (CSS-мячи, форматы счёта, чипы-кнопки); «Три шага» (dark strip, sticky устройство, IO <code>data-active</code>, фоновые цифры, рейл); CTA-панель (мяч, магнит); <code>#proof</code> (BracketBoard на фикстурах, счётчики); типографика display-уровня, eyebrows, цветовые роли</td><td>Все эффекты compositor-only (transform/opacity); Firefox получает IO-фоллбек без визуальных дыр; Safari 26.0 и 26.5 проверены; Chrome — view() работает; Lighthouse a11y ≥ 95</td></tr>
+<tr><td><strong>3. Адаптив, темы, локали</strong></td><td>9</td><td>Мобильные и планшетные варианты всех секций; тёмная тема сцены и панелей; проверка ru/en/lt на 1280×720 и 390×844; <code>document.documentElement.lang</code>; <code>:lang(lt)</code> clamp; контраст-фиксы (#18)</td><td>Скриншоты 3 локали × 2 темы × 4 брейкпоинта без переполнений; контраст всех пар ≥ 4.5:1</td></tr>
+<tr><td><strong>4. Перф, QA, релиз</strong></td><td>10</td><td>Адаптивная деградация; <code>webglcontextlost</code>; iOS resize-фильтр; Playwright-сценарий <code>/</code> (LCP, CLS, 0 rAF, постер/css3d при <code>--disable-gpu</code> и reduce); замеры INP/LCP; k<strong>ill-switch</strong> <code>?no3d</code>; финальные бюджеты в CI</td><td>Все пороги таблицы §7 зелёные; ручной прогон macOS Safari 26 + iOS Safari + Firefox + Chrome; dispose при уходе на <code>/admin</code> без ошибок</td></tr>
+<tr><td><strong>Буфер</strong></td><td>+1-2</td><td>Safari 26.x view()-квирки, i18n-переполнения, тюнинг материалов на светлом фоне</td><td>—</td></tr>
+<tr><td><strong>Фаза 2 (отдельное решение, после замеров)</strong></td><td>+5-8</td><td>Постеры и og-image из сцены (<code>render-landing-posters.mjs</code>); named <code>view-timeline</code> для «Трёх шагов»; WebGL-мячи <code>#sports</code> через <code>setScissor</code>; витрина «Сетка собирается сама» (<code>makeBracketTree.setAssembly</code>) при бюджете ≤ 12 draw calls суммарно; кубок в CTA (Lathe + PMREM, ≤ 7 draw calls); ambient-розыгрыш <code>RallyDirector</code> в hero на tier full с cap 30 fps; self-host шрифтов</td><td>Бюджеты §7 не нарушены; 0 кадров в покое сохраняется; решение владельца по каждому пункту отдельно</td></tr>
+</tbody></table></div>
+<p>Итого v1: <strong>10-12 рабочих дней</strong> одного фронтенд-разработчика (Vue + three), MVP-«вау» — 5 дней.</p>
+    <h2 id="concepts-scores">Баллы судей по концепциям</h2>
+    <p>Три судьи (Awwwards-жюри и бренд; principal-инженер; UX и мобайл) оценивали четыре независимые концепции. Сумма баллов:</p>
+    <div class="table-wrap"><table><thead><tr><th>Концепция</th><th>Σ баллов</th><th>Оценка усилий</th></tr></thead><tbody><tr><td>«Один корт» — непрерывная кинематографичная сцена Bracketa</td><td class='num'>123</td><td>22–26 дев-дней одним фронтендером (без дизайнера-3D)</td></tr><tr><td>«Реквизит» — пять витрин одного матча (Angle B: set-pieces по секциям)</td><td class='num'>150</td><td>14-18 дней одного фронтенд-разработчика (с three-опытом)</td></tr><tr><td>«Сборка» (Bracketa Assembly) — интерфейс в пространстве</td><td class='num'>136</td><td>22 дня (±20%) одним фронтенд-разработчиком</td></tr><tr><td>«Подача» (Lean 2.5D + один WebGL-герой)</td><td class='num'>160</td><td>10–12 рабочих дней одного разработчика (Vue + three), из них MVP-«вау» (hero-сцена с мячом</td></tr></tbody></table></div>
+  </article>
+</div>
