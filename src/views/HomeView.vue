@@ -99,6 +99,7 @@ const LandingScene3D = defineAsyncComponent({
 })
 
 const sports = ['tennis', 'padel', 'football']
+const formats = ['knockout', 'league', 'groups', 'double']
 const steps = ['step1', 'step2', 'step3']
 
 const features = [
@@ -139,7 +140,7 @@ function scrollTo(id) {
         </a>
         <div class="landing-nav__links">
           <a href="#how-it-works" @click.prevent="scrollTo('how-it-works')">{{ t('home.nav.howItWorks') }}</a>
-          <a href="#sports" @click.prevent="scrollTo('sports')">{{ t('home.nav.sports') }}</a>
+          <a href="#formats" @click.prevent="scrollTo('formats')">{{ t('home.cinematic.formatsNav') }}</a>
           <a href="#features" @click.prevent="scrollTo('features')">{{ t('home.nav.features') }}</a>
         </div>
         <div class="landing-nav__actions">
@@ -152,7 +153,7 @@ function scrollTo(id) {
     </nav>
 
     <section id="top" class="landing-hero">
-      <div class="hero-watermark" aria-hidden="true">PLAY</div>
+      <div class="hero-watermark" aria-hidden="true">CUP</div>
       <div class="landing-hero__content">
         <p class="cinema-kicker"><span class="status-dot"></span>{{ t('home.cinematic.badge') }}</p>
         <h1 class="landing-hero__title">{{ t('home.cinematic.title') }}<span class="landing-hero__title-accent">{{ t('home.cinematic.titleAccent') }}</span></h1>
@@ -165,17 +166,17 @@ function scrollTo(id) {
         <p v-if="signInError" class="cinema-error" role="alert">{{ signInError }}</p>
       </div>
       <div class="landing-hero__visual" data-stage="hero">
-        <span class="hero-coordinate" aria-hidden="true">BRK / 001 — MATCH POINT</span>
+        <span class="hero-coordinate" aria-hidden="true">BRK / 001 — TOURNAMENT DAY</span>
         <div v-tilt="5" class="match-ticket">
-          <div class="match-ticket__top"><span>{{ t('home.cinematic.liveTitle') }}</span><span class="match-ticket__live"><i></i> LIVE <small>· {{ t('home.cinematic.demo') }}</small></span></div>
-          <p class="match-ticket__meta">{{ t('home.cinematic.semifinal') }} <span>·</span> {{ t('home.cinematic.court') }}</p>
-          <div class="ticket-player"><span class="ticket-avatar">AN</span><span>A. Novak</span><span class="ticket-sets">6 &nbsp; 4</span><strong>40</strong></div>
-          <div class="ticket-player"><span class="ticket-avatar ticket-avatar--second">MS</span><span>M. Silva</span><span class="ticket-sets">3 &nbsp; 6</span><strong>30</strong></div>
+          <div class="match-ticket__top"><span>{{ t('home.cinematic.liveTitle') }}</span><span class="match-ticket__live"><i></i> {{ t('home.cinematic.demo') }}</span></div>
+          <p class="match-ticket__meta">{{ t('home.cinematic.bracketType') }} <span>·</span> {{ t('home.cinematic.tournamentStatus') }}</p>
+          <div class="ticket-stat"><span>{{ t('home.cinematic.participants') }}</span><strong>16</strong></div>
+          <div class="ticket-stat"><span>{{ t('home.cinematic.matches') }}</span><strong>15</strong></div>
           <div class="match-ticket__bottom"><span class="status-dot"></span>{{ t('home.cinematic.point') }}<span aria-hidden="true">↗</span></div>
         </div>
         <button v-if="scene3d && scene3dReady" class="motion-control" :aria-label="t(motionPaused ? 'home.cinematic.play' : 'home.cinematic.pause')" :aria-pressed="motionPaused" @click="motionPaused = !motionPaused"><span aria-hidden="true">{{ motionPaused ? '▷' : 'Ⅱ' }}</span></button>
       </div>
-      <div class="hero-bottom"><a href="#how-it-works" @click.prevent="scrollTo('how-it-works')"><span class="scroll-arrow" aria-hidden="true">↓</span>{{ t('home.cinematic.scroll') }}</a><span class="hero-sports">TENNIS <i>/</i> PADEL <i>/</i> FOOTBALL</span></div>
+      <div class="hero-bottom"><a href="#how-it-works" @click.prevent="scrollTo('how-it-works')"><span class="scroll-arrow" aria-hidden="true">↓</span>{{ t('home.cinematic.scroll') }}</a><span class="hero-sports">ENTRIES <i>/</i> BRACKETS <i>/</i> CHAMPIONS</span></div>
     </section>
 
     <div class="cinema-manifesto"><span>{{ t('home.cinematic.strip1') }}</span><span>{{ t('home.cinematic.strip2') }} <i aria-hidden="true">↘</i></span></div>
@@ -197,15 +198,16 @@ function scrollTo(id) {
       </div>
     </section>
 
-    <section id="sports" class="landing-section landing-sports">
-      <div class="cinema-section-head cinema-section-head--split reveal"><div><p class="landing-eyebrow">02 / {{ t('home.cinematic.sportEyebrow') }}</p><h2>{{ t('home.cinematic.sportTitle') }}</h2></div><p class="cinema-section-copy">{{ t('home.cinematic.sportText') }}</p></div>
-      <div class="sport-tiles">
-        <article v-for="(sport, i) in sports" :key="sport" class="sport-tile">
-          <div class="sport-tile__top"><span>0{{ i + 1 }}</span><span>{{ sport.toUpperCase() }}</span><span aria-hidden="true">↗</span></div>
-          <div class="sport-tile__stage" :data-stage="`sport-${sport}`" aria-hidden="true"></div>
-          <div class="sport-tile__copy reveal"><p class="sport-tile__tagline">{{ t(`sportTagline.${sport}`) }}</p><h3 class="sport-tile__title">{{ t(`sport.${sport}`) }}</h3><p class="sport-tile__text">{{ t(`home.sports.${sport}`) }}</p></div>
+    <section id="formats" class="landing-section landing-sports landing-formats">
+      <div class="cinema-section-head cinema-section-head--split reveal"><div><p class="landing-eyebrow">02 / {{ t('home.cinematic.formatEyebrow') }}</p><h2>{{ t('home.cinematic.formatTitle') }}</h2></div><p class="cinema-section-copy">{{ t('home.cinematic.formatText') }}</p></div>
+      <div class="sport-tiles format-tiles">
+        <article v-for="(format, i) in formats" :key="format" class="sport-tile format-tile">
+          <div class="sport-tile__top"><span>0{{ i + 1 }}</span><span>FORMAT / {{ ['KNOCKOUT', 'LEAGUE', 'GROUPS', 'DOUBLE ELIM.'][i] }}</span></div>
+          <div class="sport-tile__stage" :data-stage="`format-${format}`" aria-hidden="true"></div>
+          <div class="sport-tile__copy reveal"><h3 class="sport-tile__title">{{ t(`home.cinematic.${format}Title`) }}</h3><p class="sport-tile__text">{{ t(`home.cinematic.${format}Text`) }}</p></div>
         </article>
       </div>
+      <div class="supported-sports"><span>{{ t('home.cinematic.supported') }}</span><span v-for="sport in sports" :key="sport">{{ t(`sport.${sport}`) }}</span></div>
     </section>
 
     <section id="features" class="landing-section cinema-features-section">
@@ -213,7 +215,7 @@ function scrollTo(id) {
       <div class="landing-features">
         <article v-for="(feature, i) in features" :key="feature.key" class="feature-card reveal" :style="{ '--i': i % 3 }">
           <div class="feature-card__top"><svg class="feature-card__glyph" width="29" height="29" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path :d="feature.path" /></svg><span>0{{ i + 1 }}</span></div>
-          <h3 class="feature-card__title">{{ t(`home.features.${feature.key}.title`) }}</h3><p class="feature-card__text">{{ t(`home.features.${feature.key}.description`) }}</p>
+          <h3 class="feature-card__title">{{ t(feature.key === 'doubles' ? 'home.cinematic.participantsTitle' : `home.features.${feature.key}.title`) }}</h3><p class="feature-card__text">{{ t(feature.key === 'doubles' ? 'home.cinematic.participantsText' : `home.features.${feature.key}.description`) }}</p>
         </article>
       </div>
     </section>

@@ -141,7 +141,7 @@ onMounted(async () => {
     )
   }
 
-  root.querySelectorAll('[data-stage^="sport-"]').forEach((stage) => {
+  root.querySelectorAll('[data-stage^="format-"]').forEach((stage) => {
     const tile = stage.closest('.sport-tile') || stage
     const key = stage.dataset.stage
     listen(tile, 'pointerenter', () => world.setHover(key, true))

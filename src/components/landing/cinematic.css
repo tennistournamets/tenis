@@ -282,3 +282,27 @@
   .landing--cinematic:not(.landing--no3d) .match-ticket.tilt { transform: none; }
   .landing--cinematic .motion-control { display: none; }
 }
+
+/* Tournament-led compositions: entries, formats and champions. */
+.landing--cinematic .ticket-stat { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 10px 0; font-size: .875rem; color: #b5c9be; }
+.landing--cinematic .ticket-stat strong { color: #d1f64b; font: 500 1.65rem var(--font-mono); }
+.landing--cinematic .format-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+.landing--cinematic .format-tile { padding: 25px 32px 32px; }
+.landing--cinematic .format-tile .sport-tile__stage { height: 300px; }
+.landing--cinematic .format-tile .sport-tile__title { font-size: 1.7rem; }
+.landing--cinematic .format-tile .sport-tile__top > span:last-child { font-size: .625rem; margin-left: 0; }
+.landing--cinematic .supported-sports { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 14px 30px; padding-top: 32px; color: var(--cinema-text); font-size: .875rem; }
+.landing--cinematic .supported-sports > span:first-child { color: var(--cinema-muted); }
+.landing--cinematic .supported-sports > span:not(:first-child)::before { content: '/'; margin-right: 20px; color: var(--cinema-accent); }
+@media (max-width: 600px) {
+  .landing--cinematic .format-tiles { grid-template-columns: 1fr; }
+  .landing--cinematic .format-tile { padding: 22px 24px 28px; }
+  .landing--cinematic .format-tile .sport-tile__stage { height: 250px; }
+  .landing--cinematic .supported-sports { gap: 12px 18px; }
+  .landing--cinematic .supported-sports > span:first-child { flex-basis: 100%; text-align: center; }
+  .landing--cinematic .supported-sports > span:not(:first-child)::before { display: none; }
+}
+@media (max-width: 600px) {
+  .landing--cinematic .landing-hero__title { font-size: clamp(2rem, 9.6vw, 3.6rem); }
+  .landing--cinematic .landing-hero__visual, .landing--cinematic.landing--3d .landing-hero__visual { height: 370px; }
+}

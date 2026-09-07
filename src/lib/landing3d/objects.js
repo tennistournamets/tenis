@@ -518,6 +518,7 @@ export function makeScoreSlab({ width = 3.0, height = 1.0 } = {}) {
 export function disposeObject(root) {
   const geometries = new Set(), materials = new Set(), textures = new Set()
   root.traverse((obj) => {
+    if (obj.isInstancedMesh) obj.dispose()
     if (obj.geometry && !geometries.has(obj.geometry)) { geometries.add(obj.geometry); obj.geometry.dispose() }
     const mats = Array.isArray(obj.material) ? obj.material : obj.material ? [obj.material] : []
     for (const mat of mats) {
