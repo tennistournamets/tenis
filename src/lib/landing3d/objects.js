@@ -17,10 +17,38 @@ function std(color, opts = {}) {
 // (a cos t + b cos 3t, a sin t − b sin 3t, 2√(ab) sin 2t) lies on a sphere of radius a+b.
 export function makeTennisBall({ radius = 1, detail = 40 } = {}) {
   const group = new THREE.Group()
-  const felt = std(0xc6f24e, { roughness: 0.95 })
+  const canvas = document.createElement('canvas')
+  canvas.width = canvas.height = 128
+  const ctx = canvas.getContext('2d')
+  const grain = ctx.createImageData(128, 128)
+  for (let i = 0; i < grain.data.length; i += 4) {
+    const value = 100 + Math.round(hash(i) * 155)
+    grain.data[i] = grain.data[i + 1] = grain.data[i + 2] = value
+    grain.data[i + 3] = 255
+  }
+  ctx.putImageData(grain, 0, 0)
+  const bump = new THREE.CanvasTexture(canvas)
+  bump.wrapS = bump.wrapT = THREE.RepeatWrapping
+  bump.repeat.set(5, 3)
+  const felt = new THREE.MeshPhysicalMaterial({ color: 0xaacb12, roughness: 0.96, envMapIntensity: 0.22, bumpMap: bump, bumpScale: 0.035, sheen: 0.45, sheenColor: 0xbace41, sheenRoughness: 0.95 })
   const seamMat = std(0xf5f7f3, { roughness: 0.55 })
 
   group.add(new THREE.Mesh(new THREE.SphereGeometry(radius, detail, Math.round(detail * 0.7)), felt))
+
+  if (detail >= 64) {
+    const fibers = []
+    for (let i = 0; i < 6500; i++) {
+      const y = 1 - (i / 6499) * 2
+      const ring = Math.sqrt(1 - y * y)
+      const angle = i * 2.399963229728653
+      const x = Math.cos(angle) * ring, z = Math.sin(angle) * ring
+      const length = radius * (1.008 + hash(i) * 0.009)
+      fibers.push(x * radius, y * radius, z * radius, x * length, y * length, z * length)
+    }
+    const fiberGeo = new THREE.BufferGeometry()
+    fiberGeo.setAttribute('position', new THREE.Float32BufferAttribute(fibers, 3))
+    group.add(new THREE.LineSegments(fiberGeo, new THREE.LineBasicMaterial({ color: 0xbad52e, transparent: true, opacity: 0.28 })))
+  }
 
   const a = 0.72 * radius
   const b = 0.28 * radius
@@ -38,10 +66,10 @@ export function makeTennisBall({ radius = 1, detail = 40 } = {}) {
     )
   }
   const curve = new THREE.CatmullRomCurve3(pts, true, 'catmullrom', 0.5)
-  group.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 160, radius * 0.045, 8, true), seamMat))
+  group.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 160, radius * 0.025, 8, true), seamMat))
 
   group.userData.setPalette = (p) => {
-    felt.color.copy(p.lime)
+    felt.color.set(0xaacb12)
   }
   return group
 }
@@ -161,7 +189,7 @@ export function makePadelRacket() {
     curveSegments: 22,
   })
   geo.translate(0, 0, -0.17)
-  const faceMat = std(0x0f7b4d, { roughness: 0.5 })
+  const faceMat = std(0x174e3a, { roughness: 0.42, metalness: 0.25, envMapIntensity: 0.3 })
   const wallMat = std(0x14201b, { roughness: 0.6, metalness: 0.1 })
   const paddle = new THREE.Mesh(geo, [faceMat, wallMat])
   group.add(paddle)
@@ -175,9 +203,9 @@ export function makePadelRacket() {
   group.add(butt)
 
   group.userData.setPalette = (p) => {
-    faceMat.color.copy(p.primary)
-    wallMat.color.copy(p.ink)
-    gripMat.color.copy(p.ink)
+    faceMat.color.set(0x174e3a)
+    wallMat.color.set(0x14201b)
+    gripMat.color.set(0x101918)
     butt.material.color.copy(p.lime)
   }
   return group
@@ -201,6 +229,31 @@ export function makeBracketTree() {
   const cols = [-3.4, -1.13, 1.13, 3.4]
   const rounds = [8, 4, 2, 1]
   const slabs = []
+  const labelRows = []
+  const labelCanvas = document.createElement('canvas')
+  labelCanvas.width = 384
+  labelCanvas.height = 2048
+  const labelContext = labelCanvas.getContext('2d')
+  const labelTexture = new THREE.CanvasTexture(labelCanvas)
+  labelTexture.colorSpace = THREE.SRGBColorSpace
+  const labelMaterial = new THREE.MeshBasicMaterial({ map: labelTexture, transparent: true, depthWrite: false, toneMapped: false })
+  const names = ['A. Novak', 'M. Silva', 'J. Martin', 'L. Rossi', 'E. Wilson', 'R. Chen', 'S. Garcia', 'T. Kim']
+  function drawLabels(p) {
+    labelContext.clearRect(0, 0, 384, 2048)
+    labelContext.textBaseline = 'middle'
+    for (const { idx, name, winner } of labelRows) {
+      const y = idx * 96 + 48
+      labelContext.fillStyle = p.isDark ? '#edf5e8' : '#163326'
+      labelContext.font = '500 30px system-ui, sans-serif'
+      labelContext.textAlign = 'left'
+      labelContext.fillText(name, 14, y)
+      labelContext.textAlign = 'right'
+      labelContext.font = '500 27px system-ui, sans-serif'
+      labelContext.fillStyle = p.isDark ? '#d1f64b' : '#336b27'
+      labelContext.fillText(winner ? '✓' : '—', 370, y)
+    }
+    labelTexture.needsUpdate = true
+  }
   const ys = []
   for (let r = 0; r < rounds.length; r++) {
     const n = rounds[r]
@@ -212,6 +265,13 @@ export function makeBracketTree() {
       const isWinner = r === rounds.length - 1 || i % 2 === 0
       const mesh = new THREE.Mesh(slabGeo, isWinner ? winMat : slabMat)
       const idx = slabs.length
+      const labelGeo = new THREE.PlaneGeometry(1.57, 0.39)
+      const uv = labelGeo.attributes.uv
+      for (let j = 0; j < uv.count; j++) uv.setY(j, 1 - ((idx + 1) * 96 - uv.getY(j) * 96) / 2048)
+      const label = new THREE.Mesh(labelGeo, labelMaterial)
+      label.position.z = 0.066
+      mesh.add(label)
+      labelRows.push({ idx, name: names[i * 2 ** r] || names[0], winner: isWinner })
       mesh.userData.home = new THREE.Vector3(cols[r], y, 0)
       mesh.userData.scatter = new THREE.Vector3(
         (hash(idx) - 0.5) * 9,
@@ -262,6 +322,7 @@ export function makeBracketTree() {
   group.userData.setAssembly(1)
 
   group.userData.setPalette = (p) => {
+    drawLabels(p)
     slabMat.color.copy(p.surface)
     winMat.color.copy(p.primaryMuted)
     lineMat.color.copy(p.isDark ? p.muted : p.border)
@@ -382,11 +443,15 @@ export function makeScoreSlab({ width = 3.0, height = 1.0 } = {}) {
   texture.colorSpace = THREE.SRGBColorSpace
   texture.anisotropy = 4
 
-  const state = { a: 40, b: 30, nameA: 'Орлов', nameB: 'Лебедева', lime: '#C6F24E', muted: '#96A39A', accent: '#FF5A48' }
+  const state = { a: 40, b: 30, nameA: 'A. Novak', nameB: 'M. Silva', lime: '#C6F24E', muted: '#96A39A', accent: '#FF5A48' }
   function draw() {
     const W = canvas.width
     const H = canvas.height
     ctx.clearRect(0, 0, W, H)
+    ctx.fillStyle = '#10221e'
+    ctx.beginPath()
+    ctx.roundRect(4, 4, W - 8, H - 8, 18)
+    ctx.fill()
     ctx.textBaseline = 'middle'
     ctx.font = '500 30px "Golos Text", system-ui, sans-serif'
     ctx.fillStyle = '#F2F5F1'
@@ -394,7 +459,7 @@ export function makeScoreSlab({ width = 3.0, height = 1.0 } = {}) {
     ctx.fillText(`${state.nameA} — ${state.nameB}`, 88, 74)
     ctx.font = '600 24px "JetBrains Mono", ui-monospace, monospace'
     ctx.fillStyle = state.muted
-    ctx.fillText('LIVE · 3-Й СЕТ', 88, 118)
+    ctx.fillText('LIVE · DEMO', 88, 118)
     ctx.font = '700 92px "JetBrains Mono", ui-monospace, monospace'
     ctx.textAlign = 'right'
     ctx.fillStyle = state.lime
@@ -422,7 +487,7 @@ export function makeScoreSlab({ width = 3.0, height = 1.0 } = {}) {
   // canvas is 3:1, so the face plane is width × width/3 (== height when height = width/3)
   const face = new THREE.Mesh(
     new THREE.PlaneGeometry(width, (width * canvas.height) / canvas.width),
-    new THREE.MeshBasicMaterial({ map: texture, transparent: true, depthWrite: false }),
+    new THREE.MeshBasicMaterial({ map: texture, transparent: true, depthWrite: false, toneMapped: false }),
   )
   face.position.z = 0.081
   group.add(face)
@@ -451,13 +516,16 @@ export function makeScoreSlab({ width = 3.0, height = 1.0 } = {}) {
 
 // -------------------------------------------------------------- disposal
 export function disposeObject(root) {
+  const geometries = new Set(), materials = new Set(), textures = new Set()
   root.traverse((obj) => {
-    if (obj.geometry) obj.geometry.dispose()
+    if (obj.geometry && !geometries.has(obj.geometry)) { geometries.add(obj.geometry); obj.geometry.dispose() }
     const mats = Array.isArray(obj.material) ? obj.material : obj.material ? [obj.material] : []
     for (const mat of mats) {
+      if (materials.has(mat)) continue
+      materials.add(mat)
       for (const key of Object.keys(mat)) {
         const v = mat[key]
-        if (v && v.isTexture) v.dispose()
+        if (v?.isTexture && !textures.has(v)) { textures.add(v); v.dispose() }
       }
       mat.dispose()
     }

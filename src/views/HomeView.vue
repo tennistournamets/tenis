@@ -2,6 +2,8 @@
 import { defineAsyncComponent, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
+import '../components/landing/cinematic.css'
+
 import LanguageSwitcher from '../components/LanguageSwitcher.vue'
 import ThemeToggle from '../components/ThemeToggle.vue'
 import { maxNetworkTier } from '../lib/rally3d/networkTier'
@@ -10,6 +12,12 @@ import { useReveal } from '../lib/useReveal'
 import { useAuthStore } from '../stores/auth'
 
 const { t } = useI18n()
+const activeStep = ref(1)
+const motionPaused = ref(false)
+const signingIn = ref(false)
+const signInError = ref('')
+let scrollFrame = 0
+let stopScroll = () => {}
 const auth = useAuthStore()
 
 const vTilt = tilt
@@ -47,10 +55,34 @@ function scheduleScene3d() {
   }
 }
 onMounted(() => {
+  const measure = () => {
+    scrollFrame = 0
+    const root = landingEl.value
+    if (!root) return
+    const max = document.documentElement.scrollHeight - innerHeight
+    root.style.setProperty('--page-progress', String(max > 0 ? scrollY / max : 0))
+    const blocks = [...root.querySelectorAll('[data-step-block]')]
+    let nearest = Infinity
+    blocks.forEach((block, i) => {
+      const rect = block.getBoundingClientRect()
+      const distance = Math.abs(rect.top + rect.height * 0.5 - innerHeight * 0.5)
+      if (distance < nearest) { nearest = distance; activeStep.value = i + 1 }
+    })
+  }
+  const onScroll = () => { if (!scrollFrame) scrollFrame = requestAnimationFrame(measure) }
+  window.addEventListener('scroll', onScroll, { passive: true })
+  window.addEventListener('resize', onScroll)
+  stopScroll = () => {
+    window.removeEventListener('scroll', onScroll)
+    window.removeEventListener('resize', onScroll)
+    cancelAnimationFrame(scrollFrame)
+  }
+  measure()
   if (document.readyState === 'complete') scheduleScene3d()
   else window.addEventListener('load', scheduleScene3d, { once: true })
 })
 onBeforeUnmount(() => {
+  stopScroll()
   window.removeEventListener('load', scheduleScene3d)
   if (idleHandle) {
     if (idleIsTimeout) clearTimeout(idleHandle)
@@ -70,243 +102,126 @@ const sports = ['tennis', 'padel', 'football']
 const steps = ['step1', 'step2', 'step3']
 
 const features = [
-  { key: 'bracket', icon: 'bracket', tone: '' },
-  { key: 'liveScore', icon: 'bolt', tone: 'feature-card__icon--accent' },
-  { key: 'spectator', icon: 'eye', tone: 'feature-card__icon--success' },
-  { key: 'doubles', icon: 'users', tone: 'feature-card__icon--warning' },
-  { key: 'registration', icon: 'user-plus', tone: 'feature-card__icon--info' },
-  { key: 'collaboration', icon: 'layers', tone: 'feature-card__icon--purple' },
+  { key: 'bracket', path: 'M3 4h6v4H3z M3 16h6v4H3z M15 10h6v4h-6z M9 6h3v12H9 M12 12h3' },
+  { key: 'liveScore', path: 'M13 2 4 14h7l-1 8 10-13h-7l1-7' },
+  { key: 'spectator', path: 'M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0' },
+  { key: 'doubles', path: 'M15 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M12 7a3.5 3.5 0 1 1-7 0 3.5 3.5 0 0 1 7 0 M16 4a3.5 3.5 0 0 1 0 7 M18 15a4 4 0 0 1 4 4v2' },
+  { key: 'registration', path: 'M14 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-9 M17 2v6 M14 5h6 M7 11h5 M7 15h9' },
+  { key: 'collaboration', path: 'm12 3 10 5-10 5L2 8l10-5z M2 12l10 5 10-5 M2 16l10 5 10-5' },
 ]
 
 async function goRegister() {
-  await auth.signInWithGoogle()
+  if (signingIn.value) return
+  signingIn.value = true
+  signInError.value = ''
+  try { await auth.signInWithGoogle() }
+  catch { signInError.value = t('home.cinematic.signInError') }
+  finally { signingIn.value = false }
 }
 
 function scrollTo(id) {
-  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
+  document.getElementById(id)?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' })
 }
 </script>
 
 <template>
-  <div
-    ref="landingEl"
-    class="landing"
-    :class="{ 'landing--3d': scene3d && scene3dReady, 'landing--no3d': !scene3d }"
-  >
-    <LandingScene3D
-      v-if="scene3d"
-      :root="landingEl"
-      @ready="scene3dReady = true"
-      @unavailable="scene3d = false"
-    />
-
-    <!-- Navbar -->
-    <nav class="landing-nav">
+  <div ref="landingEl" class="landing landing--cinematic" :class="{ 'landing--3d': scene3d && scene3dReady, 'landing--no3d': !(scene3d && scene3dReady), 'landing--paused': motionPaused }">
+    <LandingScene3D v-if="scene3d" :root="landingEl" :paused="motionPaused" @ready="scene3dReady = true" @unavailable="scene3d = false; scene3dReady = false" />
+    <nav class="landing-nav" aria-label="Bracketa">
       <div class="landing-nav__inner">
-        <span class="landing-nav__brand">
-          <svg class="landing-nav__logo" width="28" height="28" viewBox="0 0 28 28" fill="none">
-            <rect width="28" height="28" rx="8" fill="var(--primary)" />
-            <path d="M11 8H9.5A1.5 1.5 0 0 0 8 9.5v9A1.5 1.5 0 0 0 9.5 20H11" stroke="#fff" stroke-width="2" stroke-linecap="round" fill="none" />
-            <path d="M17 8h1.5A1.5 1.5 0 0 1 20 9.5v9a1.5 1.5 0 0 1-1.5 1.5H17" stroke="#fff" stroke-width="2" stroke-linecap="round" fill="none" />
-            <circle cx="14" cy="14" r="2.2" fill="var(--lime)" />
+        <a class="landing-nav__brand" href="#" @click.prevent="scrollTo('top')" aria-label="Bracketa">
+          <svg class="landing-nav__logo" width="32" height="32" viewBox="0 0 28 28" fill="none" aria-hidden="true">
+            <rect width="28" height="28" rx="8" fill="var(--lime)" />
+            <path d="M11 8H8v12h3M17 8h3v12h-3" stroke="#11251c" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
+            <circle cx="14" cy="14" r="2.2" fill="#11251c" />
           </svg>
-          {{ t('app.title') }}
-        </span>
+          {{ t('app.title') }}<span class="brand-period">.</span>
+        </a>
         <div class="landing-nav__links">
-          <a class="landing-nav__link" href="#how-it-works" @click.prevent="scrollTo('how-it-works')">{{ t('home.nav.howItWorks') }}</a>
-          <a class="landing-nav__link" href="#features" @click.prevent="scrollTo('features')">{{ t('home.nav.features') }}</a>
-          <a class="landing-nav__link" href="#sports" @click.prevent="scrollTo('sports')">{{ t('home.nav.sports') }}</a>
+          <a href="#how-it-works" @click.prevent="scrollTo('how-it-works')">{{ t('home.nav.howItWorks') }}</a>
+          <a href="#sports" @click.prevent="scrollTo('sports')">{{ t('home.nav.sports') }}</a>
+          <a href="#features" @click.prevent="scrollTo('features')">{{ t('home.nav.features') }}</a>
         </div>
         <div class="landing-nav__actions">
           <ThemeToggle />
           <LanguageSwitcher />
-          <button class="btn btn--primary btn--sm" @click="goRegister">
-            {{ t('home.admin.button') }}
-          </button>
+          <button class="cinema-login" :disabled="signingIn" @click="goRegister">{{ t('home.cinematic.login') }} <span aria-hidden="true">↗</span></button>
         </div>
       </div>
+      <div class="reading-progress" aria-hidden="true"></div>
     </nav>
 
-    <!-- Hero -->
-    <section class="landing-hero">
+    <section id="top" class="landing-hero">
+      <div class="hero-watermark" aria-hidden="true">PLAY</div>
       <div class="landing-hero__content">
-        <span class="landing-hero__badge"><span class="landing-hero__badge-dot"></span>{{ t('home.hero.badge') }}</span>
-        <h1 class="landing-hero__title">
-          {{ t('home.hero.title') }}
-          <span class="landing-hero__title-accent">{{ t('home.hero.titleAccent') }}</span>
-        </h1>
-        <p class="landing-hero__subtitle">{{ t('home.hero.subtitle') }}</p>
+        <p class="cinema-kicker"><span class="status-dot"></span>{{ t('home.cinematic.badge') }}</p>
+        <h1 class="landing-hero__title">{{ t('home.cinematic.title') }}<span class="landing-hero__title-accent">{{ t('home.cinematic.titleAccent') }}</span></h1>
+        <p class="landing-hero__subtitle">{{ t('home.cinematic.subtitle') }}</p>
         <div class="landing-hero__actions">
-          <button class="btn btn--primary btn--lg" @click="goRegister">
-            {{ t('home.hero.cta') }}
-          </button>
-          <button class="btn btn--outline btn--lg" @click="scrollTo('how-it-works')">
-            {{ t('home.hero.ctaSecondary') }}
-          </button>
+          <button class="cinema-button" :disabled="signingIn" @click="goRegister">{{ t('home.cinematic.cta') }}<span aria-hidden="true">↗</span></button>
+          <a class="cinema-link" href="#how-it-works" @click.prevent="scrollTo('how-it-works')"><span class="play-icon" aria-hidden="true">▷</span>{{ t('home.cinematic.explore') }}</a>
         </div>
-        <p class="landing-hero__note">{{ t('home.hero.note') }}</p>
+        <p class="landing-hero__note">{{ t('home.cinematic.note') }}</p>
+        <p v-if="signInError" class="cinema-error" role="alert">{{ signInError }}</p>
       </div>
       <div class="landing-hero__visual" data-stage="hero">
-        <div v-tilt="7" class="demo-card" aria-hidden="true">
-          <div class="demo-card__head">
-            <span class="demo-card__title">Летний кубок · полуфиналы</span>
-            <span class="demo-card__live"><span class="live-dot"></span>LIVE</span>
-          </div>
-          <div class="demo-card__body">
-            <div class="demo-bracket">
-              <div class="demo-pair">
-                <div class="demo-slot demo-slot--win">
-                  <span class="demo-slot__name">Петров</span>
-                  <span class="demo-slot__score">6 · 6</span>
-                </div>
-                <div class="demo-slot">
-                  <span class="demo-slot__name">Волкова</span>
-                  <span class="demo-slot__score demo-slot__score--muted">3 · 4</span>
-                </div>
-              </div>
-              <div class="demo-pair demo-pair--live">
-                <div class="demo-slot">
-                  <span class="demo-slot__name">Орлов</span>
-                  <span class="demo-slot__score">7 · 2</span>
-                </div>
-                <div class="demo-slot">
-                  <span class="demo-slot__name">Лебедева</span>
-                  <span class="demo-slot__score">5 · 3</span>
-                </div>
-              </div>
-            </div>
-            <div class="demo-connector" aria-hidden="true"></div>
-            <div class="demo-final">
-              <div class="demo-slot demo-slot--win">
-                <span class="demo-slot__name">Петров</span>
-              </div>
-              <div class="demo-slot demo-slot--empty">
-                <span class="demo-slot__name">Ждём финалиста</span>
-              </div>
-              <span class="demo-final__meta">Финал · сб 16:00</span>
-            </div>
-          </div>
-          <div class="demo-card__bar">
-            <span class="demo-card__match"><span class="live-dot"></span>Орлов — Лебедева</span>
-            <span class="demo-card__points">40 <span>—</span> 30</span>
-          </div>
+        <span class="hero-coordinate" aria-hidden="true">BRK / 001 — MATCH POINT</span>
+        <div v-tilt="5" class="match-ticket">
+          <div class="match-ticket__top"><span>{{ t('home.cinematic.liveTitle') }}</span><span class="match-ticket__live"><i></i> LIVE <small>· {{ t('home.cinematic.demo') }}</small></span></div>
+          <p class="match-ticket__meta">{{ t('home.cinematic.semifinal') }} <span>·</span> {{ t('home.cinematic.court') }}</p>
+          <div class="ticket-player"><span class="ticket-avatar">AN</span><span>A. Novak</span><span class="ticket-sets">6 &nbsp; 4</span><strong>40</strong></div>
+          <div class="ticket-player"><span class="ticket-avatar ticket-avatar--second">MS</span><span>M. Silva</span><span class="ticket-sets">3 &nbsp; 6</span><strong>30</strong></div>
+          <div class="match-ticket__bottom"><span class="status-dot"></span>{{ t('home.cinematic.point') }}<span aria-hidden="true">↗</span></div>
+        </div>
+        <button v-if="scene3d && scene3dReady" class="motion-control" :aria-label="t(motionPaused ? 'home.cinematic.play' : 'home.cinematic.pause')" :aria-pressed="motionPaused" @click="motionPaused = !motionPaused"><span aria-hidden="true">{{ motionPaused ? '▷' : 'Ⅱ' }}</span></button>
+      </div>
+      <div class="hero-bottom"><a href="#how-it-works" @click.prevent="scrollTo('how-it-works')"><span class="scroll-arrow" aria-hidden="true">↓</span>{{ t('home.cinematic.scroll') }}</a><span class="hero-sports">TENNIS <i>/</i> PADEL <i>/</i> FOOTBALL</span></div>
+    </section>
+
+    <div class="cinema-manifesto"><span>{{ t('home.cinematic.strip1') }}</span><span>{{ t('home.cinematic.strip2') }} <i aria-hidden="true">↘</i></span></div>
+
+    <section id="how-it-works" class="landing-section landing-how">
+      <div class="cinema-section-head reveal"><p class="landing-eyebrow">01 / {{ t('home.cinematic.storyEyebrow') }}</p><h2>{{ t('home.cinematic.storyTitle') }}</h2><p class="cinema-section-copy">{{ t('home.cinematic.storyText') }}</p></div>
+      <div class="how">
+        <div class="how__steps">
+          <article v-for="(step, i) in steps" :id="`chapter-${i + 1}`" :key="step" class="how-step" :class="{ 'how-step--active': activeStep === i + 1 }" :data-step-block="i + 1">
+            <div class="how-step__stage" :data-stage="`step-${i + 1}`" aria-hidden="true"></div>
+            <div class="how-step__copy reveal"><span class="how-step__number">0{{ i + 1 }}<span>/ 03</span></span><h3 class="how-step__title">{{ t(`home.cinematic.step${i + 1}Title`) }}</h3><p class="how-step__text">{{ t(`home.cinematic.step${i + 1}Text`) }}</p><span class="step-tag"><span aria-hidden="true">✓</span>{{ t(`home.cinematic.tag${i + 1}`) }}</span></div>
+          </article>
+        </div>
+        <div class="how__stage-col">
+          <div class="stage-caption"><span class="status-dot"></span><span>{{ t(`home.cinematic.stage${activeStep}`) }}</span><span class="stage-caption__demo">{{ t('home.cinematic.demo') }}</span></div>
+          <div class="how__stage" data-stage="steps" aria-hidden="true"></div>
+          <div class="chapter-nav"><button v-for="i in 3" :key="i" :class="{ 'is-active': activeStep === i }" :aria-label="t(`home.cinematic.stage${i}`)" :aria-current="activeStep === i ? 'step' : undefined" @click="scrollTo(`chapter-${i}`)"><span>0{{ i }}</span><i></i></button></div>
         </div>
       </div>
     </section>
 
-    <!-- Sports -->
-    <section class="landing-section landing-sports" id="sports">
-      <div class="landing-section__header reveal">
-        <p class="landing-eyebrow">{{ t('home.sports.eyebrow') }}</p>
-        <h2 class="landing-section__title">{{ t('home.sports.title') }}</h2>
-        <p class="landing-section__subtitle">{{ t('home.sports.subtitle') }}</p>
-      </div>
+    <section id="sports" class="landing-section landing-sports">
+      <div class="cinema-section-head cinema-section-head--split reveal"><div><p class="landing-eyebrow">02 / {{ t('home.cinematic.sportEyebrow') }}</p><h2>{{ t('home.cinematic.sportTitle') }}</h2></div><p class="cinema-section-copy">{{ t('home.cinematic.sportText') }}</p></div>
       <div class="sport-tiles">
-        <article
-          v-for="(sport, i) in sports"
-          :key="sport"
-          class="sport-tile reveal"
-          :style="{ '--i': i }"
-        >
+        <article v-for="(sport, i) in sports" :key="sport" class="sport-tile">
+          <div class="sport-tile__top"><span>0{{ i + 1 }}</span><span>{{ sport.toUpperCase() }}</span><span aria-hidden="true">↗</span></div>
           <div class="sport-tile__stage" :data-stage="`sport-${sport}`" aria-hidden="true"></div>
-          <p class="sport-tile__tagline">{{ t(`sportTagline.${sport}`) }}</p>
-          <h3 class="sport-tile__title">{{ t(`sport.${sport}`) }}</h3>
-          <p class="sport-tile__text">{{ t(`home.sports.${sport}`) }}</p>
+          <div class="sport-tile__copy reveal"><p class="sport-tile__tagline">{{ t(`sportTagline.${sport}`) }}</p><h3 class="sport-tile__title">{{ t(`sport.${sport}`) }}</h3><p class="sport-tile__text">{{ t(`home.sports.${sport}`) }}</p></div>
         </article>
       </div>
     </section>
 
-    <!-- Features -->
-    <section class="landing-section landing-section--alt" id="features">
-      <div class="landing-section__header reveal">
-        <p class="landing-eyebrow">{{ t('home.features.eyebrow') }}</p>
-        <h2 class="landing-section__title">{{ t('home.features.title') }}</h2>
-        <p class="landing-section__subtitle">{{ t('home.features.subtitle') }}</p>
-      </div>
+    <section id="features" class="landing-section cinema-features-section">
+      <div class="cinema-section-head reveal"><p class="landing-eyebrow">03 / {{ t('home.cinematic.featureEyebrow') }}</p><h2>{{ t('home.cinematic.featureTitle') }}</h2><p class="cinema-section-copy">{{ t('home.cinematic.featureText') }}</p></div>
       <div class="landing-features">
-        <div v-for="(feature, i) in features" :key="feature.key" class="reveal" :style="{ '--i': i }">
-          <div v-tilt="5" class="feature-card">
-            <div class="feature-card__icon" :class="feature.tone">
-              <svg v-if="feature.icon === 'bracket'" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="3" y="3" width="18" height="18" rx="2" />
-                <path d="M3 9h18" />
-                <path d="M9 3v18" />
-              </svg>
-              <svg v-else-if="feature.icon === 'bolt'" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-              </svg>
-              <svg v-else-if="feature.icon === 'eye'" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                <circle cx="12" cy="12" r="3" />
-              </svg>
-              <svg v-else-if="feature.icon === 'users'" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                <circle cx="9" cy="7" r="4" />
-                <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-                <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-              </svg>
-              <svg v-else-if="feature.icon === 'user-plus'" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-                <circle cx="9" cy="7" r="4" />
-                <line x1="19" y1="8" x2="19" y2="14" />
-                <line x1="22" y1="11" x2="16" y2="11" />
-              </svg>
-              <svg v-else width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M12 2L2 7l10 5 10-5-10-5z" />
-                <path d="M2 17l10 5 10-5" />
-                <path d="M2 12l10 5 10-5" />
-              </svg>
-            </div>
-            <h3 class="feature-card__title">{{ t(`home.features.${feature.key}.title`) }}</h3>
-            <p class="feature-card__text">{{ t(`home.features.${feature.key}.description`) }}</p>
-          </div>
-        </div>
+        <article v-for="(feature, i) in features" :key="feature.key" class="feature-card reveal" :style="{ '--i': i % 3 }">
+          <div class="feature-card__top"><svg class="feature-card__glyph" width="29" height="29" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path :d="feature.path" /></svg><span>0{{ i + 1 }}</span></div>
+          <h3 class="feature-card__title">{{ t(`home.features.${feature.key}.title`) }}</h3><p class="feature-card__text">{{ t(`home.features.${feature.key}.description`) }}</p>
+        </article>
       </div>
     </section>
 
-    <!-- How It Works: steps scroll, the 3D stage sticks -->
-    <section class="landing-section landing-how" id="how-it-works">
-      <div class="landing-section__header reveal">
-        <p class="landing-eyebrow">{{ t('home.howItWorks.eyebrow') }}</p>
-        <h2 class="landing-section__title">{{ t('home.howItWorks.title') }}</h2>
-        <p class="landing-section__subtitle">{{ t('home.howItWorks.subtitle') }}</p>
-      </div>
-      <div class="how">
-        <div class="how__steps">
-          <article
-            v-for="(step, i) in steps"
-            :key="step"
-            class="how-step reveal"
-            :data-step-block="i + 1"
-          >
-            <div class="how-step__stage" :data-stage="`step-${i + 1}`" aria-hidden="true"></div>
-            <span class="how-step__number">0{{ i + 1 }}</span>
-            <h3 class="how-step__title">{{ t(`home.howItWorks.${step}.title`) }}</h3>
-            <p class="how-step__text">{{ t(`home.howItWorks.${step}.description`) }}</p>
-          </article>
-        </div>
-        <div class="how__stage-col">
-          <div class="how__stage" data-stage="steps" aria-hidden="true"></div>
-        </div>
-      </div>
-    </section>
-
-    <!-- CTA -->
     <section class="landing-section landing-cta">
-      <div class="landing-cta__inner reveal">
-        <h2 class="landing-cta__title">{{ t('home.cta.title') }}</h2>
-        <p class="landing-cta__subtitle">{{ t('home.cta.subtitle') }}</p>
-
-        <button class="btn btn--primary btn--lg landing-cta__btn" type="button" @click="goRegister">
-          {{ t('home.cta.button') }}
-        </button>
-        <p class="landing-hero__note">{{ t('home.hero.note') }}</p>
-      </div>
+      <div class="cta-stage" data-stage="trophy" aria-hidden="true"></div>
+      <div class="landing-cta__inner reveal"><p class="landing-eyebrow">{{ t('home.cinematic.closingEyebrow') }}</p><h2 class="landing-cta__title">{{ t('home.cinematic.closingTitle') }}</h2><p class="landing-cta__subtitle">{{ t('home.cinematic.closingText') }}</p><button class="cinema-button" :disabled="signingIn" @click="goRegister">{{ t('home.cinematic.cta') }}<span aria-hidden="true">↗</span></button><p class="landing-hero__note">{{ t('home.cinematic.note') }}</p><p v-if="signInError" class="cinema-error" role="alert">{{ signInError }}</p></div>
     </section>
-
-    <!-- Footer -->
-    <footer class="landing-footer">
-      <span class="landing-footer__copy">&copy; {{ new Date().getFullYear() }} {{ t('app.title') }}</span>
-    </footer>
+    <footer class="landing-footer"><a class="footer-brand" href="#top" @click.prevent="scrollTo('top')">Bracketa<span>.</span></a><span>{{ t('home.cinematic.footer') }}</span><span class="landing-footer__copy">&copy; {{ new Date().getFullYear() }} Bracketa</span></footer>
   </div>
 </template>

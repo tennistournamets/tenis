@@ -8,6 +8,7 @@ import { theme } from '../../lib/theme'
 // Fixed transparent WebGL layer behind the landing. Props are anchored to
 // [data-stage] / [data-step-block] elements found under `root`.
 const props = defineProps({
+  paused: { type: Boolean, default: false },
   root: {
     type: Object,
     default: null,
@@ -22,6 +23,7 @@ let rafId = 0
 let staticRaf = 0
 let resizeObserver = null
 let reducedMotion = false
+let motionQuery = null
 const cleanups = []
 
 function collectAnchors() {
@@ -42,7 +44,7 @@ function loop(now) {
 }
 
 function start() {
-  if (rafId || reducedMotion || !world) return
+  if (rafId || reducedMotion || document.hidden || !world) return
   rafId = requestAnimationFrame(loop)
 }
 
@@ -55,7 +57,7 @@ function queueStatic() {
   if (!world || staticRaf) return
   staticRaf = requestAnimationFrame(() => {
     staticRaf = 0
-    world.renderStatic()
+    world?.renderStatic()
   })
 }
 
@@ -76,7 +78,9 @@ onMounted(async () => {
     emit('unavailable')
     return
   }
-  reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
+  reducedMotion = motionQuery.matches || props.paused
+  listen(motionQuery, 'change', syncMotion)
   const finePointer = window.matchMedia('(pointer: fine)').matches
   const small = window.matchMedia('(max-width: 640px)').matches
   const lowEnd =
@@ -128,11 +132,11 @@ onMounted(async () => {
   listen(window, 'scroll', () => world && world.noteInput(performance.now()), { passive: true })
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(refresh).catch(() => {})
 
-  if (finePointer && !reducedMotion) {
+  if (finePointer) {
     listen(
       window,
       'pointermove',
-      (e) => world.setPointer((e.clientX / window.innerWidth) * 2 - 1, (e.clientY / window.innerHeight) * 2 - 1),
+      (e) => !reducedMotion && world?.setPointer((e.clientX / window.innerWidth) * 2 - 1, (e.clientY / window.innerHeight) * 2 - 1),
       { passive: true },
     )
   }
@@ -149,17 +153,27 @@ onMounted(async () => {
     'visibilitychange',
     () => {
       if (document.hidden) stop()
+      else if (reducedMotion) queueStatic()
       else start()
     },
   )
 
+  listen(window, 'scroll', () => { if (reducedMotion) queueStatic() }, { passive: true })
   if (reducedMotion) {
-    listen(window, 'scroll', queueStatic, { passive: true })
     queueStatic()
   } else {
     start()
   }
 })
+
+function syncMotion() {
+  reducedMotion = Boolean(motionQuery?.matches || props.paused)
+  if (!world) return
+  world.setReducedMotion(reducedMotion)
+  if (reducedMotion) { stop(); queueStatic() }
+  else start()
+}
+watch(() => props.paused, syncMotion)
 
 watch(theme, () => {
   if (!world) return

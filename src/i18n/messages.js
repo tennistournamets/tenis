@@ -1,3 +1,4 @@
+import { cinematicMessages } from './cinematic'
 import { draftMessages } from './drafts'
 import { scoringFlowMessages } from './scoringFlow'
 import { tennisRuleMessages } from './tennisRules'
@@ -18,6 +19,7 @@ export const messages = {
       subtitle: 'Организация турниров, жеребьёвка и live-сетка',
     },
     home: {
+      cinematic: cinematicMessages.ru,
       description: 'Платформа для организации теннисных турниров с жеребьёвкой, live-счётом и публичными ссылками для зрителей',
       admin: {
         title: 'Организатор',
@@ -700,6 +702,7 @@ export const messages = {
       subtitle: 'Run tournaments, draws, and live brackets',
     },
     home: {
+      cinematic: cinematicMessages.en,
       description: 'Platform for organizing tennis tournaments with draws, live scoring, and public spectator links',
       admin: {
         title: 'Organizer',
@@ -1382,6 +1385,7 @@ export const messages = {
       subtitle: 'Turnyrai, burtai ir gyvas tinklelis',
     },
     home: {
+      cinematic: cinematicMessages.lt,
       description: 'Platforma teniso turnyrų organizavimui su burtais, tiesioginiu rezultatų sekimu ir viešomis nuorodomis žiūrovams',
       admin: {
         title: 'Organizatorius',

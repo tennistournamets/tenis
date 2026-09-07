@@ -27,7 +27,7 @@ function parseColor(raw, bg) {
 }
 
 export function readPalette() {
-  const styles = getComputedStyle(document.documentElement)
+  const styles = getComputedStyle(document.querySelector('.landing--cinematic') || document.documentElement)
   const out = {}
   const read = (token, fallback, bg) => {
     const raw = styles.getPropertyValue(token).trim()
