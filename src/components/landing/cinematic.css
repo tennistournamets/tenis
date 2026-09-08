@@ -128,9 +128,9 @@
 .landing--cinematic .sport-tile__title { font-size: 1.8rem; font-weight: 500; letter-spacing: -.045em; color: var(--cinema-text); margin-bottom: 12px; }
 .landing--cinematic .sport-tile__text { color: var(--cinema-muted); font-size: .9375rem; line-height: 1.7; margin: 0; max-width: none; }
 .landing--cinematic .cinema-features-section { padding-top: 40px; }
-.landing--cinematic .landing-features { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border-top: 1px solid var(--cinema-line); }
+.landing--cinematic .landing-features { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0; border-top: 1px solid var(--cinema-line); }
 .landing--cinematic .feature-card { background: transparent; box-shadow: none; border: 0; border-bottom: 1px solid var(--cinema-line); border-radius: 0; padding: 31px 32px 36px 0; }
-.landing--cinematic .feature-card:not(:nth-child(3n + 1)) { border-left: 1px solid var(--cinema-line); padding-left: 32px; }
+.landing--cinematic .feature-card:nth-child(even) { border-left: 1px solid var(--cinema-line); padding-left: 32px; }
 .landing--cinematic .feature-card:hover { transform: none; box-shadow: none; background: none; }
 .landing--cinematic .feature-card__top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 28px; color: var(--cinema-muted); font: 400 .625rem var(--font-mono); }
 .landing--cinematic .feature-card__glyph { color: var(--cinema-accent); font: 400 2rem var(--font-body); line-height: 1; }
@@ -146,16 +146,6 @@
 .landing--cinematic .footer-brand span { color: var(--cinema-accent); }
 .landing--cinematic .landing-footer__copy { color: var(--cinema-muted); font-size: .75rem; }
 .landing--cinematic .cinema-error { color: var(--accent-text); font-size: .875rem; }
-.landing--cinematic.landing--no3d .hero-coordinate { display: none; }
-.landing--cinematic.landing--no3d .match-ticket { bottom: 50%; right: 50%; transform: translate(50%, 50%); width: min(90%, 360px); }
-.landing--cinematic.landing--no3d .how__stage-col, .landing--cinematic.landing--no3d .cta-stage { display: none; }
-.landing--cinematic.landing--no3d .how { grid-template-columns: 1fr; }
-.landing--cinematic.landing--no3d .how__steps { flex-direction: row; gap: 24px; }
-.landing--cinematic.landing--no3d .how-step { flex: 1; min-height: 0; }
-.landing--cinematic.landing--no3d .sport-tile__stage { display: none; }
-.landing--cinematic.landing--no3d .sport-tile__copy { margin-top: 36px; }
-.landing--cinematic.landing--no3d .landing-cta { grid-template-columns: 1fr; }
-.landing--cinematic.landing--no3d .landing-cta__inner { text-align: center; }
 .landing--paused *, .landing--paused *::before, .landing--paused *::after { animation-play-state: paused !important; }
 @keyframes cinema-pulse { 50% { opacity: .35; } }
 @keyframes cinema-scroll { 0%, 100% { transform: translateY(-3px); } 50% { transform: translateY(4px); } }
@@ -195,12 +185,10 @@
   .landing--cinematic .sport-tile__title { font-size: 1.5rem; }
   .landing--cinematic .sport-tile__text { font-size: .875rem; }
   .landing--cinematic .landing-features { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .landing--cinematic .feature-card:not(:nth-child(3n + 1)) { border-left: 0; padding-left: 0; }
+  .landing--cinematic .feature-card { border-left: 0; padding-left: 0; }
   .landing--cinematic .feature-card:nth-child(even) { border-left: 1px solid var(--cinema-line); padding-left: 24px; }
   .landing--cinematic .landing-cta { gap: 20px; padding-top: 65px; }
   .landing--cinematic .landing-cta__title { font-size: 2.5rem; }
-  .landing--cinematic.landing--no3d .how__steps { flex-direction: column; }
-  .landing--cinematic.landing--no3d .how-step__stage { display: none; }
 }
 @media (max-width: 600px) {
   .landing--cinematic .landing-nav__inner { padding: 12px 20px; min-height: 68px; }
@@ -258,7 +246,6 @@
   .landing--cinematic .landing-cta__subtitle { font-size: .9375rem; }
   .landing--cinematic .landing-footer { padding: 28px 22px; flex-wrap: wrap; gap: 16px; }
   .landing--cinematic .landing-footer > span:nth-child(2) { display: none; }
-  .landing--cinematic.landing--no3d .landing-hero__visual { height: 260px; }
 }
 @media (max-width: 370px) {
   .landing--cinematic .landing-nav__inner { padding-inline: 14px; }
@@ -277,9 +264,9 @@
 
 /* Keep the motion switch separate from the score ticket even at 320px. */
 .landing--cinematic .motion-control { top: 0; bottom: auto; left: 0; z-index: 3; width: 44px; height: 44px; }
-.landing--cinematic.landing--paused:not(.landing--no3d) .match-ticket.tilt { transform: none; }
+.landing--cinematic.landing--paused .match-ticket.tilt { transform: none; }
 @media (prefers-reduced-motion: reduce) {
-  .landing--cinematic:not(.landing--no3d) .match-ticket.tilt { transform: none; }
+  .landing--cinematic .match-ticket.tilt { transform: none; }
   .landing--cinematic .motion-control { display: none; }
 }
 
@@ -305,4 +292,74 @@
 @media (max-width: 600px) {
   .landing--cinematic .landing-hero__title { font-size: clamp(2rem, 9.6vw, 3.6rem); }
   .landing--cinematic .landing-hero__visual, .landing--cinematic.landing--3d .landing-hero__visual { height: 370px; }
+}
+
+/* Loading and static artwork occupy exactly the same space as the 3D scene. */
+.landing--cinematic .landing-still { display: block; width: 100%; height: 100%; color: var(--cinema-accent); }
+.landing--cinematic .cinema-button { line-height: 1.5; }
+.landing--cinematic .cinema-button > span { line-height: 1; }
+.landing--cinematic .landing-eyebrow, .landing--cinematic .how-step__number,
+.landing--cinematic .sport-tile__top, .landing--cinematic .chapter-nav button,
+.landing--cinematic .match-ticket__live, .landing--cinematic .ticket-stat strong,
+.landing--cinematic .stage-caption__demo { line-height: 1.4; }
+.landing--cinematic .footer-brand { line-height: 1.3; }
+.landing--cinematic.landing--3d .landing-still { visibility: hidden; }
+.landing--cinematic .landing-hero__visual > .landing-still { position: absolute; top: 0; height: 78%; }
+.landing--cinematic .landing-motion { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin-top: 22px; }
+.landing--cinematic .motion-toggle { display: inline-flex; align-items: center; gap: 9px; min-height: 44px; padding: 0 2px; border: 0; background: none; color: var(--cinema-text); font: 500 .875rem var(--font-body); cursor: pointer; }
+.landing--cinematic .motion-toggle:disabled { cursor: default; opacity: 1; }
+.landing--cinematic .motion-toggle__track { width: 30px; height: 18px; padding: 3px; border-radius: 20px; background: var(--cinema-muted); }
+.landing--cinematic .motion-toggle__track::before { content: ''; display: block; width: 12px; height: 12px; border-radius: 50%; background: var(--cinema-bg); }
+.landing--cinematic .motion-toggle[aria-checked='true'] .motion-toggle__track { background: var(--cinema-accent); }
+.landing--cinematic .motion-toggle[aria-checked='true'] .motion-toggle__track::before { transform: translateX(12px); }
+.landing--cinematic #motion-note { font-size: .75rem; color: var(--cinema-muted); }
+.landing--cinematic .demo-explanation { font-size: .875rem; line-height: 1.6; max-width: 460px; color: var(--cinema-muted); margin: 16px 0 0; }
+.landing--cinematic.landing--paused *, .landing--cinematic.landing--paused *::before, .landing--cinematic.landing--paused *::after { transition: none !important; }
+.landing--cinematic.landing--paused .reveal { opacity: 1; transform: none; }
+@media (max-width: 720px) {
+  .landing--cinematic .landing-hero { padding: 100px 20px 32px; gap: 12px; }
+  .landing--cinematic .cinema-kicker { font-size: .875rem; margin-bottom: 18px; }
+  .landing--cinematic .landing-hero__title { margin-bottom: 18px; }
+  .landing--cinematic .landing-hero__subtitle { line-height: 1.6; margin-bottom: 20px; }
+  .landing--cinematic .landing-hero__actions { flex-direction: column; align-items: stretch; gap: 4px; }
+  .landing--cinematic .cinema-button { width: 100%; min-height: 52px; font-size: 1rem; }
+  .landing--cinematic .cinema-link { justify-content: center; align-self: center; font-size: .875rem; }
+  .landing--cinematic .landing-hero__note { font-size: .875rem; line-height: 1.5; margin-top: 10px; }
+  .landing--cinematic .landing-motion { margin-top: 12px; gap: 0 12px; }
+  .landing--cinematic .landing-hero__visual, .landing--cinematic.landing--3d .landing-hero__visual { height: 320px; }
+  .landing--cinematic .hero-coordinate, .landing--cinematic .hero-bottom, .landing--cinematic .cinema-manifesto { display: none; }
+  .landing--cinematic .match-ticket { bottom: 0; width: 100%; right: 0; padding: 12px 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; }
+  .landing--cinematic .match-ticket__top { grid-column: 1 / -1; font-size: .875rem; }
+  .landing--cinematic .match-ticket__live { font-size: .75rem; }
+  .landing--cinematic .match-ticket__meta { grid-column: 1 / -1; margin: 0; font-size: .75rem; }
+  .landing--cinematic .ticket-stat { margin: 4px 0 0; font-size: .75rem; gap: 6px; }
+  .landing--cinematic .ticket-stat strong { font-size: 1.25rem; }
+  .landing--cinematic .match-ticket__bottom { display: none; }
+  .landing--cinematic .landing-section { padding: 48px 20px; }
+  .landing--cinematic .cinema-section-head { margin-bottom: 28px; }
+  .landing--cinematic .landing-eyebrow { font-size: .75rem; margin-bottom: 14px; }
+  .landing--cinematic .cinema-section-head h2 { font-size: clamp(2rem, 8.5vw, 2.8rem); }
+  .landing--cinematic .cinema-section-copy { margin-top: 16px; line-height: 1.6; }
+  .landing--cinematic .how-step { padding: 0 0 28px; }
+  .landing--cinematic .how-step__copy { padding-left: 16px; }
+  .landing--cinematic .how-step__number { font-size: 1.15rem; margin-bottom: 12px; }
+  .landing--cinematic .how-step__title { font-size: 1.6rem; margin-bottom: 12px; }
+  .landing--cinematic .how-step__text { line-height: 1.6; }
+  .landing--cinematic .step-tag { margin-top: 14px; font-size: .875rem; }
+  .landing--cinematic .how-step__stage, .landing--cinematic.landing--3d .how-step__stage { height: 240px; margin: 0 0 20px; }
+  .landing--cinematic .format-tiles { grid-template-columns: 1fr; gap: 0; border-top: 1px solid var(--cinema-line); }
+  .landing--cinematic .format-tile { position: relative; border: 0; border-bottom: 1px solid var(--cinema-line); border-radius: 0; padding: 20px 0 20px 38px; background: none; }
+  .landing--cinematic .sport-tile__top { position: absolute; top: 24px; left: 0; font-size: .75rem; }
+  .landing--cinematic .sport-tile__top > span:last-child { display: none; }
+  .landing--cinematic .format-tile .sport-tile__title { font-size: 1.25rem; margin-bottom: 8px; }
+  .landing--cinematic .sport-tile__text { line-height: 1.6; }
+  .landing--cinematic .landing-features { grid-template-columns: 1fr; }
+  .landing--cinematic .feature-card, .landing--cinematic .feature-card:nth-child(even) { position: relative; padding: 20px 0 20px 42px; border-left: 0; }
+  .landing--cinematic .feature-card__top { position: absolute; left: 0; top: 22px; margin: 0; }
+  .landing--cinematic .feature-card__top > span { display: none; }
+  .landing--cinematic .feature-card__title { margin-bottom: 8px; }
+  .landing--cinematic .feature-card__text { line-height: 1.6; }
+  .landing--cinematic .landing-cta { grid-template-columns: 1fr; }
+  .landing--cinematic .landing-cta__inner { text-align: left; align-items: stretch; }
+  .landing--cinematic .landing-cta__title { font-size: 2.25rem; }
 }

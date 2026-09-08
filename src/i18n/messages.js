@@ -52,7 +52,7 @@ export const messages = {
         },
         liveScore: {
           title: 'Live-счёт',
-          description: 'Поочковый ввод счёта в реальном времени. Авто-подсчёт геймов, сетов, тай-брейков. Отмена последнего действия.',
+          description: 'Поочковый live-счёт для тенниса и падела. Для футбола — итоговый счёт и пенальти.',
         },
         spectator: {
           title: 'Зрительский доступ',
@@ -64,7 +64,7 @@ export const messages = {
         },
         registration: {
           title: 'Регистрация участников',
-          description: 'Открытая форма регистрации. Подтверждение заявок, управление посевом, экспорт списка.',
+          description: 'Регистрация по ссылке. Подтверждайте заявки и управляйте списком участников.',
         },
         collaboration: {
           title: 'Командная работа',
@@ -736,7 +736,7 @@ export const messages = {
         },
         liveScore: {
           title: 'Live scoring',
-          description: 'Point-by-point score entry in real time. Auto calculation of games, sets, tiebreaks. Undo last action.',
+          description: 'Point-by-point live scoring for tennis and padel. Final scores and penalties for football.',
         },
         spectator: {
           title: 'Spectator access',
@@ -748,7 +748,7 @@ export const messages = {
         },
         registration: {
           title: 'Player registration',
-          description: 'Open registration form. Approve entries, manage seeding, export the list.',
+          description: 'Registration through a link. Approve entries and manage your participant list.',
         },
         collaboration: {
           title: 'Team collaboration',
@@ -1420,7 +1420,7 @@ export const messages = {
         },
         liveScore: {
           title: 'Tiesioginis rezultatas',
-          description: 'Taškas po taško realiuoju laiku. Automatinis žaidimų, setų, pratęsimų skaičiavimas. Paskutinio veiksmo atšaukimas.',
+          description: 'Tiesioginis taškų skaičiavimas tenisui ir padeliui. Futbolui — galutinis rezultatas ir baudiniai.',
         },
         spectator: {
           title: 'Prieiga žiūrovams',
@@ -1432,7 +1432,7 @@ export const messages = {
         },
         registration: {
           title: 'Žaidėjų registracija',
-          description: 'Atvira registracijos forma. Patvirtinkite dalyvius, tvarkykite reitingus, eksportuokite sąrašą.',
+          description: 'Registracija per nuorodą. Patvirtinkite paraiškas ir tvarkykite dalyvių sąrašą.',
         },
         collaboration: {
           title: 'Komandinis darbas',

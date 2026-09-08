@@ -9,6 +9,7 @@ import { theme } from '../../lib/theme'
 // [data-stage] / [data-step-block] elements found under `root`.
 const props = defineProps({
   paused: { type: Boolean, default: false },
+  compact: { type: Boolean, default: false },
   root: {
     type: Object,
     default: null,
@@ -22,6 +23,8 @@ let world = null
 let rafId = 0
 let staticRaf = 0
 let resizeObserver = null
+let stageObserver = null
+let visibleStages = new Set()
 let reducedMotion = false
 let motionQuery = null
 const cleanups = []
@@ -44,7 +47,7 @@ function loop(now) {
 }
 
 function start() {
-  if (rafId || reducedMotion || document.hidden || !world) return
+  if (rafId || reducedMotion || document.hidden || !world || !visibleStages.size) return
   rafId = requestAnimationFrame(loop)
 }
 
@@ -91,6 +94,7 @@ onMounted(async () => {
     world = createLandingWorld(host.value, {
       palette: readPalette(),
       reducedMotion,
+      compact: props.compact,
       dprCap: small || lowEnd ? 1.25 : 1.5,
       onContextLost() {
         console.warn('landing3d: WebGL context lost, falling back')
@@ -111,9 +115,20 @@ onMounted(async () => {
     return
   }
   refresh()
+  world.renderStatic()
   emit('ready')
 
   const root = props.root || document.body
+  // No animation loop while the visitor reads the text-only sections.
+  stageObserver = new IntersectionObserver(entries => {
+    for (const entry of entries) {
+      if (entry.isIntersecting && entry.boundingClientRect.width && entry.boundingClientRect.height) visibleStages.add(entry.target)
+      else visibleStages.delete(entry.target)
+    }
+    if (visibleStages.size) start()
+    else { stop(); queueStatic() }
+  }, { rootMargin: '100px' })
+  root.querySelectorAll('[data-stage]').forEach(stage => stageObserver.observe(stage))
   resizeObserver = new ResizeObserver(() => refresh())
   resizeObserver.observe(root)
   // iOS toolbars fire resize storms with height-only changes; debounce.
@@ -190,6 +205,8 @@ onBeforeUnmount(() => {
   for (const fn of cleanups) fn()
   cleanups.length = 0
   if (resizeObserver) resizeObserver.disconnect()
+  stageObserver?.disconnect()
+  visibleStages.clear()
   if (world) world.dispose()
   world = null
 })

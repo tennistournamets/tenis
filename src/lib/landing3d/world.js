@@ -13,8 +13,8 @@ const FOV = 30, CAM_Z = 18
 
 // A single transparent canvas. Each composition lives in its own DOM-anchored
 // group, so scroll is native and the product's buttons remain ordinary HTML.
-export function createLandingWorld(host, { palette, reducedMotion = false, dprCap = 1.5, onContextLost } = {}) {
-  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance', failIfMajorPerformanceCaveat: true })
+export function createLandingWorld(host, { palette, reducedMotion = false, compact = false, dprCap = 1.5, onContextLost } = {}) {
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: compact ? 'low-power' : 'high-performance', failIfMajorPerformanceCaveat: true })
   const budgetDpr = () => Math.min(devicePixelRatio || 1, dprCap, Math.sqrt(2.6e6 / Math.max(1, innerWidth * innerHeight)))
   let dpr = budgetDpr()
   renderer.setPixelRatio(dpr)
@@ -53,46 +53,52 @@ export function createLandingWorld(host, { palette, reducedMotion = false, dprCa
     const heroEntry = makeEntryCard()
     heroEntry.scale.setScalar(0.64)
     const orbit = makeOrbit()
-    const heroConfetti = makeConfetti(38)
+    const heroConfetti = makeConfetti(compact ? 12 : 38)
     hero.add(orbit, heroPodium, heroMedal, heroEntry, heroConfetti)
     scene.add(hero)
 
     const beats = [new THREE.Group(), new THREE.Group(), new THREE.Group()]
-    const entries = makeEntryPair()
-    entries.scale.setScalar(1.05)
-    beats[0].add(entries)
+    const entries = compact ? null : makeEntryPair()
+    if (entries) { entries.scale.setScalar(1.05); beats[0].add(entries) }
 
     // Keep the assembling tournament bracket as the central story beat.
     const tree = makeBracketTree()
     tree.scale.setScalar(0.72)
     beats[1].add(tree)
 
-    const winners = makePodium()
-    winners.rotation.set(0.12, -0.25, 0)
-    winners.scale.setScalar(1.04)
-    const winnerConfetti = makeConfetti()
-    beats[2].add(winners, winnerConfetti)
+    const winners = compact ? null : makePodium()
+    const winnerConfetti = compact ? null : makeConfetti()
+    if (winners) {
+      winners.rotation.set(0.12, -0.25, 0)
+      winners.scale.setScalar(1.04)
+      beats[2].add(winners, winnerConfetti)
+    }
     scene.add(...beats)
 
-    const knockout = makeBracketTree()
-    knockout.scale.setScalar(0.42)
-    const league = makeStandings()
-    league.scale.setScalar(0.82)
-    const groups = makeEntryPair()
-    groups.scale.setScalar(0.68)
-    const double = new THREE.Group()
-    const upperTree = makeBracketTree(), lowerTree = makeBracketTree()
-    upperTree.scale.setScalar(0.33)
-    lowerTree.scale.setScalar(0.26)
-    upperTree.position.set(-0.1, 0.6, 0.1)
-    lowerTree.position.set(0.2, -0.9, -0.3)
-    double.add(upperTree, lowerTree)
-    const tiles = [knockout, league, groups, double].map((obj, i) => ({ key: `format-${['knockout', 'league', 'groups', 'double'][i]}`, obj, baseScale: obj.scale.x, hover: 0, target: 0, angle: i * 0.55 }))
-    for (const tile of tiles) scene.add(tile.obj)
+    const themed = [tree]
+    const tiles = []
+    let groups = null
+    if (!compact) {
+      const knockout = makeBracketTree()
+      knockout.scale.setScalar(0.42)
+      const league = makeStandings()
+      league.scale.setScalar(0.82)
+      groups = makeEntryPair()
+      groups.scale.setScalar(0.68)
+      const double = new THREE.Group()
+      const upperTree = makeBracketTree(), lowerTree = makeBracketTree()
+      upperTree.scale.setScalar(0.33)
+      lowerTree.scale.setScalar(0.26)
+      upperTree.position.set(-0.1, 0.6, 0.1)
+      lowerTree.position.set(0.2, -0.9, -0.3)
+      double.add(upperTree, lowerTree)
+      tiles.push(...[knockout, league, groups, double].map((obj, i) => ({ key: `format-${['knockout', 'league', 'groups', 'double'][i]}`, obj, baseScale: obj.scale.x, hover: 0, target: 0, angle: i * 0.55 })))
+      for (const tile of tiles) scene.add(tile.obj)
+      themed.push(knockout, upperTree, lowerTree)
+    }
 
-    const trophy = makeMedal()
-    scene.add(trophy)
-    const themed = [tree, knockout, upperTree, lowerTree]
+    const trophy = compact ? null : makeMedal()
+    if (trophy) scene.add(trophy)
     function setPalette(p) {
       themed.forEach(obj => obj.userData.setPalette?.(p))
       scene.environmentIntensity = p.isDark ? 0.72 : 0.9
@@ -152,6 +158,7 @@ export function createLandingWorld(host, { palette, reducedMotion = false, dprCa
       }
       for (let i = 0; i < 3; i++) {
         const g = beats[i]
+        if (compact && i !== 1) { g.visible = false; continue }
         let r, weight, progress
         if (sticky) {
           r = { left: sticky.left, top: sticky.top + sy, width: sticky.width, height: sticky.height }
@@ -198,8 +205,8 @@ export function createLandingWorld(host, { palette, reducedMotion = false, dprCa
       })
 
       const tr = rects.trophy
-      trophy.visible = !!visible(tr)
-      if (trophy.visible) {
+      if (trophy) trophy.visible = !!visible(tr)
+      if (trophy?.visible) {
         any = true
         const p = reducedMotion ? 0.5 : clamp((vh - (tr.top - scroll)) / (vh + tr.height), 0, 1)
         const unit = Math.min(tr.width / 3.3, tr.height / 3.9) * upp
@@ -210,12 +217,15 @@ export function createLandingWorld(host, { palette, reducedMotion = false, dprCa
       return any
     }
 
-    let prev = 0, avg = 16, lastInput = 0, skip = false, hadVisible = false
+    let prev = 0, avg = 16, lastInput = 0, skip = false, hadVisible = false, lastMobileFrame = 0
     function frame(now) {
+      // Keep touch scrolling responsive: mobile artwork renders at up to 30 fps.
+      if (compact && now - lastMobileFrame < 32) return
+      lastMobileFrame = now
       const dt = prev ? clamp((now - prev) / 1000, 0, 0.05) : 0.016
       prev = now
       avg += (dt * 1000 - avg) * 0.05
-      if (avg > 26 && dpr > 1) { dpr = Math.max(1, dpr - 0.25); renderer.setPixelRatio(dpr); avg = 16 }
+      if (avg > (compact ? 42 : 26) && dpr > 1) { dpr = Math.max(1, dpr - 0.25); renderer.setPixelRatio(dpr); avg = 16 }
       const any = update(dt)
       if (!any) {
         if (hadVisible) renderer.clear()
@@ -223,7 +233,7 @@ export function createLandingWorld(host, { palette, reducedMotion = false, dprCa
         return
       }
       hadVisible = true
-      if (now - lastInput > 4000 && !reducedMotion) { skip = !skip; if (skip) return }
+      if (!compact && now - lastInput > 4000 && !reducedMotion) { skip = !skip; if (skip) return }
       renderer.render(scene, camera)
     }
     function renderStatic() { update(0); renderer.render(scene, camera) }
