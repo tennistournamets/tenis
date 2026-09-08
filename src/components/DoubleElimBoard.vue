@@ -1,7 +1,8 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import BracketBoard from './BracketBoard.vue'
+import { useNarrowLayout } from '../lib/useNarrowLayout'
 
 const props = defineProps({
   matches: { type: Array, default: () => [] },
@@ -12,15 +13,42 @@ const props = defineProps({
 })
 const emit = defineEmits(['view-live'])
 const { t } = useI18n()
+const isNarrowLayout = useNarrowLayout()
+const activeStage = ref('winners')
 
 const winners = computed(() => props.matches.filter((m) => m.stage === 'winners'))
 const losers = computed(() => props.matches.filter((m) => m.stage === 'losers'))
 const grandFinal = computed(() => props.matches.filter((m) => m.stage === 'grand_final'))
+const panels = computed(() => [
+  { key: 'winners', label: t('admin.winnersBracket'), count: winners.value.length },
+  { key: 'losers', label: t('admin.losersBracket'), count: losers.value.length },
+  { key: 'grand_final', label: t('admin.grandFinal'), count: grandFinal.value.length },
+].filter((panel) => panel.count))
+
+watch(panels, (next) => {
+  if (!next.some((panel) => panel.key === activeStage.value)) activeStage.value = next[0]?.key || 'winners'
+}, { immediate: true })
 </script>
 
 <template>
   <div class="de-board">
-    <section class="de-panel">
+    <div v-if="isNarrowLayout" class="de-tabs" role="tablist" :aria-label="t('mobile.stageFilter')">
+      <button
+        v-for="panel in panels"
+        :id="`de-tab-${panel.key}`"
+        :key="panel.key"
+        type="button"
+        role="tab"
+        :aria-selected="activeStage === panel.key"
+        :aria-controls="`de-panel-${panel.key}`"
+        :class="{ active: activeStage === panel.key }"
+        @click="activeStage = panel.key"
+      >
+        <span>{{ panel.label }}</span><b>{{ panel.count }}</b>
+      </button>
+    </div>
+
+    <section v-show="!isNarrowLayout || activeStage === 'winners'" id="de-panel-winners" class="de-panel" role="tabpanel" aria-labelledby="de-tab-winners">
       <header class="de-panel__head">
         <h3 class="de-panel__title">{{ t('admin.winnersBracket') }}</h3>
       </header>
@@ -36,7 +64,7 @@ const grandFinal = computed(() => props.matches.filter((m) => m.stage === 'grand
       </div>
     </section>
 
-    <section v-if="losers.length" class="de-panel">
+    <section v-if="losers.length" v-show="!isNarrowLayout || activeStage === 'losers'" id="de-panel-losers" class="de-panel" role="tabpanel" aria-labelledby="de-tab-losers">
       <header class="de-panel__head">
         <h3 class="de-panel__title">{{ t('admin.losersBracket') }}</h3>
       </header>
@@ -52,7 +80,7 @@ const grandFinal = computed(() => props.matches.filter((m) => m.stage === 'grand
       </div>
     </section>
 
-    <section v-if="grandFinal.length" class="de-panel de-panel--gf">
+    <section v-if="grandFinal.length" v-show="!isNarrowLayout || activeStage === 'grand_final'" id="de-panel-grand_final" class="de-panel de-panel--gf" role="tabpanel" aria-labelledby="de-tab-grand_final">
       <header class="de-panel__head">
         <h3 class="de-panel__title">{{ t('admin.grandFinal') }}</h3>
       </header>
@@ -78,10 +106,21 @@ const grandFinal = computed(() => props.matches.filter((m) => m.stage === 'grand
 }
 
 .de-panel {
+  position: relative;
   border: 1px solid var(--border);
   border-radius: var(--radius, 16px);
   background: var(--surface);
   overflow: hidden;
+}
+
+.de-tabs { display: grid; gap: 6px; padding: 5px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface-row); }
+.de-tabs button { min-height: 44px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 12px; border: 0; border-radius: 11px; color: var(--text-muted); background: transparent; font: inherit; font-size: .84rem; font-weight: 700; text-align: left; }
+.de-tabs button.active { color: var(--text); background: var(--surface); box-shadow: 0 3px 12px rgb(15 23 42 / 8%); }
+.de-tabs b { min-width: 25px; height: 25px; display: grid; place-items: center; border-radius: 8px; color: var(--primary); background: var(--primary-muted); font-size: .75rem; }
+
+@media (max-width: 720px) {
+  .de-panel__head { display: none; }
+  .de-panel__canvas :deep(.infinite-canvas) { min-height: min(62vh, 520px); }
 }
 
 .de-panel__head {

@@ -120,17 +120,13 @@ async page => {
       await p.locator('#tab-scores').click()
       check(await p.locator('#panel-scores').isVisible(), `${label}: score tab opens`)
       if (sport !== 'football') {
-        if (format === 'round_robin') {
-          await p.locator('#panel-scores button.rr-cross__result').first().click()
-          if (role !== 'counter') await p.locator('.msm-actions .btn--ghost').click()
-        } else await p.locator('#panel-scores .score-match__actions .btn--ghost').first().click()
+        await p.locator('#panel-scores .mobile-match__actions .btn--ghost').first().click()
         await p.waitForSelector('.live-modal')
         check(await p.evaluate(() => mf.calls.some(c => c.name === 'start_live_match')), `${label}: permitted LIVE starts`)
         if (role === 'counter') check(await p.locator('.live-modal .btn--danger').count() === 0, `${label}: counter has no stop action`)
         await p.keyboard.press('Escape')
-      } else if (format === 'single_elimination' || format === 'double_elimination') {
-        await p.locator('#tab-bracket').click()
-        await p.locator('.match-card__score-btn:visible').first().click()
+      } else {
+        await p.locator('#panel-scores .mobile-match__actions .btn--secondary').first().click()
         await p.waitForSelector('.msm-goals')
         check(await p.locator('.live-modal').count() === 0 && !await p.evaluate(() => mf.calls.some(c => c.name === 'start_live_match')), `${label}: bracket opens goals without tennis RPC`)
         await p.keyboard.press('Escape')

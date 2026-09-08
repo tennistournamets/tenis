@@ -10,8 +10,10 @@ import GroupStageBoard from '../components/GroupStageBoard.vue'
 import DoubleElimBoard from '../components/DoubleElimBoard.vue'
 import LiveScoreViewerModal from '../components/LiveScoreViewerModal.vue'
 import RegistrationForm from '../components/RegistrationForm.vue'
+import TournamentMatchList from '../components/TournamentMatchList.vue'
 import { entryMemberNames } from '../lib/entryDisplay'
 import { getSportConfig } from '../lib/sportConfig'
+import { useNarrowLayout } from '../lib/useNarrowLayout'
 import { supabase } from '../lib/supabase'
 import { createSnapshotRefresh, subscribeTournament, subscribeRefreshTriggers } from '../lib/tournamentSync'
 import { createPublicTournamentReader } from '../lib/tournamentRepository'
@@ -25,6 +27,8 @@ const props = defineProps({
 })
 
 const { t } = useI18n()
+const isNarrowLayout = useNarrowLayout()
+const mobileSurface = ref('matches')
 
 const tournament = ref(null)
 const entries = ref([])
@@ -284,8 +288,20 @@ onBeforeUnmount(() => {
               <span class="pub-chip__icon">{{ chip.icon }}</span>{{ chip.label }}
             </span>
           </div>
-          <p v-if="tournament.description" class="pub-hero__desc">{{ tournament.description }}</p>
-          <p v-if="tournament.sport === 'tennis'" class="pub-hero__desc">{{ tennisRulesSummary(tournament.scoring_config, t) }}</p>
+          <details
+            v-if="tournament.description || tournament.sport === 'tennis'"
+            class="pub-hero__details"
+            :open="!isNarrowLayout"
+          >
+            <summary>{{ t('mobile.tournamentDetails') }}</summary>
+            <p v-if="tournament.description" class="pub-hero__desc">{{ tournament.description }}</p>
+            <p v-if="tournament.sport === 'tennis'" class="pub-hero__desc">{{ tennisRulesSummary(tournament.scoring_config, t) }}</p>
+          </details>
+          <div v-if="tournament.publish_contact && (tournament.contact_phone || tournament.contact_email)" class="pub-contact">
+            <strong>{{ t('mobile.organizerContacts') }}</strong>
+            <a v-if="tournament.contact_phone" :href="`tel:${tournament.contact_phone}`">{{ tournament.contact_phone }}</a>
+            <a v-if="tournament.contact_email" :href="`mailto:${tournament.contact_email}`">{{ tournament.contact_email }}</a>
+          </div>
         </div>
       </section>
 
@@ -345,6 +361,48 @@ onBeforeUnmount(() => {
       <div v-else-if="!matches.length && !groups.length" class="card empty-state" role="status">
         <p>{{ t('bracket.empty') }}</p>
       </div>
+
+      <template v-else-if="isNarrowLayout">
+        <div class="mobile-surface-switch" role="tablist" :aria-label="t('tournament.tabsLabel')">
+          <button type="button" role="tab" :aria-selected="mobileSurface === 'matches'" :class="{ active: mobileSurface === 'matches' }" @click="mobileSurface = 'matches'">
+            {{ t('mobile.matches') }}
+          </button>
+          <button type="button" role="tab" :aria-selected="mobileSurface === 'overview'" :class="{ active: mobileSurface === 'overview' }" @click="mobileSurface = 'overview'">
+            {{ t('mobile.overview') }}
+          </button>
+        </div>
+
+        <div v-if="mobileSurface === 'matches'" class="card mobile-match-card">
+          <TournamentMatchList
+            :matches="matches"
+            :sets-by-match="setsByMatch"
+            :entries-map="entriesMap"
+            :live-scores-by-match="liveScoresByMatch"
+            @view-live="selectedLiveMatchId = $event.id"
+          />
+        </div>
+
+        <template v-else-if="isRoundRobin">
+          <div v-if="standings.length" class="card">
+            <h3 class="section-title">{{ t('standings.title') }}</h3>
+            <StandingsTable :rows="standings" :family="sportCfg.scoringFamily" />
+          </div>
+          <div v-if="matches.length" class="card rr-cross-card" style="margin-top: var(--space-4)">
+            <h3 class="section-title">{{ t('standings.crossTable') }}</h3>
+            <RoundRobinCrossTable :matches="matches" :entries-map="entriesMap" :standings="standings" :family="sportCfg.scoringFamily" :live-scores-by-match="liveScoresByMatch" @view-live="selectedLiveMatchId = $event.id" />
+          </div>
+        </template>
+        <template v-else-if="isGroupsPlayoff">
+          <div v-if="groups.length" class="card"><h3 class="section-title">{{ t('admin.groupStage') }}</h3><GroupStageBoard :groups="groupsView" :entries-map="entriesMap" :family="sportCfg.scoringFamily" /></div>
+          <div v-if="playoffMatches.length" class="card" style="margin-top: var(--space-4)"><h3 class="section-title">{{ t('admin.playoff') }}</h3><BracketBoard :matches="playoffMatches" :sets-by-match="setsByMatch" :entries-map="entriesMap" :live-scores-by-match="liveScoresByMatch" @view-live="selectedLiveMatchId = $event.id" /></div>
+        </template>
+        <div v-else-if="isDoubleElim" class="card">
+          <DoubleElimBoard :matches="matches" :sets-by-match="setsByMatch" :entries-map="entriesMap" :live-scores-by-match="liveScoresByMatch" @view-live="selectedLiveMatchId = $event.id" />
+        </div>
+        <div v-else class="card">
+          <BracketBoard :matches="matches" :sets-by-match="setsByMatch" :entries-map="entriesMap" :live-scores-by-match="liveScoresByMatch" @view-live="selectedLiveMatchId = $event.id" />
+        </div>
+      </template>
 
       <template v-else-if="isRoundRobin">
         <div v-if="standings.length" class="card">
@@ -482,7 +540,43 @@ onBeforeUnmount(() => {
   line-height: 1.6;
 }
 
+.pub-hero__details summary { display: none; }
+.pub-contact { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 10px; font-size: .84rem; }
+.pub-contact a { color: var(--primary); overflow-wrap: anywhere; }
+
+.mobile-surface-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+  padding: 5px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface-row);
+}
+.mobile-surface-switch button {
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 11px;
+  color: var(--text-muted);
+  background: transparent;
+  font: inherit;
+  font-size: .86rem;
+  font-weight: 750;
+}
+.mobile-surface-switch button.active { color: var(--text); background: var(--surface); box-shadow: 0 3px 12px rgb(15 23 42 / 8%); }
+
 @media (max-width: 560px) {
-  .pub-hero { flex-direction: column; align-items: flex-start; gap: var(--space-3); }
+  .pub-hero { gap: var(--space-3); padding: 16px; }
+  .pub-hero__icon { display: none; }
+  .pub-hero__title-row { gap: 8px; }
+  .pub-hero__title-row .page-title { font-size: clamp(1.45rem, 7vw, 1.85rem); line-height: 1.08; }
+  .pub-chips { flex-wrap: nowrap; overflow-x: auto; margin-top: 8px; padding-bottom: 2px; scrollbar-width: none; }
+  .pub-chips::-webkit-scrollbar { display: none; }
+  .pub-chip { padding: 4px 9px; font-size: .76rem; }
+  .pub-hero__details { margin-top: 8px; }
+  .pub-hero__details summary { display: list-item; color: var(--primary); font-size: .84rem; font-weight: 750; cursor: pointer; }
+  .pub-hero__desc { margin-top: 8px; font-size: .9rem; line-height: 1.45; }
+  .mobile-match-card { padding: 14px; }
 }
 </style>

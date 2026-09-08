@@ -121,6 +121,15 @@ async page => {
   await page.waitForFunction(() => af.saved === 1)
   check(await page.evaluate(() => af.calls[0].args.p_expected_matches[0].revision === 7 && !('slug' in af.calls[0].args.p_patch)), 'Settings: category reset preserves expected match versions and immutable slug')
 
+  await page.evaluate(() => af.mount('components/admin/TournamentSettingsForm', { tournament: { ...af.base, status: 'in_progress' } }))
+  check(!await page.locator('#adm-name').isDisabled() && !await page.locator('#adm-desc').isDisabled(), 'Settings: active tournament name and description remain editable')
+  check(await page.locator('#adm-cat').isDisabled() && await page.locator('#adm-status').isDisabled(), 'Settings: active tournament structure and status remain locked')
+  check(!await page.locator('#adm-contact-phone').isDisabled() && await page.locator('#adm-publish-contact').isDisabled(), 'Settings: organizer contact remains editable and unpublished without a value')
+  await page.locator('#adm-contact-phone').fill(' +370 600 00000 ')
+  await page.locator('#adm-publish-contact').check()
+  await page.locator('.admin-settings-card__footer .btn--primary').click()
+  check(await page.evaluate(() => af.calls[0].args.p_patch.contact_phone === '+370 600 00000' && af.calls[0].args.p_patch.publish_contact === true), 'Settings: explicit contact publication is saved with normalized public details')
+
   for (const locale of ['ru', 'en', 'lt']) {
     await page.evaluate(locale => { af.i18n.global.locale.value = locale }, locale)
     await page.evaluate(() => af.mount('components/admin/ManualEntryForm'))

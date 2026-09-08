@@ -81,19 +81,22 @@ async page => {
   for (const locale of ['ru', 'en', 'lt']) {
     await page.evaluate(locale => { ui.i18n.global.locale.value = locale }, locale)
     await page.evaluate(() => ui.mount('components/CopyTournamentLink', { slug: 'cup / 2026' }))
+    if (await page.evaluate(() => typeof navigator.share === 'function')) {
+      check(await page.getByRole('button', { name: await page.evaluate(() => ui.i18n.global.t('share.qrShare')) }).count() === 1, `${locale}: native mobile share action is available`)
+    }
     await page.evaluate(() => Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined }))
-    await page.locator('.copy-link button').click()
+    await page.locator('.copy-link button[aria-live]').click()
     check(await page.getByRole('alert').innerText() === await page.evaluate(() => ui.i18n.global.t('share.copyFailed')), `${locale}: missing Clipboard displays translated failure`)
     await page.locator('.copy-link input').focus()
     check(await page.locator('.copy-link input').evaluate(el => el.selectionStart === 0 && el.selectionEnd === el.value.length && el.value.endsWith('/tournaments/cup%20%2F%202026')), `${locale}: full manual link is selected`)
     await page.evaluate(() => Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async () => { throw new Error('denied') } } }))
-    await page.locator('.copy-link button').click()
-    check(await page.getByRole('alert').count() === 1 && await page.locator('.copy-link button').innerText() === await page.evaluate(() => ui.i18n.global.t('share.copyLink')), `${locale}: denied Clipboard never reports copied`)
+    await page.locator('.copy-link button[aria-live]').click()
+    check(await page.getByRole('alert').count() === 1 && await page.locator('.copy-link button[aria-live]').innerText() === await page.evaluate(() => ui.i18n.global.t('share.copyLink')), `${locale}: denied Clipboard never reports copied`)
     await page.evaluate(() => Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: url => new Promise(resolve => { ui.copiedUrl = url; ui.copyResolve = resolve }) } }))
-    await page.locator('.copy-link button').click()
-    check(await page.locator('.copy-link button').isDisabled(), `${locale}: copy waits for API completion`)
+    await page.locator('.copy-link button[aria-live]').click()
+    check(await page.locator('.copy-link button[aria-live]').isDisabled(), `${locale}: copy waits for API completion`)
     await page.evaluate(() => ui.copyResolve())
-    await page.waitForFunction(() => document.querySelector('.copy-link button')?.textContent.trim() === ui.i18n.global.t('share.copied'))
+    await page.waitForFunction(() => document.querySelector('.copy-link button[aria-live]')?.textContent.trim() === ui.i18n.global.t('share.copied'))
     check(await page.getByRole('alert').count() === 0, `${locale}: confirmed copy clears failure`)
 
     for (const file of ['components/FootballScoreEditor', 'components/MatchScoreModal']) {
@@ -112,7 +115,7 @@ async page => {
   await page.evaluate(() => ui.mount('components/CopyTournamentLink', { slug: 'step9-actual-clipboard' }))
   await page.evaluate(() => { delete navigator.clipboard })
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
-  await page.locator('.copy-link button').click()
+  await page.locator('.copy-link button[aria-live]').click()
   check(await page.evaluate(async () => (await navigator.clipboard.readText()).endsWith('/tournaments/step9-actual-clipboard')), 'Clipboard: native browser clipboard contains the exact link')
   await page.context().clearPermissions()
   await page.evaluate(() => {
@@ -121,7 +124,7 @@ async page => {
     return ui.mount('components/TournamentQrModal', { slug: 'step9-qr', name: 'Step 9', onClose: () => { ui.closed = true } })
   })
   await page.setViewportSize({ width: 390, height: 844 })
-  await page.locator('.copy-link button').click()
+  await page.locator('.copy-link button[aria-live]').click()
   check(await page.getByRole('alert').count() === 1, 'QR: failed copying offers manual fallback')
   check(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'QR: fallback fits a 390px mobile viewport')
   await page.screenshot({ path: 'output/playwright/step9-clipboard-mobile.png' })

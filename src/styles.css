@@ -2300,6 +2300,26 @@ textarea.input:focus {
   max-width: 100%;
 }
 
+.admin-start-reason {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: .8rem;
+  line-height: 1.35;
+}
+
+.admin-mobile-surface {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+  padding: 5px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface-row);
+}
+.admin-mobile-surface button { min-height: 44px; padding: 8px; border: 0; border-radius: 11px; color: var(--text-muted); background: transparent; font: inherit; font-size: .86rem; font-weight: 750; }
+.admin-mobile-surface button.active { color: var(--text); background: var(--surface); box-shadow: 0 3px 12px rgb(15 23 42 / 8%); }
+
 @media (max-width: 600px) {
   .admin-tournament-overview__actions { width: 100%; }
   .admin-tournament-overview__actions .btn { min-height: 44px; max-width: 100%; white-space: normal; }
@@ -2419,6 +2439,14 @@ textarea.input:focus {
   min-height: 100vh;
   border-radius: 0;
   background-color: var(--bg);
+  touch-action: none;
+}
+
+@media (max-width: 720px) {
+  .infinite-canvas:not(.infinite-canvas--fullscreen) {
+    touch-action: pan-y;
+    cursor: default;
+  }
 }
 
 .infinite-canvas__content {
@@ -2610,6 +2638,12 @@ textarea.input:focus {
 
 .match-card__row--slot-editable.match-card__row--draggable:active {
   cursor: grabbing;
+}
+
+.match-card__row--selected {
+  outline: 3px solid var(--primary);
+  outline-offset: -3px;
+  background: var(--primary-muted);
 }
 
 .match-card__row--drag-over {
@@ -3351,6 +3385,7 @@ textarea.input:focus {
   padding: 0.375rem 0.75rem;
   font-size: 0.8125rem;
   font-weight: 500;
+  color: var(--text);
   border-radius: 100px;
   background: var(--surface-1, #1a1d23);
   border: 1px solid var(--border, #444);
@@ -3368,6 +3403,28 @@ textarea.input:focus {
   cursor: grabbing;
   transform: scale(0.97);
 }
+
+.manual-pairing-pool__chip--selected {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: var(--primary-muted);
+  box-shadow: 0 0 0 3px var(--primary-muted);
+}
+
+.pairing-tap-hint {
+  margin: 0 0 var(--space-2);
+  color: var(--text-muted);
+  font-size: .82rem;
+}
+
+.pair-slot__zone:focus-visible {
+  outline: 3px solid var(--primary-muted);
+  outline-offset: 2px;
+}
+
+.rejected-entries { margin-top: var(--space-3); border-top: 1px solid var(--border); padding-top: var(--space-3); }
+.rejected-entries summary { min-height: 44px; display: flex; align-items: center; gap: 8px; color: var(--text-muted); font-weight: 700; cursor: pointer; }
+.rejected-entries__list { padding-top: var(--space-2); }
 
 .manual-pairing-grid {
   display: grid;

@@ -18,6 +18,7 @@ import TournamentQrModal from '../components/TournamentQrModal.vue'
 import ScoreEditor from '../components/ScoreEditor.vue'
 import ManualEntryForm from '../components/admin/ManualEntryForm.vue'
 import TournamentSettingsForm from '../components/admin/TournamentSettingsForm.vue'
+import TournamentMatchList from '../components/TournamentMatchList.vue'
 import { scoringError } from '../lib/tennisRules'
 import { sameForm, cloneForm, matchVersions } from '../lib/formDraft'
 import { useUnsavedChanges, confirmDiscard, withApprovedDeparture } from '../lib/unsavedChanges'
@@ -29,6 +30,7 @@ import { readAdminTournamentSnapshot } from '../lib/tournamentRepository'
 import { indexEntries, groupSetsByMatch, indexLiveScores, buildGroupsView } from '../lib/tournamentProjections'
 import CopyTournamentLink from '../components/CopyTournamentLink.vue'
 import { useAuthStore } from '../stores/auth'
+import { useNarrowLayout } from '../lib/useNarrowLayout'
 
 const props = defineProps({
   id: {
@@ -41,6 +43,8 @@ const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
+const isNarrowLayout = useNarrowLayout()
+const adminMobileBracketSurface = ref('matches')
 
 const tournament = ref(null)
 const entries = ref([])
@@ -86,6 +90,7 @@ const pairingConflict = computed(() => manualPairingOpen.value && pairingBaselin
   pairingBaseline.value.settings_revision !== tournament.value?.settings_revision))
 const manualPairSlots = ref([])
 const manualPairingDragOver = ref(null)
+const selectedPairPlayer = ref(null)
 const pairingEditMode = ref(false)
 const editModePlayers = ref([])
 
@@ -98,6 +103,7 @@ const setsByMatch = computed(() => groupSetsByMatch(matchSets.value))
 const liveScoresByMatch = computed(() => indexLiveScores(liveScores.value))
 
 const pendingEntries = computed(() => entries.value.filter((entry) => entry.status === 'pending'))
+const rejectedEntries = computed(() => entries.value.filter((entry) => entry.status === 'rejected'))
 const approvedEntries = computed(() => entries.value.filter((entry) => entry.status === 'approved'))
 
 const unpairedEntries = computed(() => {
@@ -170,6 +176,7 @@ const canStartTournament = computed(
 )
 const isTournamentActive = computed(() => tournament.value?.status === 'in_progress')
 const isTournamentFinished = computed(() => tournament.value?.status === 'completed')
+const showAdminBracketOverview = computed(() => !isNarrowLayout.value || !isTournamentActive.value || adminMobileBracketSurface.value === 'overview')
 const scoreAccess = computed(() => scoringAccess(tournament.value, currentUserRole.value))
 const canManageTournament = computed(() => scoreAccess.value.manager)
 const canLiveScoreRole = computed(() => ['owner', 'editor', 'counter'].includes(currentUserRole.value))
@@ -417,6 +424,7 @@ async function closeManualPairing(force = false) {
   manualPairingOpen.value = false
   manualPairSlots.value = []
   manualPairingDragOver.value = null
+  selectedPairPlayer.value = null
   pairingEditMode.value = false
   editModePlayers.value = []
   pairingBaseline.value = null
@@ -474,7 +482,11 @@ function onSlotDrop(event, slotIndex, position) {
   } catch {
     return
   }
-  if (!payload.entryId) return
+  movePairPlayer(payload, slotIndex, position)
+}
+
+function movePairPlayer(payload, slotIndex, position) {
+  if (!payload?.entryId || actionLoading.value) return
 
   const entry = findEntryById(payload.entryId)
   if (!entry) return
@@ -495,10 +507,32 @@ function onSlotDrop(event, slotIndex, position) {
   slot[targetKey] = entry
 }
 
+function selectPairPlayer(entry, fromSlot = null, fromPosition = null) {
+  if (actionLoading.value) return
+  const current = selectedPairPlayer.value
+  if (current?.entryId === entry.id && current?.fromSlot === fromSlot && current?.fromPosition === fromPosition) {
+    selectedPairPlayer.value = null
+    return
+  }
+  selectedPairPlayer.value = { entryId: entry.id, fromSlot, fromPosition }
+}
+
+function assignSelectedPlayer(slotIndex, position) {
+  if (!selectedPairPlayer.value) return
+  movePairPlayer(selectedPairPlayer.value, slotIndex, position)
+  selectedPairPlayer.value = null
+}
+
+function activatePairSlot(entry, slotIndex, position) {
+  if (selectedPairPlayer.value) assignSelectedPlayer(slotIndex, position)
+  else if (entry) selectPairPlayer(entry, slotIndex, position)
+}
+
 function removeFromSlot(slotIndex, position) {
   if (actionLoading.value) return
   const key = position === 'A' ? 'playerA' : 'playerB'
   manualPairSlots.value[slotIndex][key] = null
+  selectedPairPlayer.value = null
 }
 
 async function reloadPairingDraft() {
@@ -1010,6 +1044,7 @@ onBeforeUnmount(() => {
             <CopyTournamentLink
               v-if="showPublicShareActions"
               :slug="tournament.slug"
+              :name="tournament.name"
             />
 
             <button
@@ -1035,6 +1070,10 @@ onBeforeUnmount(() => {
                 {{ t('admin.startTournament') }}
               </button>
             </span>
+
+            <p v-if="showStartButton && startBlockReason" class="admin-start-reason" role="status">
+              {{ startBlockReason }}
+            </p>
 
             <button
               v-if="isTournamentActive"
@@ -1178,6 +1217,22 @@ onBeforeUnmount(() => {
               </div>
             </div>
             <p v-else class="muted">{{ t('admin.noPending') }}</p>
+
+            <details v-if="rejectedEntries.length" class="rejected-entries">
+              <summary>
+                {{ t('mobile.rejectedEntries') }}
+                <span class="badge badge--neutral">{{ rejectedEntries.length }}</span>
+              </summary>
+              <div class="stack stack--sm rejected-entries__list">
+                <div v-for="entry in rejectedEntries" :key="entry.id" class="participant-item">
+                  <span class="entry-avatar">{{ entryInitials(entry) }}</span>
+                  <strong class="entry-name">{{ entryLabel(entry) }}</strong>
+                  <button class="btn btn--ghost btn--sm" type="button" :disabled="actionLoading" @click="updateEntryStatus(entry.id, 'pending')">
+                    {{ t('mobile.restoreEntry') }}
+                  </button>
+                </div>
+              </div>
+            </details>
           </div>
 
           <div v-if="!isTournamentActive" class="divider" />
@@ -1258,18 +1313,25 @@ onBeforeUnmount(() => {
               </div>
               <div class="manual-pairing-pool">
                 <h4 class="manual-pairing-pool__title">{{ t('admin.manualPairingPool') }}</h4>
+                <p class="pairing-tap-hint" role="status">
+                  {{ selectedPairPlayer ? t('mobile.selectedPlayer', { name: entryLabel(findEntryById(selectedPairPlayer.entryId)) }) : t('mobile.selectPlayerHint') }}
+                </p>
                 <div v-if="unassignedPlayers.length" class="manual-pairing-pool__list">
-                  <span
+                  <button
                     v-for="entry in unassignedPlayers"
                     :key="entry.id"
+                    type="button"
                     class="manual-pairing-pool__chip"
+                    :class="{ 'manual-pairing-pool__chip--selected': selectedPairPlayer?.entryId === entry.id && selectedPairPlayer?.fromSlot == null }"
+                    :aria-pressed="selectedPairPlayer?.entryId === entry.id && selectedPairPlayer?.fromSlot == null"
                     draggable="true"
                     @dragstart="onPlayerDragStart($event, entry, null, null)"
                     @dragend="onPlayerDragEnd"
+                    @click="selectPairPlayer(entry)"
                   >
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                     {{ entryLabel(entry) }}
-                  </span>
+                  </button>
                 </div>
                 <p v-else class="muted" style="font-size: 0.875rem">{{ t('admin.allPlayersAssigned') }}</p>
               </div>
@@ -1284,11 +1346,17 @@ onBeforeUnmount(() => {
                       'pair-slot__zone--drag-over': manualPairingDragOver === `${idx}-A`,
                     }"
                     :draggable="!!slot.playerA"
+                    role="button"
+                    tabindex="0"
+                    :aria-label="t('mobile.selectBracketSlot', { name: slot.playerA ? entryLabel(slot.playerA) : t('admin.emptySlot') })"
                     @dragstart="slot.playerA && onPlayerDragStart($event, slot.playerA, idx, 'A')"
                     @dragend="onPlayerDragEnd"
                     @dragover="onSlotDragOver($event, idx, 'A')"
                     @dragleave="onSlotDragLeave($event, idx, 'A')"
                     @drop="onSlotDrop($event, idx, 'A')"
+                    @click="activatePairSlot(slot.playerA, idx, 'A')"
+                    @keydown.enter="activatePairSlot(slot.playerA, idx, 'A')"
+                    @keydown.space.prevent="activatePairSlot(slot.playerA, idx, 'A')"
                   >
                     <template v-if="slot.playerA">
                       <span class="pair-slot__player">{{ entryLabel(slot.playerA) }}</span>
@@ -1296,7 +1364,7 @@ onBeforeUnmount(() => {
                         class="pair-slot__remove"
                         type="button"
                         aria-label="Remove"
-                        @click="removeFromSlot(idx, 'A')"
+                        @click.stop="removeFromSlot(idx, 'A')"
                       >&times;</button>
                     </template>
                     <span v-else class="pair-slot__placeholder">{{ t('admin.emptySlot') }}</span>
@@ -1308,11 +1376,17 @@ onBeforeUnmount(() => {
                       'pair-slot__zone--drag-over': manualPairingDragOver === `${idx}-B`,
                     }"
                     :draggable="!!slot.playerB"
+                    role="button"
+                    tabindex="0"
+                    :aria-label="t('mobile.selectBracketSlot', { name: slot.playerB ? entryLabel(slot.playerB) : t('admin.emptySlot') })"
                     @dragstart="slot.playerB && onPlayerDragStart($event, slot.playerB, idx, 'B')"
                     @dragend="onPlayerDragEnd"
                     @dragover="onSlotDragOver($event, idx, 'B')"
                     @dragleave="onSlotDragLeave($event, idx, 'B')"
                     @drop="onSlotDrop($event, idx, 'B')"
+                    @click="activatePairSlot(slot.playerB, idx, 'B')"
+                    @keydown.enter="activatePairSlot(slot.playerB, idx, 'B')"
+                    @keydown.space.prevent="activatePairSlot(slot.playerB, idx, 'B')"
                   >
                     <template v-if="slot.playerB">
                       <span class="pair-slot__player">{{ entryLabel(slot.playerB) }}</span>
@@ -1320,7 +1394,7 @@ onBeforeUnmount(() => {
                         class="pair-slot__remove"
                         type="button"
                         aria-label="Remove"
-                        @click="removeFromSlot(idx, 'B')"
+                        @click.stop="removeFromSlot(idx, 'B')"
                       >&times;</button>
                     </template>
                     <span v-else class="pair-slot__placeholder">{{ t('admin.emptySlot') }}</span>
@@ -1356,18 +1430,25 @@ onBeforeUnmount(() => {
               </div>
               <div class="manual-pairing-pool">
                 <h4 class="manual-pairing-pool__title">{{ t('admin.manualPairingPool') }}</h4>
+                <p class="pairing-tap-hint" role="status">
+                  {{ selectedPairPlayer ? t('mobile.selectedPlayer', { name: entryLabel(findEntryById(selectedPairPlayer.entryId)) }) : t('mobile.selectPlayerHint') }}
+                </p>
                 <div v-if="unassignedPlayers.length" class="manual-pairing-pool__list">
-                  <span
+                  <button
                     v-for="entry in unassignedPlayers"
                     :key="entry.id"
+                    type="button"
                     class="manual-pairing-pool__chip"
+                    :class="{ 'manual-pairing-pool__chip--selected': selectedPairPlayer?.entryId === entry.id && selectedPairPlayer?.fromSlot == null }"
+                    :aria-pressed="selectedPairPlayer?.entryId === entry.id && selectedPairPlayer?.fromSlot == null"
                     draggable="true"
                     @dragstart="onPlayerDragStart($event, entry, null, null)"
                     @dragend="onPlayerDragEnd"
+                    @click="selectPairPlayer(entry)"
                   >
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                     {{ entryLabel(entry) }}
-                  </span>
+                  </button>
                 </div>
                 <p v-else class="muted" style="font-size: 0.875rem">{{ t('admin.allPlayersAssigned') }}</p>
               </div>
@@ -1382,11 +1463,17 @@ onBeforeUnmount(() => {
                       'pair-slot__zone--drag-over': manualPairingDragOver === `${idx}-A`,
                     }"
                     :draggable="!!slot.playerA"
+                    role="button"
+                    tabindex="0"
+                    :aria-label="t('mobile.selectBracketSlot', { name: slot.playerA ? entryLabel(slot.playerA) : t('admin.emptySlot') })"
                     @dragstart="slot.playerA && onPlayerDragStart($event, slot.playerA, idx, 'A')"
                     @dragend="onPlayerDragEnd"
                     @dragover="onSlotDragOver($event, idx, 'A')"
                     @dragleave="onSlotDragLeave($event, idx, 'A')"
                     @drop="onSlotDrop($event, idx, 'A')"
+                    @click="activatePairSlot(slot.playerA, idx, 'A')"
+                    @keydown.enter="activatePairSlot(slot.playerA, idx, 'A')"
+                    @keydown.space.prevent="activatePairSlot(slot.playerA, idx, 'A')"
                   >
                     <template v-if="slot.playerA">
                       <span class="pair-slot__player">{{ entryLabel(slot.playerA) }}</span>
@@ -1394,7 +1481,7 @@ onBeforeUnmount(() => {
                         class="pair-slot__remove"
                         type="button"
                         aria-label="Remove"
-                        @click="removeFromSlot(idx, 'A')"
+                        @click.stop="removeFromSlot(idx, 'A')"
                       >&times;</button>
                     </template>
                     <span v-else class="pair-slot__placeholder">{{ t('admin.emptySlot') }}</span>
@@ -1406,11 +1493,17 @@ onBeforeUnmount(() => {
                       'pair-slot__zone--drag-over': manualPairingDragOver === `${idx}-B`,
                     }"
                     :draggable="!!slot.playerB"
+                    role="button"
+                    tabindex="0"
+                    :aria-label="t('mobile.selectBracketSlot', { name: slot.playerB ? entryLabel(slot.playerB) : t('admin.emptySlot') })"
                     @dragstart="slot.playerB && onPlayerDragStart($event, slot.playerB, idx, 'B')"
                     @dragend="onPlayerDragEnd"
                     @dragover="onSlotDragOver($event, idx, 'B')"
                     @dragleave="onSlotDragLeave($event, idx, 'B')"
                     @drop="onSlotDrop($event, idx, 'B')"
+                    @click="activatePairSlot(slot.playerB, idx, 'B')"
+                    @keydown.enter="activatePairSlot(slot.playerB, idx, 'B')"
+                    @keydown.space.prevent="activatePairSlot(slot.playerB, idx, 'B')"
                   >
                     <template v-if="slot.playerB">
                       <span class="pair-slot__player">{{ entryLabel(slot.playerB) }}</span>
@@ -1418,7 +1511,7 @@ onBeforeUnmount(() => {
                         class="pair-slot__remove"
                         type="button"
                         aria-label="Remove"
-                        @click="removeFromSlot(idx, 'B')"
+                        @click.stop="removeFromSlot(idx, 'B')"
                       >&times;</button>
                     </template>
                     <span v-else class="pair-slot__placeholder">{{ t('admin.emptySlot') }}</span>
@@ -1456,6 +1549,15 @@ onBeforeUnmount(() => {
         class="tab-panel"
         :class="{ 'tab-panel--active': activeTab === 'bracket' }"
       >
+        <template v-if="isNarrowLayout && isTournamentActive && matches.length">
+          <div class="admin-mobile-surface" role="tablist" :aria-label="t('tournament.tabsLabel')">
+            <button type="button" role="tab" :aria-selected="adminMobileBracketSurface === 'matches'" :class="{ active: adminMobileBracketSurface === 'matches' }" @click="adminMobileBracketSurface = 'matches'">{{ t('mobile.matches') }}</button>
+            <button type="button" role="tab" :aria-selected="adminMobileBracketSurface === 'overview'" :class="{ active: adminMobileBracketSurface === 'overview' }" @click="adminMobileBracketSurface = 'overview'">{{ t('mobile.overview') }}</button>
+          </div>
+          <section v-if="adminMobileBracketSurface === 'matches'" class="card mobile-score-center" style="margin-top: var(--space-3)">
+            <TournamentMatchList :matches="matches" :entries-map="entriesMap" :sets-by-match="setsByMatch" :live-scores-by-match="liveScoresByMatch" :can-edit-final="canEditFinalScores" :can-live-score="canUseLiveScoring" @edit-result="openRrMatch" @view-live="openLiveScoring" />
+          </section>
+        </template>
         <!-- Round-robin: schedule + standings + fixtures -->
         <template v-if="isRoundRobin">
           <section v-if="canManageTournament && !isTournamentActive" class="card stack stack--sm">
@@ -1472,7 +1574,7 @@ onBeforeUnmount(() => {
             </div>
           </section>
 
-          <section v-if="standings.length" class="card stack stack--sm" style="margin-top: var(--space-4)">
+          <section v-if="standings.length && showAdminBracketOverview" class="card stack stack--sm" style="margin-top: var(--space-4)">
             <h2 class="section-title">{{ t('standings.title') }}</h2>
             <RoundRobinStandings
               :rows="standings"
@@ -1514,12 +1616,12 @@ onBeforeUnmount(() => {
             </div>
           </section>
 
-          <section v-if="hasGroups" class="card stack stack--sm" style="margin-top: var(--space-4)">
+          <section v-if="hasGroups && showAdminBracketOverview" class="card stack stack--sm" style="margin-top: var(--space-4)">
             <h2 class="section-title">{{ t('admin.groupStage') }}</h2>
             <GroupStageBoard :groups="groupsView" :entries-map="entriesMap" :family="tournamentScoringFamily" />
           </section>
 
-          <section v-if="hasPlayoff" class="card stack stack--sm" style="margin-top: var(--space-4)">
+          <section v-if="hasPlayoff && showAdminBracketOverview" class="card stack stack--sm" style="margin-top: var(--space-4)">
             <h2 class="section-title">{{ t('admin.playoff') }}</h2>
             <BracketBoard
               :matches="playoffMatches"
@@ -1580,7 +1682,7 @@ onBeforeUnmount(() => {
           </template>
         </section>
 
-        <section v-if="!isRoundRobin && !isGroupsPlayoff" class="card stack stack--sm" style="margin-top: var(--space-4)">
+        <section v-if="!isRoundRobin && !isGroupsPlayoff && showAdminBracketOverview" class="card stack stack--sm" style="margin-top: var(--space-4)">
           <DoubleElimBoard
             v-if="isDoubleElim"
             :matches="displayMatches"
@@ -1633,8 +1735,20 @@ onBeforeUnmount(() => {
         class="tab-panel"
         :class="{ 'tab-panel--active': activeTab === 'scores' }"
       >
+        <section v-if="isNarrowLayout" class="card mobile-score-center">
+          <TournamentMatchList
+            :matches="matches"
+            :entries-map="entriesMap"
+            :sets-by-match="setsByMatch"
+            :live-scores-by-match="liveScoresByMatch"
+            :can-edit-final="canEditFinalScores"
+            :can-live-score="canUseLiveScoring"
+            @edit-result="openRrMatch"
+            @view-live="openLiveScoring"
+          />
+        </section>
         <!-- Round-robin: same crosstable as the bracket tab (no artificial rounds) -->
-        <template v-if="isRoundRobin">
+        <template v-else-if="isRoundRobin">
           <section class="card stack stack--sm rr-cross-card">
             <h2 class="section-title">{{ t('standings.crossTable') }}</h2>
             <p class="muted">{{ t('standings.clickToScore') }}</p>
