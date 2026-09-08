@@ -12,6 +12,7 @@ import FootballScoreEditor from '../components/FootballScoreEditor.vue'
 import GroupStageBoard from '../components/GroupStageBoard.vue'
 import DoubleElimBoard from '../components/DoubleElimBoard.vue'
 import { scoringFamily, getSportConfig } from '../lib/sportConfig'
+import { scoringAccess, matchScoringAction } from '../lib/scoringAccess'
 import LiveScoringModal from '../components/LiveScoringModal.vue'
 import TournamentQrModal from '../components/TournamentQrModal.vue'
 import ScoreEditor from '../components/ScoreEditor.vue'
@@ -169,10 +170,12 @@ const canStartTournament = computed(
 )
 const isTournamentActive = computed(() => tournament.value?.status === 'in_progress')
 const isTournamentFinished = computed(() => tournament.value?.status === 'completed')
-const canManageTournament = computed(() => currentUserRole.value === 'owner' || currentUserRole.value === 'editor')
+const scoreAccess = computed(() => scoringAccess(tournament.value, currentUserRole.value))
+const canManageTournament = computed(() => scoreAccess.value.manager)
 const canLiveScoreRole = computed(() => ['owner', 'editor', 'counter'].includes(currentUserRole.value))
-const canEditScores = computed(() => isTournamentActive.value && canLiveScoreRole.value)
-const canEditFinalScores = computed(() => isTournamentActive.value && canManageTournament.value)
+const canEditScores = computed(() => scoreAccess.value.scores)
+const canUseLiveScoring = computed(() => scoreAccess.value.live)
+const canEditFinalScores = computed(() => scoreAccess.value.final)
 
 const showStartButton = computed(() => {
   const s = tournament.value?.status
@@ -358,7 +361,8 @@ const groupsView = computed(() =>
 const selectedRrMatch = ref(null)
 
 function openRrMatch(match) {
-  if (!canEditFinalScores.value && !canEditScores.value) return
+  if (!matchScoringAction(tournament.value, currentUserRole.value, match)) return
+  if (!canEditFinalScores.value) return openLiveScoring(match)
   selectedRrMatch.value = match
 }
 
@@ -850,17 +854,17 @@ function statusBadgeClass(status) {
 const TABS = ['entries', 'bracket', 'scores', 'settings']
 
 function isTabEnabled(tab) {
-  if (!canManageTournament.value) {
-    return tab === 'bracket'
-  }
-  return tab !== 'scores' || canEditScores.value
+  if (tab === 'bracket') return true
+  if (tab === 'scores') return canEditScores.value
+  return canManageTournament.value
 }
 
 const enabledTabs = computed(() => TABS.filter(isTabEnabled))
+const defaultTab = () => canManageTournament.value ? 'entries' : canEditScores.value ? 'scores' : 'bracket'
 
 function readHashTab() {
   const h = window.location.hash.replace('#', '')
-  const fallback = canManageTournament.value ? 'entries' : 'bracket'
+  const fallback = defaultTab()
   if (!TABS.includes(h)) return fallback
   return isTabEnabled(h) ? h : fallback
 }
@@ -915,18 +919,21 @@ function onTabKeydown(event) {
 
 watch(canEditScores, () => {
   if (!isTabEnabled(activeTab.value)) {
-    setTab(canManageTournament.value ? 'entries' : 'bracket')
+    setTab(defaultTab())
   }
 })
 
 watch(canManageTournament, () => {
   if (!isTabEnabled(activeTab.value)) {
-    setTab(canManageTournament.value ? 'entries' : 'bracket')
+    setTab(defaultTab())
   }
 })
 
 function openLiveScoring(match) {
-  selectedLiveMatch.value = match
+  const current = matches.value.find(row => row.id === match.id)
+  const action = matchScoringAction(tournament.value, currentUserRole.value, current)
+  if (action === 'live') selectedLiveMatch.value = current
+  else if (action === 'result') selectedRrMatch.value = current
 }
 
 const selectedLiveScore = computed(() => (
@@ -1043,6 +1050,8 @@ onBeforeUnmount(() => {
 
       </section>
 
+      <p v-if="currentUserRole === 'counter' && isGoalsSport" class="alert alert--info" role="status">{{ t('mobile.finalScoreRole') }}</p>
+
       <div role="tablist" class="tab-group" @keydown="onTabKeydown">
         <button
           v-if="canManageTournament"
@@ -1059,7 +1068,6 @@ onBeforeUnmount(() => {
           <span v-if="pendingEntries.length" class="tab__badge">{{ pendingEntries.length }}</span>
         </button>
         <button
-          v-if="canManageTournament"
           id="tab-bracket"
           role="tab"
           class="tab"
@@ -1663,7 +1671,7 @@ onBeforeUnmount(() => {
           :scoring-config="tournament.scoring_config || {}"
           :category="tournament.category"
           :disabled="!canEditFinalScores"
-          :can-live-score="canEditScores"
+          :can-live-score="canUseLiveScoring"
           :live-scores-by-match="liveScoresByMatch"
           @saved="refreshScoreData"
           @start-live="openLiveScoring"
@@ -1752,7 +1760,7 @@ onBeforeUnmount(() => {
       </div>
 
       <LiveScoringModal
-        v-if="selectedLiveMatch"
+        v-if="selectedLiveMatch && canUseLiveScoring"
         :match="matches.find(m => m.id === selectedLiveMatch.id) || selectedLiveMatch"
         :can-stop-live="canManageTournament"
         :live-score="selectedLiveScore"
@@ -1780,7 +1788,7 @@ onBeforeUnmount(() => {
         :scoring-config="tournament.scoring_config || {}"
         :sets="setsByMatch[selectedRrMatch.id] || []"
         :can-edit-final="canEditFinalScores"
-        :can-live-score="canEditScores && !isGoalsSport"
+        :can-live-score="canUseLiveScoring"
         :live-status="liveScoresByMatch[selectedRrMatch.id]?.status || null"
         @close="selectedRrMatch = null"
         @saved="refreshScoreData"

@@ -1474,12 +1474,14 @@ textarea:focus-visible,
 .grid-2 {
   display: grid;
   gap: var(--space-4);
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
 }
+
+.grid-2 > * { min-width: 0; }
 
 @media (min-width: 900px) {
   .grid-2 {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
 }
 
@@ -1666,6 +1668,7 @@ textarea:focus-visible,
 
 /* Forms */
 .form-field {
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
@@ -1683,6 +1686,7 @@ textarea:focus-visible,
 select.input,
 textarea.input {
   width: 100%;
+  min-width: 0;
   min-height: var(--touch-min);
   padding: var(--space-2) var(--space-3);
   font: inherit;
@@ -2289,9 +2293,16 @@ textarea.input:focus {
 
 .admin-tournament-overview__actions {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-2);
   align-items: center;
-  flex-shrink: 0;
+  min-width: 0;
+  max-width: 100%;
+}
+
+@media (max-width: 600px) {
+  .admin-tournament-overview__actions { width: 100%; }
+  .admin-tournament-overview__actions .btn { min-height: 44px; max-width: 100%; white-space: normal; }
 }
 
 .tooltip-wrapper {

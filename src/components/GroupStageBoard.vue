@@ -43,7 +43,8 @@ function name(map, id) {
 <style scoped>
 .group-board {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
   gap: var(--space-4, 16px);
 }
+.group-board__group { min-width: 0; }
 </style>

@@ -414,6 +414,10 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.participant-item { flex-wrap: wrap; gap: 8px 12px; }
+.participant-item strong { flex: 1 1 180px; min-width: 0; overflow-wrap: anywhere; }
+.participant-item .badge { flex-shrink: 0; }
+
 .pub-hero {
   display: flex;
   align-items: center;

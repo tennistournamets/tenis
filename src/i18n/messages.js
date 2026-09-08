@@ -1,3 +1,4 @@
+import { mobileMessages } from './mobile'
 import { cinematicMessages } from './cinematic'
 import { draftMessages } from './drafts'
 import { scoringFlowMessages } from './scoringFlow'
@@ -5,6 +6,7 @@ import { tennisRuleMessages } from './tennisRules'
 
 export const messages = {
   ru: {
+    mobile: mobileMessages.ru,
     sync: {
       unavailable: 'Не удалось обновить данные. Показано последнее полученное состояние; повторяем подключение автоматически.',
       loadFailed: 'Не удалось загрузить турнир',
@@ -688,6 +690,7 @@ export const messages = {
     },
   },
   en: {
+    mobile: mobileMessages.en,
     sync: {
       unavailable: 'Unable to refresh. Showing the last received data; reconnecting automatically.',
       loadFailed: 'Unable to load the tournament',
@@ -1371,6 +1374,7 @@ export const messages = {
     },
   },
   lt: {
+    mobile: mobileMessages.lt,
     sync: {
       unavailable: 'Nepavyko atnaujinti duomenų. Rodomi paskutiniai gauti duomenys; ryšys atkuriamas automatiškai.',
       loadFailed: 'Nepavyko įkelti turnyro',

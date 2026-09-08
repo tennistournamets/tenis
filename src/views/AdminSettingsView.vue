@@ -84,6 +84,7 @@ onMounted(async () => {
 }
 
 .account-identity__name {
+  overflow-wrap: anywhere;
   font-family: var(--font-display);
   font-weight: 700;
   font-size: 1.05rem;
@@ -91,6 +92,7 @@ onMounted(async () => {
 }
 
 .account-identity__email {
+  overflow-wrap: anywhere;
   font-size: 0.875rem;
   color: var(--muted);
 }

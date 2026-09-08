@@ -157,7 +157,7 @@ function rowClass(side, entryId, winner) {
       <button
         class="match-card__score-btn"
         type="button"
-        :aria-label="t('live.start')"
+        :aria-label="`${t('standings.matchScore')}: ${memberLines(match.side_a_entry_id).join(' / ')} — ${memberLines(match.side_b_entry_id).join(' / ')}`"
         @click="emit('view-live', match)"
       >
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
