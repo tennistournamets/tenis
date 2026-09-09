@@ -1,7 +1,7 @@
 <script setup>
 // Standings table for round-robin where every row expands into the player's
 // schedule: opponents still to play on top, finished matches (with score) below.
-import { computed, reactive } from 'vue'
+import { computed, reactive, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { buildRoundRobinModel, entryLabelFor, orientScore } from '../lib/roundRobin'
@@ -17,6 +17,7 @@ const props = defineProps({
 const emit = defineEmits(['view-live'])
 
 const { t } = useI18n()
+const tableId = useId()
 
 const expanded = reactive({})
 
@@ -53,29 +54,20 @@ function detailsFor(entryId) {
   return { upcoming, played }
 }
 
-function onRow(item) {
-  if (item.live) emit('view-live', item.match)
-}
+const columns = computed(() => props.family === 'goals'
+  ? ['played', 'won', 'drawn', 'lost', 'for', 'against', 'diff', 'points']
+  : ['played', 'won', 'lost', 'sets', 'points'])
 </script>
 
 <template>
-  <div class="standings-wrap">
+  <div class="standings-wrap" tabindex="0" role="region" :aria-label="t('standings.title')">
     <table class="standings rr-standings">
+      <caption class="sr-only">{{ t('standings.title') }}</caption>
       <thead>
         <tr>
-          <th class="standings__rank">#</th>
-          <th class="standings__team">{{ t('standings.team') }}</th>
-          <th :title="t('standings.played')">{{ t('standings.played') }}</th>
-          <th :title="t('standings.won')">{{ t('standings.won') }}</th>
-          <th v-if="family === 'goals'" :title="t('standings.drawn')">{{ t('standings.drawn') }}</th>
-          <th :title="t('standings.lost')">{{ t('standings.lost') }}</th>
-          <template v-if="family === 'goals'">
-            <th :title="t('standings.for')">{{ t('standings.for') }}</th>
-            <th :title="t('standings.against')">{{ t('standings.against') }}</th>
-            <th :title="t('standings.diff')">{{ t('standings.diff') }}</th>
-          </template>
-          <th v-else :title="t('standings.sets')">{{ t('standings.sets') }}</th>
-          <th :title="t('standings.points')">{{ t('standings.points') }}</th>
+          <th scope="col" class="standings__rank" :aria-label="t('a11y.rank')">#</th>
+          <th scope="col" class="standings__team">{{ t('standings.team') }}</th>
+          <th v-for="column in columns" :key="column" scope="col" :title="t(`a11y.stats.${column}`)" :aria-label="t(`a11y.stats.${column}`)">{{ t(`standings.${column}`) }}</th>
         </tr>
       </thead>
       <tbody>
@@ -83,13 +75,12 @@ function onRow(item) {
           <tr
             class="rr-standings__row"
             :class="{ 'rr-standings__row--open': expanded[r.entry_id] }"
-            :aria-expanded="Boolean(expanded[r.entry_id])"
-            @click="toggle(r.entry_id)"
           >
             <td class="standings__rank">{{ r.rank }}</td>
-            <td class="standings__team">
-              <span class="rr-standings__team-cell">
+            <th scope="row" class="standings__team">
+              <button type="button" class="rr-standings__team-cell" :aria-label="t('a11y.scheduleFor', { name: r.display_name })" :aria-expanded="Boolean(expanded[r.entry_id])" :aria-controls="expanded[r.entry_id] ? `${tableId}-${r.entry_id}` : undefined" @click="toggle(r.entry_id)">
                 <svg
+                  aria-hidden="true"
                   class="rr-standings__chevron"
                   :class="{ 'rr-standings__chevron--open': expanded[r.entry_id] }"
                   width="13"
@@ -104,8 +95,8 @@ function onRow(item) {
                   <polyline points="9 18 15 12 9 6" />
                 </svg>
                 {{ r.display_name }}
-              </span>
-            </td>
+              </button>
+            </th>
             <td>{{ r.played }}</td>
             <td>{{ r.won }}</td>
             <td v-if="family === 'goals'">{{ r.drawn }}</td>
@@ -121,7 +112,7 @@ function onRow(item) {
 
           <tr v-if="expanded[r.entry_id]" class="rr-standings__details-row">
             <td :colspan="colCount">
-              <div class="rr-standings__details">
+              <div :id="`${tableId}-${r.entry_id}`" class="rr-standings__details">
                 <div v-if="detailsFor(r.entry_id).upcoming.length" class="rr-standings__group">
                   <h4 class="rr-standings__group-title">{{ t('standings.toPlay') }}</h4>
                   <ul class="rr-standings__list">
@@ -130,12 +121,12 @@ function onRow(item) {
                       :key="item.match.id"
                       class="rr-standings__item"
                       :class="{ 'rr-standings__item--live': item.live }"
-                      @click.stop="onRow(item)"
                     >
-                      <span class="rr-standings__opponent">{{ label(item.opponentId) }}</span>
-                      <span v-if="item.live" class="rr-live-badge">
-                        <span class="live-dot"></span>{{ t('live.live') }}
-                      </span>
+                      <button v-if="item.live" type="button" class="rr-standings__live-action" :aria-label="t('a11y.matchAction', { action: t('mobile.watchLive'), teamA: r.display_name, teamB: label(item.opponentId) })" @click="emit('view-live', item.match)">
+                        <span class="rr-standings__opponent">{{ label(item.opponentId) }}</span>
+                        <span class="rr-live-badge"><span class="live-dot"></span>{{ t('live.live') }}</span>
+                      </button>
+                      <span v-else class="rr-standings__opponent">{{ label(item.opponentId) }}</span>
                     </li>
                   </ul>
                 </div>
@@ -189,7 +180,7 @@ function onRow(item) {
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
-.standings th {
+.standings thead th {
   font-family: var(--font-mono);
   font-size: 0.7rem;
   font-weight: 600;
@@ -213,7 +204,6 @@ function onRow(item) {
 }
 
 .rr-standings__row {
-  cursor: pointer;
   transition: background 0.12s;
 }
 .rr-standings__row:hover,
@@ -224,7 +214,17 @@ function onRow(item) {
   display: inline-flex;
   align-items: center;
   gap: 7px;
+  min-height: 44px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
+.rr-standings__live-action { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; width: 100%; padding: 6px 8px; border: 0; border-radius: 6px; background: transparent; color: inherit; font: inherit; cursor: pointer; }
 .rr-standings__chevron {
   flex-shrink: 0;
   color: var(--muted);

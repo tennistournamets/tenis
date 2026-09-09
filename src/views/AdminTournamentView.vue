@@ -31,6 +31,8 @@ import { indexEntries, groupSetsByMatch, indexLiveScores, buildGroupsView } from
 import CopyTournamentLink from '../components/CopyTournamentLink.vue'
 import { useAuthStore } from '../stores/auth'
 import { useNarrowLayout } from '../lib/useNarrowLayout'
+import { useHeaderTitle } from '../lib/headerTitle'
+import { onTabKeydown as onSurfaceTabKeydown } from '../lib/tabNavigation'
 
 const props = defineProps({
   id: {
@@ -47,6 +49,7 @@ const isNarrowLayout = useNarrowLayout()
 const adminMobileBracketSurface = ref('matches')
 
 const tournament = ref(null)
+useHeaderTitle(() => tournament.value?.name)
 const entries = ref([])
 const matches = ref([])
 const standings = ref([])
@@ -1550,14 +1553,15 @@ onBeforeUnmount(() => {
         :class="{ 'tab-panel--active': activeTab === 'bracket' }"
       >
         <template v-if="isNarrowLayout && isTournamentActive && matches.length">
-          <div class="admin-mobile-surface" role="tablist" :aria-label="t('tournament.tabsLabel')">
-            <button type="button" role="tab" :aria-selected="adminMobileBracketSurface === 'matches'" :class="{ active: adminMobileBracketSurface === 'matches' }" @click="adminMobileBracketSurface = 'matches'">{{ t('mobile.matches') }}</button>
-            <button type="button" role="tab" :aria-selected="adminMobileBracketSurface === 'overview'" :class="{ active: adminMobileBracketSurface === 'overview' }" @click="adminMobileBracketSurface = 'overview'">{{ t('mobile.overview') }}</button>
+          <div class="admin-mobile-surface" role="tablist" :aria-label="t('tournament.tabsLabel')" @keydown="onSurfaceTabKeydown">
+            <button id="admin-surface-matches" type="button" role="tab" aria-controls="admin-mobile-panel" :tabindex="adminMobileBracketSurface === 'matches' ? 0 : -1" :aria-selected="adminMobileBracketSurface === 'matches'" :class="{ active: adminMobileBracketSurface === 'matches' }" @click="adminMobileBracketSurface = 'matches'">{{ t('mobile.matches') }}</button>
+            <button id="admin-surface-overview" type="button" role="tab" aria-controls="admin-mobile-panel" :tabindex="adminMobileBracketSurface === 'overview' ? 0 : -1" :aria-selected="adminMobileBracketSurface === 'overview'" :class="{ active: adminMobileBracketSurface === 'overview' }" @click="adminMobileBracketSurface = 'overview'">{{ t('mobile.overview') }}</button>
           </div>
-          <section v-if="adminMobileBracketSurface === 'matches'" class="card mobile-score-center" style="margin-top: var(--space-3)">
+        </template>
+        <div id="admin-mobile-panel" :role="isNarrowLayout && isTournamentActive && matches.length ? 'tabpanel' : undefined" :aria-labelledby="isNarrowLayout && isTournamentActive && matches.length ? `admin-surface-${adminMobileBracketSurface}` : undefined">
+          <section v-if="isNarrowLayout && isTournamentActive && matches.length && adminMobileBracketSurface === 'matches'" class="card mobile-score-center" style="margin-top: var(--space-3)">
             <TournamentMatchList :matches="matches" :entries-map="entriesMap" :sets-by-match="setsByMatch" :live-scores-by-match="liveScoresByMatch" :can-edit-final="canEditFinalScores" :can-live-score="canUseLiveScoring" @edit-result="openRrMatch" @view-live="openLiveScoring" />
           </section>
-        </template>
         <!-- Round-robin: schedule + standings + fixtures -->
         <template v-if="isRoundRobin">
           <section v-if="canManageTournament && !isTournamentActive" class="card stack stack--sm">
@@ -1726,6 +1730,8 @@ onBeforeUnmount(() => {
             </button>
           </div>
         </section>
+      </div>
+
       </div>
 
       <div

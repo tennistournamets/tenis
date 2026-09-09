@@ -14,6 +14,8 @@ import TournamentMatchList from '../components/TournamentMatchList.vue'
 import { entryMemberNames } from '../lib/entryDisplay'
 import { getSportConfig } from '../lib/sportConfig'
 import { useNarrowLayout } from '../lib/useNarrowLayout'
+import { useHeaderTitle } from '../lib/headerTitle'
+import { onTabKeydown } from '../lib/tabNavigation'
 import { supabase } from '../lib/supabase'
 import { createSnapshotRefresh, subscribeTournament, subscribeRefreshTriggers } from '../lib/tournamentSync'
 import { createPublicTournamentReader } from '../lib/tournamentRepository'
@@ -31,6 +33,7 @@ const isNarrowLayout = useNarrowLayout()
 const mobileSurface = ref('matches')
 
 const tournament = ref(null)
+useHeaderTitle(() => tournament.value?.name)
 const entries = ref([])
 const matches = ref([])
 const standings = ref([])
@@ -306,12 +309,14 @@ onBeforeUnmount(() => {
       </section>
 
       <template v-if="tournament.status === 'registration_open' || registrationDirty">
-        <div class="tab-group" role="tablist" :aria-label="t('tournament.tabsLabel')">
+        <div class="tab-group" role="tablist" :aria-label="t('tournament.tabsLabel')" @keydown="onTabKeydown">
           <button
             type="button"
             class="tab"
             :class="{ 'tab--active': activeTab === 'registration' }"
             role="tab"
+            id="pub-tab-registration"
+            aria-controls="pub-registration-panel"
             :aria-selected="activeTab === 'registration'"
             @click="activeTab = 'registration'"
           >
@@ -331,7 +336,7 @@ onBeforeUnmount(() => {
           </span>
         </div>
 
-        <div role="tabpanel">
+        <div id="pub-registration-panel" role="tabpanel" aria-labelledby="pub-tab-registration">
           <div :class="approvedEntries.length || pendingEntries.length ? 'grid-2' : 'pub-reg-solo'">
             <div class="stack stack--sm">
               <RegistrationForm
@@ -363,15 +368,16 @@ onBeforeUnmount(() => {
       </div>
 
       <template v-else-if="isNarrowLayout">
-        <div class="mobile-surface-switch" role="tablist" :aria-label="t('tournament.tabsLabel')">
-          <button type="button" role="tab" :aria-selected="mobileSurface === 'matches'" :class="{ active: mobileSurface === 'matches' }" @click="mobileSurface = 'matches'">
+        <div class="mobile-surface-switch" role="tablist" :aria-label="t('tournament.tabsLabel')" @keydown="onTabKeydown">
+          <button id="pub-tab-matches" type="button" role="tab" aria-controls="pub-mobile-panel" :tabindex="mobileSurface === 'matches' ? 0 : -1" :aria-selected="mobileSurface === 'matches'" :class="{ active: mobileSurface === 'matches' }" @click="mobileSurface = 'matches'">
             {{ t('mobile.matches') }}
           </button>
-          <button type="button" role="tab" :aria-selected="mobileSurface === 'overview'" :class="{ active: mobileSurface === 'overview' }" @click="mobileSurface = 'overview'">
+          <button id="pub-tab-overview" type="button" role="tab" aria-controls="pub-mobile-panel" :tabindex="mobileSurface === 'overview' ? 0 : -1" :aria-selected="mobileSurface === 'overview'" :class="{ active: mobileSurface === 'overview' }" @click="mobileSurface = 'overview'">
             {{ t('mobile.overview') }}
           </button>
         </div>
 
+        <div id="pub-mobile-panel" role="tabpanel" :aria-labelledby="`pub-tab-${mobileSurface}`">
         <div v-if="mobileSurface === 'matches'" class="card mobile-match-card">
           <TournamentMatchList
             :matches="matches"
@@ -401,6 +407,7 @@ onBeforeUnmount(() => {
         </div>
         <div v-else class="card">
           <BracketBoard :matches="matches" :sets-by-match="setsByMatch" :entries-map="entriesMap" :live-scores-by-match="liveScoresByMatch" @view-live="selectedLiveMatchId = $event.id" />
+        </div>
         </div>
       </template>
 

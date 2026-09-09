@@ -134,7 +134,8 @@ async function save(m) {
           type="number"
           min="0"
           :disabled="disabled || removed(m.id) || savingId === m.id"
-          :aria-label="t('football.goals')"
+          inputmode="numeric"
+          :aria-label="t('a11y.scoreField', { metric: t('football.goals'), team: removed(m.id) ? m.labelA : name(m.side_a_entry_id), side: 'A' })"
         />
         <span class="fb-colon">:</span>
         <input
@@ -143,15 +144,18 @@ async function save(m) {
           type="number"
           min="0"
           :disabled="disabled || removed(m.id) || savingId === m.id"
-          :aria-label="t('football.goals')"
+          inputmode="numeric"
+          :aria-label="t('a11y.scoreField', { metric: t('football.goals'), team: removed(m.id) ? m.labelB : name(m.side_b_entry_id), side: 'B' })"
         />
       </div>
       <span class="fb-row__team fb-row__team--right">{{ removed(m.id) ? m.labelB : name(m.side_b_entry_id) }}</span>
 
       <div class="fb-row__pens">
-        <label class="fb-pen-label">{{ t('football.pens') }}</label>
+        <span class="fb-pen-label">{{ t('football.pens') }}</span>
         <input
           v-model="fieldsFor(m).pa"
+          inputmode="numeric"
+          :aria-label="t('a11y.scoreField', { metric: t('football.pens'), team: removed(m.id) ? m.labelA : name(m.side_a_entry_id), side: 'A' })"
           class="input fb-input fb-input--pen"
           type="number"
           min="0"
@@ -160,6 +164,8 @@ async function save(m) {
         <span class="fb-colon">:</span>
         <input
           v-model="fieldsFor(m).pb"
+          inputmode="numeric"
+          :aria-label="t('a11y.scoreField', { metric: t('football.pens'), team: removed(m.id) ? m.labelB : name(m.side_b_entry_id), side: 'B' })"
           class="input fb-input fb-input--pen"
           type="number"
           min="0"
@@ -183,7 +189,7 @@ async function save(m) {
       </Transition>
     </div>
 
-    <p v-if="errorText" class="error-text">{{ errorText }}</p>
+    <p v-if="errorText" class="error-text" role="alert">{{ errorText }}</p>
   </div>
 </template>
 

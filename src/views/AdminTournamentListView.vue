@@ -8,7 +8,7 @@ import CopyTournamentLink from '../components/CopyTournamentLink.vue'
 import { getSportConfig } from '../lib/sportConfig'
 import { useAuthStore } from '../stores/auth'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const router = useRouter()
 const auth = useAuthStore()
 
@@ -110,7 +110,7 @@ function formatDate(iso) {
     return '—'
   }
   try {
-    return new Date(iso).toLocaleDateString(undefined, {
+    return new Date(iso).toLocaleDateString(locale.value, {
       year: 'numeric',
       month: 'short',
       day: 'numeric',

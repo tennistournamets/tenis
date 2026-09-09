@@ -31,8 +31,9 @@ const { t } = useI18n()
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 38px;
-  height: 38px;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
   border: 1px solid var(--border);
   border-radius: 999px;
   background: var(--surface);

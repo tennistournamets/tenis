@@ -1,8 +1,9 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, ref, useId, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import BracketBoard from './BracketBoard.vue'
 import { useNarrowLayout } from '../lib/useNarrowLayout'
+import { onTabKeydown } from '../lib/tabNavigation'
 
 const props = defineProps({
   matches: { type: Array, default: () => [] },
@@ -15,6 +16,7 @@ const emit = defineEmits(['view-live'])
 const { t } = useI18n()
 const isNarrowLayout = useNarrowLayout()
 const activeStage = ref('winners')
+const boardId = useId()
 
 const winners = computed(() => props.matches.filter((m) => m.stage === 'winners'))
 const losers = computed(() => props.matches.filter((m) => m.stage === 'losers'))
@@ -32,15 +34,16 @@ watch(panels, (next) => {
 
 <template>
   <div class="de-board">
-    <div v-if="isNarrowLayout" class="de-tabs" role="tablist" :aria-label="t('mobile.stageFilter')">
+    <div v-if="isNarrowLayout" class="de-tabs" role="tablist" aria-orientation="vertical" :aria-label="t('mobile.stageFilter')" @keydown="onTabKeydown">
       <button
         v-for="panel in panels"
-        :id="`de-tab-${panel.key}`"
+        :id="`${boardId}-tab-${panel.key}`"
         :key="panel.key"
         type="button"
         role="tab"
         :aria-selected="activeStage === panel.key"
-        :aria-controls="`de-panel-${panel.key}`"
+        :aria-controls="`${boardId}-panel-${panel.key}`"
+        :tabindex="activeStage === panel.key ? 0 : -1"
         :class="{ active: activeStage === panel.key }"
         @click="activeStage = panel.key"
       >
@@ -48,9 +51,9 @@ watch(panels, (next) => {
       </button>
     </div>
 
-    <section v-show="!isNarrowLayout || activeStage === 'winners'" id="de-panel-winners" class="de-panel" role="tabpanel" aria-labelledby="de-tab-winners">
+    <section v-show="!isNarrowLayout || activeStage === 'winners'" :id="`${boardId}-panel-winners`" class="de-panel" :role="isNarrowLayout ? 'tabpanel' : undefined" :aria-labelledby="`${boardId}-${isNarrowLayout ? 'tab' : 'heading'}-winners`">
       <header class="de-panel__head">
-        <h3 class="de-panel__title">{{ t('admin.winnersBracket') }}</h3>
+        <h3 :id="`${boardId}-heading-winners`" class="de-panel__title">{{ t('admin.winnersBracket') }}</h3>
       </header>
       <div class="de-panel__canvas">
         <BracketBoard
@@ -64,9 +67,9 @@ watch(panels, (next) => {
       </div>
     </section>
 
-    <section v-if="losers.length" v-show="!isNarrowLayout || activeStage === 'losers'" id="de-panel-losers" class="de-panel" role="tabpanel" aria-labelledby="de-tab-losers">
+    <section v-if="losers.length" v-show="!isNarrowLayout || activeStage === 'losers'" :id="`${boardId}-panel-losers`" class="de-panel" :role="isNarrowLayout ? 'tabpanel' : undefined" :aria-labelledby="`${boardId}-${isNarrowLayout ? 'tab' : 'heading'}-losers`">
       <header class="de-panel__head">
-        <h3 class="de-panel__title">{{ t('admin.losersBracket') }}</h3>
+        <h3 :id="`${boardId}-heading-losers`" class="de-panel__title">{{ t('admin.losersBracket') }}</h3>
       </header>
       <div class="de-panel__canvas">
         <BracketBoard
@@ -80,9 +83,9 @@ watch(panels, (next) => {
       </div>
     </section>
 
-    <section v-if="grandFinal.length" v-show="!isNarrowLayout || activeStage === 'grand_final'" id="de-panel-grand_final" class="de-panel de-panel--gf" role="tabpanel" aria-labelledby="de-tab-grand_final">
+    <section v-if="grandFinal.length" v-show="!isNarrowLayout || activeStage === 'grand_final'" :id="`${boardId}-panel-grand_final`" class="de-panel de-panel--gf" :role="isNarrowLayout ? 'tabpanel' : undefined" :aria-labelledby="`${boardId}-${isNarrowLayout ? 'tab' : 'heading'}-grand_final`">
       <header class="de-panel__head">
-        <h3 class="de-panel__title">{{ t('admin.grandFinal') }}</h3>
+        <h3 :id="`${boardId}-heading-grand_final`" class="de-panel__title">{{ t('admin.grandFinal') }}</h3>
       </header>
       <div class="de-panel__canvas">
         <BracketBoard

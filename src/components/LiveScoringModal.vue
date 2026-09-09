@@ -380,8 +380,8 @@ async function stopLive() {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
+  width: 44px;
+  height: 44px;
   flex: none;
   border: 1px solid var(--border);
   border-radius: 999px;

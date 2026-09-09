@@ -56,6 +56,7 @@
   --border: #E4E7E2;
   --border-strong: #D8DCD6;
   --input-bg: #FFFFFF;
+  --control-border: #7a897f;
   --header-bg: rgba(255, 255, 255, 0.88);
 
   --shadow-sm: 0 1px 2px rgba(20, 32, 27, 0.05);
@@ -132,6 +133,7 @@
     --border: #263029;
     --border-strong: #33403A;
     --input-bg: #131A16;
+    --control-border: #6f8277;
     --header-bg: rgba(16, 21, 18, 0.88);
 
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
@@ -203,7 +205,8 @@ button:focus-visible,
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible,
-.tab:focus-visible {
+summary:focus-visible,
+[tabindex]:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
 }
@@ -213,6 +216,22 @@ textarea:focus-visible,
   display: flex;
   flex-direction: column;
 }
+
+.skip-link {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: 1000;
+  transform: translateY(calc(-100% - 16px));
+  padding: 12px 16px;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-md);
+}
+
+.skip-link:focus { transform: translateY(0); }
+#main-content:focus { outline: none; }
 
 .app-main {
   flex: 1;
@@ -1576,7 +1595,7 @@ textarea:focus-visible,
 }
 
 .btn--sm {
-  min-height: 40px;
+  min-height: var(--touch-min);
   padding: 0 var(--space-4);
   font-size: 0.875rem;
   border-radius: 10px;
@@ -1692,7 +1711,7 @@ textarea.input {
   font: inherit;
   color: var(--text);
   background: var(--input-bg);
-  border: 1px solid var(--border);
+  border: 1px solid var(--control-border);
   border-radius: var(--radius-sm);
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
@@ -1716,7 +1735,7 @@ textarea.input {
 .input:hover,
 select.input:hover,
 textarea.input:hover {
-  border-color: var(--border-strong);
+  border-color: var(--muted);
 }
 
 .input:focus,
@@ -1740,6 +1759,7 @@ textarea.input:focus {
 
 .checkbox-row {
   display: flex;
+  min-height: var(--touch-min);
   align-items: center;
   gap: var(--space-2);
   font-size: 0.9375rem;
@@ -1755,6 +1775,7 @@ textarea.input:focus {
 /* Компактный переключатель (checkbox с видом switch) */
 .switch {
   display: inline-flex;
+  min-height: var(--touch-min);
   align-items: center;
   gap: var(--space-2);
   font-size: 0.8125rem;
@@ -2476,8 +2497,8 @@ textarea.input:focus {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 44px;
+  height: 44px;
   border: none;
   background: transparent;
   color: var(--text);
@@ -2894,8 +2915,9 @@ textarea.input:focus {
 }
 
 .modal-close {
-  width: 2rem;
-  height: 2rem;
+  width: var(--touch-min);
+  height: var(--touch-min);
+  flex-shrink: 0;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--surface-row);
@@ -2991,11 +3013,11 @@ textarea.input:focus {
 
 .score-grid__input {
   width: 44px;
-  min-height: 36px;
+  min-height: var(--touch-min);
   text-align: center;
   font-family: var(--font-mono);
   font-size: 0.9375rem;
-  border: 1px solid var(--border);
+  border: 1px solid var(--control-border);
   border-radius: var(--radius-sm);
   background: var(--surface);
   color: var(--text);
@@ -3037,7 +3059,7 @@ textarea.input:focus {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 36px;
+  min-height: var(--touch-min);
   padding: 0 var(--space-3);
   font-size: 0.8125rem;
   font-weight: 600;
@@ -3080,6 +3102,7 @@ textarea.input:focus {
   align-items: center;
   gap: var(--space-3);
   width: 100%;
+  min-height: var(--touch-min);
   padding: var(--space-2) var(--space-3);
   font-size: 0.875rem;
   font-weight: 500;
@@ -3111,7 +3134,6 @@ textarea.input:focus {
 
 .lang-dropdown__item--active .lang-dropdown__item-name {
   color: var(--primary);
-  opacity: 0.7;
 }
 
 /* Profile menu */
@@ -3123,8 +3145,8 @@ textarea.input:focus {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   padding: 0;
   border: 1px solid var(--border-strong);
   border-radius: 50%;
@@ -3150,6 +3172,7 @@ textarea.input:focus {
   top: calc(100% + 6px);
   right: 0;
   min-width: 220px;
+  width: min(300px, calc(100vw - 32px));
   background: var(--surface);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
@@ -3166,6 +3189,7 @@ textarea.input:focus {
 }
 
 .profile-menu__name {
+  overflow-wrap: anywhere;
   font-size: 0.875rem;
   font-weight: 600;
   color: var(--text);
@@ -3189,6 +3213,7 @@ textarea.input:focus {
   align-items: center;
   gap: var(--space-2);
   width: 100%;
+  min-height: var(--touch-min);
   padding: var(--space-2) var(--space-4);
   font-size: 0.875rem;
   font-weight: 500;

@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, ref, useId, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { entryMemberNames } from '../lib/entryDisplay'
@@ -17,6 +17,7 @@ const props = defineProps({
 
 const emit = defineEmits(['edit-result', 'view-live'])
 const { t } = useI18n()
+const titleId = useId()
 const search = ref('')
 const statusFilter = ref('current')
 const stageFilter = ref('all')
@@ -98,11 +99,11 @@ const visibleMatches = computed(() => {
 </script>
 
 <template>
-  <section class="match-center" aria-labelledby="match-center-title">
+  <section class="match-center" :aria-labelledby="titleId">
     <header class="match-center__head">
       <div>
         <p class="match-center__eyebrow">{{ t('mobile.matchCenterEyebrow') }}</p>
-        <h2 id="match-center-title" class="match-center__title">{{ t('mobile.matches') }}</h2>
+        <h2 :id="titleId" class="match-center__title">{{ t('mobile.matches') }}</h2>
       </div>
       <span class="match-center__count">{{ visibleMatches.length }}</span>
     </header>

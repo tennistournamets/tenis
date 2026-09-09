@@ -42,6 +42,10 @@ function teamLabel(entryId) {
   return names.length ? names.join(' / ') : t('bracket.tbd')
 }
 
+function goalLabel(metric, side) {
+  return t('a11y.scoreField', { metric: t(`football.${metric}`), team: teamLabel(props.match[`side_${side}_entry_id`]), side: side.toUpperCase() })
+}
+
 // --- sets form ---
 const setRows = ref(scoreRows(props.sets, props.setFormat))
 const baseRevision = ref(props.match.score_revision)
@@ -162,16 +166,16 @@ async function save() {
       <div v-else class="stack stack--sm">
         <div class="msm-goals">
           <span class="msm-grid__name">{{ teamLabel(match.side_a_entry_id) }}</span>
-          <input v-model="goals.a" class="input msm-grid__input" type="number" min="0" :disabled="!canEditFinal || manualBlocked || saving || savedFlash" :aria-label="t('football.goals')" />
+          <input v-model="goals.a" class="input msm-grid__input" type="number" inputmode="numeric" min="0" :disabled="!canEditFinal || manualBlocked || saving || savedFlash" :aria-label="goalLabel('goals', 'a')" />
           <span class="muted">:</span>
-          <input v-model="goals.b" class="input msm-grid__input" type="number" min="0" :disabled="!canEditFinal || manualBlocked || saving || savedFlash" :aria-label="t('football.goals')" />
+          <input v-model="goals.b" class="input msm-grid__input" type="number" inputmode="numeric" min="0" :disabled="!canEditFinal || manualBlocked || saving || savedFlash" :aria-label="goalLabel('goals', 'b')" />
           <span class="msm-grid__name msm-goals__right">{{ teamLabel(match.side_b_entry_id) }}</span>
         </div>
         <div class="msm-goals">
           <span class="msm-goals__pens-label muted">{{ t('football.pens') }}</span>
-          <input v-model="goals.pa" class="input msm-grid__input" type="number" min="0" :disabled="!canEditFinal || manualBlocked || saving || savedFlash" :aria-label="t('football.pens')" />
+          <input v-model="goals.pa" class="input msm-grid__input" type="number" inputmode="numeric" min="0" :disabled="!canEditFinal || manualBlocked || saving || savedFlash" :aria-label="goalLabel('pens', 'a')" />
           <span class="muted">:</span>
-          <input v-model="goals.pb" class="input msm-grid__input" type="number" min="0" :disabled="!canEditFinal || manualBlocked || saving || savedFlash" :aria-label="t('football.pens')" />
+          <input v-model="goals.pb" class="input msm-grid__input" type="number" inputmode="numeric" min="0" :disabled="!canEditFinal || manualBlocked || saving || savedFlash" :aria-label="goalLabel('pens', 'b')" />
           <span class="msm-goals__right"></span>
         </div>
         <p class="muted" style="font-size: var(--font-sm)">{{ t('football.penHint') }}</p>
@@ -202,7 +206,7 @@ async function save() {
         </Transition>
       </div>
 
-      <p v-if="errorText" class="error-text">{{ errorText }}</p>
+      <p v-if="errorText" class="error-text" role="alert">{{ errorText }}</p>
     </div>
   </AppModal>
 </template>
