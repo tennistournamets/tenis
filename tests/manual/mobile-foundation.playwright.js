@@ -94,6 +94,9 @@ async page => {
       await p.waitForSelector('#adm-tournament-title'); await fit(`admin/${width}/${locale}`)
       if (width === 320 && locale === 'ru') { await p.locator('.admin-tournament-overview__actions').scrollIntoViewIfNeeded(); await p.screenshot({ path: 'output/playwright/mobile-foundation/admin-320.png' }) }
       await p.evaluate(() => mf.mount('views/AdminSettingsView')); await p.waitForSelector('.account-identity'); await fit(`settings/${width}/${locale}`)
+      // Each matrix cell represents a fresh user journey. Step 5 intentionally
+      // restores wizard state within a tab, so isolate cells from one another.
+      await p.evaluate(() => sessionStorage.clear())
       await p.evaluate(() => mf.mount('views/AdminTournamentCreateView')); await p.waitForSelector('.wizard__heading')
       for (let step = 1; step <= 3; step++) {
         if (step > 1) { await p.locator('.wizard__foot .btn--primary').click(); await p.waitForTimeout(50) }

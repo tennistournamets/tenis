@@ -1,8 +1,9 @@
 // Run via playwright_cli.sh -s=public11 run-code --filename=tests/manual/public-data.playwright.js
-// Requires Vite on 127.0.0.1:5174. Mounts the actual public page, intercepts REST
+// Requires a local Vite page. Mounts the actual public page, intercepts REST
 // and replaces Realtime with an in-memory channel. No server data is changed.
 async page => {
-  const origin = 'http://127.0.0.1:5174'
+  const origin = await page.evaluate(() => location.origin)
+  if (!/^http:\/\/127\.0\.0\.1:\d+$/.test(origin)) throw new Error('Open the local Vite page first')
   const checks = [], errors = []
   const check = (value, label) => { if (!value) throw new Error(label); checks.push(label) }
   page.setDefaultTimeout(10000)

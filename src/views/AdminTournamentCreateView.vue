@@ -6,8 +6,9 @@ import { useI18n } from 'vue-i18n'
 import { normalizeTournamentSlug } from '../lib/tournamentSlug'
 import { tournamentShareUrl } from '../lib/shareLink'
 import { supabase } from '../lib/supabase'
-import { useUnsavedChanges } from '../lib/unsavedChanges'
+import { confirmDiscard, useUnsavedChanges, withApprovedDeparture } from '../lib/unsavedChanges'
 import { cloneForm, sameForm } from '../lib/formDraft'
+import { clearSessionDraft, readSessionDraft, userDraftKey, writeSessionDraft } from '../lib/sessionDraft'
 import { useAuthStore } from '../stores/auth'
 import { getSportConfig, resolveCategory } from '../lib/sportConfig'
 import SportPicker from '../components/SportPicker.vue'
@@ -28,6 +29,9 @@ const formError = ref(null)
 const slugError = ref('')
 const fallbackSlug = `tournament-${crypto.randomUUID().slice(0, 8)}`
 const step = ref(1) // 1 = sport, 2 = format, 3 = details
+const draftKey = ref('')
+const draftReady = ref(false)
+const draftRestored = ref(false)
 
 const form = reactive({
   name: '',
@@ -48,7 +52,21 @@ const form = reactive({
 })
 
 const initialForm = cloneForm(form)
-const unregisterDraft = useUnsavedChanges(() => !sameForm(form, initialForm), () => saving.value)
+const hasDraftChanges = () => step.value !== 1 || !sameForm(form, initialForm)
+function clearWizardDraft() {
+  clearSessionDraft(draftKey.value)
+}
+const unregisterDraft = useUnsavedChanges(hasDraftChanges, () => saving.value, clearWizardDraft)
+
+watch([form, step], () => {
+  if (!draftReady.value) return
+  if (!hasDraftChanges()) {
+    clearWizardDraft()
+    draftRestored.value = false
+    return
+  }
+  writeSessionDraft(draftKey.value, { step: step.value, form: cloneForm(form) })
+}, { deep: true })
 
 const cfg = computed(() => getSportConfig(form.sport))
 const effectiveCategory = computed(() => resolveCategory(form.sport, form.category))
@@ -148,6 +166,7 @@ async function createTournament() {
     }
 
     if (!newId) throw new Error('Missing tournament ID')
+    clearWizardDraft()
     unregisterDraft()
     const query = form.is_public && form.generate_qr ? { qr: '1' } : undefined
     await router.replace({ name: 'admin-tournament', params: { id: newId }, query })
@@ -159,17 +178,58 @@ async function createTournament() {
   }
 }
 
-function cancel() {
-  router.push({ name: 'admin-tournaments' })
+async function cancel() {
+  if (!(await confirmDiscard(t, hasDraftChanges(), saving.value))) return
+  clearWizardDraft()
+  unregisterDraft()
+  await withApprovedDeparture(() => router.push({ name: 'admin-tournaments' }))
+}
+
+function discardStoredDraft() {
+  Object.assign(form, cloneForm(initialForm))
+  step.value = 1
+  errorText.value = ''
+  slugError.value = ''
+  draftRestored.value = false
+  clearWizardDraft()
 }
 
 onMounted(async () => {
   await auth.init()
+  draftKey.value = userDraftKey('create-tournament', auth.user?.id)
+  const stored = readSessionDraft(draftKey.value)
+  if (stored?.form && Number.isInteger(stored.step) && stored.step >= 1 && stored.step <= 3) {
+    const restored = {}
+    for (const [key, fallback] of Object.entries(initialForm)) {
+      const value = stored.form[key]
+      if (value === undefined) continue
+      if (fallback && typeof fallback === 'object') {
+        if (value && typeof value === 'object' && !Array.isArray(value)) restored[key] = cloneForm(value)
+      } else if (typeof value === typeof fallback) {
+        restored[key] = value
+      }
+    }
+    Object.assign(form, restored)
+    if (!['tennis', 'padel', 'football'].includes(form.sport)) form.sport = initialForm.sport
+    if (!getSportConfig(form.sport).allowedFormats.includes(form.format)) form.format = initialForm.format
+    if (!['singles', 'doubles'].includes(form.category)) form.category = initialForm.category
+    if (!['best_of_3', 'best_of_5'].includes(form.set_format)) form.set_format = initialForm.set_format
+    if (!['men', 'women'].includes(form.gender)) form.gender = initialForm.gender
+    step.value = stored.step
+    draftRestored.value = hasDraftChanges()
+  }
+  draftReady.value = true
 })
 </script>
 
 <template>
   <div ref="wizardRoot" class="wizard">
+    <div v-if="draftRestored" class="alert alert--info wizard__draft" role="status">
+      <span>{{ t('drafts.restored') }}</span>
+      <button type="button" class="btn btn--ghost btn--sm" :disabled="saving" @click="discardStoredDraft">
+        {{ t('drafts.discardStored') }}
+      </button>
+    </div>
     <!-- Wizard chrome header -->
     <header class="wizard__head">
       <div class="wizard__brand">
@@ -381,6 +441,14 @@ onMounted(async () => {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow-sm);
+}
+
+.wizard__draft {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin: 0;
 }
 
 .wizard__head {

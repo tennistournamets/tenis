@@ -42,11 +42,33 @@ const props = defineProps({
 })
 
 const { t } = useI18n()
-const route = useRoute()
-const router = useRouter()
+// The fallback keeps isolated component previews functional; routed product
+// pages always receive the real Vue Router instances.
+const route = useRoute() || { query: {}, hash: '' }
+const router = useRouter() || {
+  push: () => Promise.resolve(),
+  replace: () => Promise.resolve(),
+  back: () => {},
+}
 const auth = useAuthStore()
 const isNarrowLayout = useNarrowLayout()
-const adminMobileBracketSurface = ref('matches')
+const ADMIN_MOBILE_SURFACES = ['matches', 'overview']
+const queryValue = value => Array.isArray(value) ? value[0] : value
+const adminSurfaceFromQuery = value => ADMIN_MOBILE_SURFACES.includes(queryValue(value))
+  ? queryValue(value)
+  : 'matches'
+const adminMobileBracketSurface = ref(adminSurfaceFromQuery(route.query.surface))
+
+function adminRouteLocation(query) {
+  return { query, hash: window.location.hash || route.hash }
+}
+
+function setAdminMobileBracketSurface(surface) {
+  if (!ADMIN_MOBILE_SURFACES.includes(surface)) return
+  adminMobileBracketSurface.value = surface
+  if (queryValue(route.query.surface) === surface) return
+  void router.replace(adminRouteLocation({ ...route.query, surface }))
+}
 
 const tournament = ref(null)
 useHeaderTitle(() => tournament.value?.name)
@@ -202,43 +224,58 @@ const startBlockReason = computed(() => {
 async function startTournament() {
   if (actionLoading.value || settingsSaving.value) return
   const revision = tournament.value.settings_revision
-  if (!(await confirmDialog(t('admin.startTournamentConfirm')))) return
   actionLoading.value = true
-  const { data, error } = await supabase.rpc('update_tournament_settings', {
-    p_tournament_id: props.id, p_patch: { status: 'in_progress' }, p_expected_revision: revision,
-  })
-  actionLoading.value = false
-  if (error) { errorText.value = scoringError(error.message, t); await loadTournament(); return }
-  acceptTournament(data)
-  await loadAll(true)
+  errorText.value = ''
+  try {
+    if (!(await confirmDialog(t('admin.startTournamentConfirm')))) return
+    const { data, error } = await supabase.rpc('update_tournament_settings', {
+      p_tournament_id: props.id, p_patch: { status: 'in_progress' }, p_expected_revision: revision,
+    })
+    if (error) throw error
+    acceptTournament(data)
+    await loadAll(true)
+  } catch (error) {
+    errorText.value = scoringError(error?.message, t)
+    try { await loadTournament() } catch { /* Keep the actionable mutation error. */ }
+  } finally { actionLoading.value = false }
 }
 
 async function finishTournament() {
   if (actionLoading.value || settingsSaving.value) return
   const revision = tournament.value.settings_revision
-  if (!(await confirmDialog(t('admin.finishTournamentConfirm')))) return
   actionLoading.value = true
-  const { data, error } = await supabase.rpc('update_tournament_settings', {
-    p_tournament_id: props.id, p_patch: { status: 'completed' }, p_expected_revision: revision,
-  })
-  actionLoading.value = false
-  if (error) { errorText.value = scoringError(error.message, t); await loadTournament(); return }
-  acceptTournament(data)
-  await loadAll(true)
+  errorText.value = ''
+  try {
+    if (!(await confirmDialog(t('admin.finishTournamentConfirm')))) return
+    const { data, error } = await supabase.rpc('update_tournament_settings', {
+      p_tournament_id: props.id, p_patch: { status: 'completed' }, p_expected_revision: revision,
+    })
+    if (error) throw error
+    acceptTournament(data)
+    await loadAll(true)
+  } catch (error) {
+    errorText.value = scoringError(error?.message, t)
+    try { await loadTournament() } catch { /* Keep the actionable mutation error. */ }
+  } finally { actionLoading.value = false }
 }
 
 async function stopTournament() {
   if (actionLoading.value || settingsSaving.value) return
   const revision = tournament.value.settings_revision
-  if (!(await confirmDialog(t('admin.stopTournamentConfirm')))) return
   actionLoading.value = true
-  const { data, error } = await supabase.rpc('update_tournament_settings', {
-    p_tournament_id: props.id, p_patch: { status: 'registration_closed' }, p_expected_revision: revision,
-  })
-  actionLoading.value = false
-  if (error) { errorText.value = scoringError(error.message, t); await loadTournament(); return }
-  acceptTournament(data)
-  await loadAll(true)
+  errorText.value = ''
+  try {
+    if (!(await confirmDialog(t('admin.stopTournamentConfirm')))) return
+    const { data, error } = await supabase.rpc('update_tournament_settings', {
+      p_tournament_id: props.id, p_patch: { status: 'registration_closed' }, p_expected_revision: revision,
+    })
+    if (error) throw error
+    acceptTournament(data)
+    await loadAll(true)
+  } catch (error) {
+    errorText.value = scoringError(error?.message, t)
+    try { await loadTournament() } catch { /* Keep the actionable mutation error. */ }
+  } finally { actionLoading.value = false }
 }
 
 const entryEditState = ref(null)
@@ -305,46 +342,37 @@ function setupRealtime() {
 }
 
 async function updateEntryStatus(entryId, status) {
+  if (actionLoading.value) return
   actionLoading.value = true
   errorText.value = ''
-
-  const { error } = await supabase.from('entries').update({ status }).eq('id', entryId)
-
-  actionLoading.value = false
-
-  if (error) {
-    errorText.value = error.message
-    return
-  }
-
-  await loadAll()
+  try {
+    const { error } = await supabase.from('entries').update({ status }).eq('id', entryId)
+    if (error) throw error
+    await loadAll()
+  } catch (error) {
+    errorText.value = scoringError(error?.message, t)
+  } finally { actionLoading.value = false }
 }
 
 async function approveAllPending() {
+  if (actionLoading.value) return
   if (pendingEntries.value.length < 2) {
     return
   }
-  if (!(await confirmDialog(t('admin.approveAllConfirm')))) {
-    return
-  }
-
   actionLoading.value = true
-  errorText.value = ''
-
-  const { error } = await supabase
-    .from('entries')
-    .update({ status: 'approved' })
-    .eq('tournament_id', props.id)
-    .eq('status', 'pending')
-
-  actionLoading.value = false
-
-  if (error) {
-    errorText.value = error.message
-    return
-  }
-
-  await loadAll()
+  try {
+    if (!(await confirmDialog(t('admin.approveAllConfirm')))) return
+    errorText.value = ''
+    const { error } = await supabase
+      .from('entries')
+      .update({ status: 'approved' })
+      .eq('tournament_id', props.id)
+      .eq('status', 'pending')
+    if (error) throw error
+    await loadAll()
+  } catch (error) {
+    errorText.value = scoringError(error?.message, t)
+  } finally { actionLoading.value = false }
 }
 
 const hasBracket = computed(() => matches.value.length > 0)
@@ -371,41 +399,37 @@ const groupsView = computed(() =>
 const selectedRrMatch = ref(null)
 
 function openRrMatch(match) {
-  if (!matchScoringAction(tournament.value, currentUserRole.value, match)) return
-  if (!canEditFinalScores.value) return openLiveScoring(match)
-  selectedRrMatch.value = match
+  const current = matches.value.find(row => row.id === match?.id)
+  if (!current || !matchScoringAction(tournament.value, currentUserRole.value, current)) return
+  if (!canEditFinalScores.value) return openLiveScoring(current)
+  openAdminScoreRoute(current, 'result')
 }
 
 function startLiveFromRrModal(match) {
-  selectedRrMatch.value = null
-  openLiveScoring(match)
+  const current = matches.value.find(row => row.id === match?.id)
+  if (matchScoringAction(tournament.value, currentUserRole.value, current) !== 'live') return
+  replaceAdminScoreRoute(current, 'live')
 }
 
 async function formRandomPairs() {
+  if (actionLoading.value) return
   if (unpairedCount.value % 2 !== 0) {
     errorText.value = t('admin.oddUnpairedWarning', { count: unpairedCount.value })
     return
   }
 
-  if (!(await confirmDialog(t('admin.formPairsConfirm')))) {
-    return
-  }
-
   actionLoading.value = true
-  errorText.value = ''
-
-  const { error } = await supabase.rpc('form_random_pairs', {
-    p_tournament_id: props.id,
-  })
-
-  actionLoading.value = false
-
-  if (error) {
-    errorText.value = error.message
-    return
-  }
-
-  await loadEntries()
+  try {
+    if (!(await confirmDialog(t('admin.formPairsConfirm')))) return
+    errorText.value = ''
+    const { error } = await supabase.rpc('form_random_pairs', {
+      p_tournament_id: props.id,
+    })
+    if (error) throw error
+    await loadEntries()
+  } catch (error) {
+    errorText.value = scoringError(error?.message, t)
+  } finally { actionLoading.value = false }
 }
 
 function openManualPairing() {
@@ -554,18 +578,22 @@ async function saveManualPairs() {
   const pairs = manualPairSlots.value.filter(s => s.playerA && s.playerB).map(s => [s.playerA.memberId,s.playerB.memberId])
   if (!pairs.length) return
   const baseline = cloneForm(pairingBaseline.value)
-  if (matches.value.length && !(await confirmDialog(t('drafts.pairingReset'), { danger: true }))) return
   actionLoading.value = true
   errorText.value = ''
-  const { error } = await supabase.rpc('save_tournament_pairs', {
-    p_tournament_id: props.id, p_pairs: pairs, p_replace: pairingEditMode.value,
-    p_expected_entries: baseline.entries, p_expected_matches: baseline.matches,
-    p_expected_revision: baseline.settings_revision,
-  })
-  actionLoading.value = false
-  if (error) { errorText.value = scoringError(error.message, t); await loadEntries(); return }
-  await closeManualPairing(true)
-  await loadAll(true)
+  try {
+    if (matches.value.length && !(await confirmDialog(t('drafts.pairingReset'), { danger: true }))) return
+    const { error } = await supabase.rpc('save_tournament_pairs', {
+      p_tournament_id: props.id, p_pairs: pairs, p_replace: pairingEditMode.value,
+      p_expected_entries: baseline.entries, p_expected_matches: baseline.matches,
+      p_expected_revision: baseline.settings_revision,
+    })
+    if (error) throw error
+    await closeManualPairing(true)
+    await loadAll(true)
+  } catch (error) {
+    errorText.value = scoringError(error?.message, t)
+    try { await loadEntries() } catch { /* Preserve the local pairing draft. */ }
+  } finally { actionLoading.value = false }
 }
 
 function openEditPairing() {
@@ -609,106 +637,88 @@ function openEditPairing() {
 }
 
 async function generateBracket() {
+  if (actionLoading.value) return
   const fn = hasBracket.value ? 'rebuild_bracket' : 'generate_bracket'
 
-  if (hasBracket.value && !(await confirmDialog(t('admin.rebuildConfirm')))) {
-    return
-  }
-
   actionLoading.value = true
-  errorText.value = ''
-
-  const { error } = await supabase.rpc(fn, {
-    p_tournament_id: props.id,
-    p_mode: drawMode.value,
-    p_manual_order: null,
-  })
-
-  actionLoading.value = false
-
-  if (error) {
-    errorText.value = error.message
-    return
-  }
-
-  await loadAll()
+  try {
+    if (hasBracket.value && !(await confirmDialog(t('admin.rebuildConfirm')))) return
+    errorText.value = ''
+    const { error } = await supabase.rpc(fn, {
+      p_tournament_id: props.id,
+      p_mode: drawMode.value,
+      p_manual_order: null,
+    })
+    if (error) throw error
+    await loadAll()
+  } catch (error) {
+    errorText.value = scoringError(error?.message, t)
+  } finally { actionLoading.value = false }
 }
 
 async function generateGroups() {
-  if (hasGroups.value && !(await confirmDialog(t('admin.rebuildConfirm')))) {
-    return
-  }
+  if (actionLoading.value) return
   actionLoading.value = true
-  errorText.value = ''
-  const { error } = await supabase.rpc('generate_groups', {
-    p_tournament_id: props.id,
-    p_group_count: Number(groupCount.value) || 2,
-  })
-  actionLoading.value = false
-  if (error) {
-    errorText.value = error.message
-    return
-  }
-  await loadAll()
+  try {
+    if (hasGroups.value && !(await confirmDialog(t('admin.rebuildConfirm')))) return
+    errorText.value = ''
+    const { error } = await supabase.rpc('generate_groups', {
+      p_tournament_id: props.id,
+      p_group_count: Number(groupCount.value) || 2,
+    })
+    if (error) throw error
+    await loadAll()
+  } catch (error) {
+    errorText.value = scoringError(error?.message, t)
+  } finally { actionLoading.value = false }
 }
 
 async function startPlayoff() {
+  if (actionLoading.value) return
   actionLoading.value = true
   errorText.value = ''
-  const { error } = await supabase.rpc('generate_group_playoff', {
-    p_tournament_id: props.id,
-  })
-  actionLoading.value = false
-  if (error) {
-    errorText.value = error.message
-    return
-  }
-  await loadAll()
+  try {
+    const { error } = await supabase.rpc('generate_group_playoff', {
+      p_tournament_id: props.id,
+    })
+    if (error) throw error
+    await loadAll()
+  } catch (error) {
+    errorText.value = scoringError(error?.message, t)
+  } finally { actionLoading.value = false }
 }
 
 async function generateSchedule() {
-  if (hasBracket.value && !(await confirmDialog(t('admin.rebuildConfirm')))) {
-    return
-  }
-
+  if (actionLoading.value) return
   actionLoading.value = true
-  errorText.value = ''
-
-  const { error } = await supabase.rpc('generate_round_robin', {
-    p_tournament_id: props.id,
-  })
-
-  actionLoading.value = false
-
-  if (error) {
-    errorText.value = error.message
-    return
-  }
-
-  await loadAll()
+  try {
+    if (hasBracket.value && !(await confirmDialog(t('admin.rebuildConfirm')))) return
+    errorText.value = ''
+    const { error } = await supabase.rpc('generate_round_robin', {
+      p_tournament_id: props.id,
+    })
+    if (error) throw error
+    await loadAll()
+  } catch (error) {
+    errorText.value = scoringError(error?.message, t)
+  } finally { actionLoading.value = false }
 }
 
 async function resetBracket() {
-  if (!(await confirmDialog(t('admin.resetBracketConfirm'), { danger: true }))) {
-    return
-  }
-
+  if (actionLoading.value) return
   actionLoading.value = true
-  errorText.value = ''
-
-  const { error } = await supabase
-    .from('matches')
-    .delete()
-    .eq('tournament_id', props.id)
-
-  actionLoading.value = false
-
-  if (error) {
-    errorText.value = error.message
-    return
-  }
-
-  await loadAll()
+  try {
+    if (!(await confirmDialog(t('admin.resetBracketConfirm'), { danger: true }))) return
+    errorText.value = ''
+    const { error } = await supabase
+      .from('matches')
+      .delete()
+      .eq('tournament_id', props.id)
+    if (error) throw error
+    await loadAll()
+  } catch (error) {
+    errorText.value = scoringError(error?.message, t)
+  } finally { actionLoading.value = false }
 }
 
 const displayMatches = computed(() =>
@@ -788,22 +798,19 @@ async function saveBracketLayout() {
     side_b_entry_id: m.side_b_entry_id || null,
   }))
 
-  const { error } = await supabase.rpc('save_bracket_layout', {
-    p_tournament_id: props.id,
-    p_layout: layout,
-    p_expected_matches: matchVersions(bracketBaseline.value),
-  })
-
-  actionLoading.value = false
-
-  if (error) {
-    errorText.value = scoringError(error.message, t)
-    await loadMatchesAndSets()
-    return
-  }
-
-  await cancelBracketEditing(true)
-  await loadAll()
+  try {
+    const { error } = await supabase.rpc('save_bracket_layout', {
+      p_tournament_id: props.id,
+      p_layout: layout,
+      p_expected_matches: matchVersions(bracketBaseline.value),
+    })
+    if (error) throw error
+    await cancelBracketEditing(true)
+    await loadAll()
+  } catch (error) {
+    errorText.value = scoringError(error?.message, t)
+    try { await loadMatchesAndSets() } catch { /* Keep the local layout draft and original error. */ }
+  } finally { actionLoading.value = false }
 }
 
 async function addAdmin() {
@@ -814,65 +821,52 @@ async function addAdmin() {
 
   actionLoading.value = true
   errorText.value = ''
-
-  const { error } = await supabase.rpc('add_tournament_admin_by_email', {
-    p_tournament_id: props.id,
-    p_email: addAdminForm.email,
-    p_role: addAdminForm.role,
-  })
-
-  actionLoading.value = false
-
-  if (error) {
-    errorText.value = error.message
-    return
-  }
-
-  addAdminForm.email = ''
-  addAdminForm.role = 'editor'
-  await loadAll()
+  try {
+    const { error } = await supabase.rpc('add_tournament_admin_by_email', {
+      p_tournament_id: props.id,
+      p_email: addAdminForm.email,
+      p_role: addAdminForm.role,
+    })
+    if (error) throw error
+    addAdminForm.email = ''
+    addAdminForm.role = 'editor'
+    await loadAll()
+  } catch (error) {
+    errorText.value = scoringError(error?.message, t)
+  } finally { actionLoading.value = false }
 }
 
 async function removeAdmin(adminId) {
+  if (actionLoading.value) return
   actionLoading.value = true
   errorText.value = ''
-
-  const { error } = await supabase.rpc('remove_tournament_admin', {
-    p_tournament_id: props.id,
-    p_admin_id: adminId,
-  })
-
-  actionLoading.value = false
-
-  if (error) {
-    errorText.value = error.message
-    return
-  }
-
-  await loadAll()
+  try {
+    const { error } = await supabase.rpc('remove_tournament_admin', {
+      p_tournament_id: props.id,
+      p_admin_id: adminId,
+    })
+    if (error) throw error
+    await loadAll()
+  } catch (error) {
+    errorText.value = scoringError(error?.message, t)
+  } finally { actionLoading.value = false }
 }
 
 async function deleteTournament() {
-  if (!(await confirmDialog(t('admin.deleteTournamentConfirm'), { danger: true }))) {
-    return
-  }
-
+  if (actionLoading.value) return
   actionLoading.value = true
-  errorText.value = ''
-
-  stopRealtime?.(); stopRealtime = null
-
-  const { error } = await supabase.from('tournaments').delete().eq('id', props.id)
-
-  actionLoading.value = false
-
-  if (error) {
-    errorText.value = error.message
-    return
-  }
-
-  unregisterDrafts()
-  await withApprovedDeparture(() => router.replace({ name: 'admin-tournaments' }))
+  try {
+    if (!(await confirmDialog(t('admin.deleteTournamentConfirm'), { danger: true }))) return
+    errorText.value = ''
+    stopRealtime?.(); stopRealtime = null
+    const { error } = await supabase.from('tournaments').delete().eq('id', props.id)
+    if (error) throw error
+    unregisterDrafts()
+    await withApprovedDeparture(() => router.replace({ name: 'admin-tournaments' }))
+  } catch (error) {
+    errorText.value = scoringError(error?.message, t)
+    if (!stopRealtime) setupRealtime()
+  } finally { actionLoading.value = false }
 }
 
 function statusBadgeClass(status) {
@@ -967,15 +961,94 @@ watch(canManageTournament, () => {
 })
 
 function openLiveScoring(match) {
-  const current = matches.value.find(row => row.id === match.id)
+  const current = matches.value.find(row => row.id === match?.id)
   const action = matchScoringAction(tournament.value, currentUserRole.value, current)
-  if (action === 'live') selectedLiveMatch.value = current
-  else if (action === 'result') selectedRrMatch.value = current
+  if (action === 'live' || action === 'result') openAdminScoreRoute(current, action)
 }
 
 const selectedLiveScore = computed(() => (
   selectedLiveMatch.value ? liveScoresByMatch.value[selectedLiveMatch.value.id] : null
 ))
+
+let pushedScoreRouteKey = null
+const scoreRouteKey = (matchId, mode) => matchId && mode ? `${mode}:${matchId}` : null
+
+function setSelectedScoreMatch(match, mode) {
+  selectedLiveMatch.value = mode === 'live' ? match : null
+  selectedRrMatch.value = mode === 'result' ? match : null
+}
+
+function openAdminScoreRoute(match, mode) {
+  if (!match?.id) return
+  const key = scoreRouteKey(match.id, mode)
+  setSelectedScoreMatch(match, mode)
+  if (scoreRouteKey(queryValue(route.query.match), queryValue(route.query.score)) === key) return
+  pushedScoreRouteKey = key
+  void router.push(adminRouteLocation({ ...route.query, match: match.id, score: mode })).catch(() => {
+    if (pushedScoreRouteKey === key) pushedScoreRouteKey = null
+    setSelectedScoreMatch(null, null)
+  })
+}
+
+function replaceAdminScoreRoute(match, mode) {
+  if (!match?.id) return
+  const previousKey = scoreRouteKey(queryValue(route.query.match), queryValue(route.query.score))
+  const nextKey = scoreRouteKey(match.id, mode)
+  if (pushedScoreRouteKey === previousKey) pushedScoreRouteKey = nextKey
+  setSelectedScoreMatch(match, mode)
+  void router.replace(adminRouteLocation({ ...route.query, match: match.id, score: mode }))
+}
+
+function replaceWithoutAdminScoreQuery() {
+  const { match, score, ...query } = route.query
+  if (match === undefined && score === undefined) return
+  void router.replace(adminRouteLocation(query))
+}
+
+function closeAdminScoreModal() {
+  const key = scoreRouteKey(queryValue(route.query.match), queryValue(route.query.score))
+  const shouldGoBack = Boolean(key && pushedScoreRouteKey === key)
+  setSelectedScoreMatch(null, null)
+  pushedScoreRouteKey = null
+  if (shouldGoBack) router.back()
+  else replaceWithoutAdminScoreQuery()
+}
+
+function syncAdminScoreFromRoute() {
+  const matchId = queryValue(route.query.match)
+  const mode = queryValue(route.query.score)
+  const key = scoreRouteKey(matchId, mode)
+  if (!matchId && !mode) {
+    setSelectedScoreMatch(null, null)
+    pushedScoreRouteKey = null
+    return
+  }
+  const current = matches.value.find(row => row.id === matchId)
+  const action = current ? matchScoringAction(tournament.value, currentUserRole.value, current) : null
+  const modeAllowed = mode === 'live'
+    ? action === 'live'
+    : mode === 'result' && canEditFinalScores.value && current?.side_a_entry_id && current?.side_b_entry_id
+  if (key && modeAllowed) {
+    setSelectedScoreMatch(current, mode)
+    if (pushedScoreRouteKey && pushedScoreRouteKey !== key) pushedScoreRouteKey = null
+    return
+  }
+  setSelectedScoreMatch(null, null)
+  if (tournament.value && !loading.value) {
+    pushedScoreRouteKey = null
+    replaceWithoutAdminScoreQuery()
+  }
+}
+
+watch(() => route.query.surface, value => {
+  adminMobileBracketSurface.value = adminSurfaceFromQuery(value)
+})
+
+watch(
+  [() => route.query.match, () => route.query.score, matches, currentUserRole, loading, () => tournament.value?.id],
+  syncAdminScoreFromRoute,
+  { immediate: true },
+)
 
 const hasOtherDrafts = computed(() => Boolean(addAdminForm.email) || addAdminForm.role !== 'editor')
 const unregisterDrafts = useUnsavedChanges(() => hasOtherDrafts.value || bracketHasChanges.value || pairingDirty.value,
@@ -993,7 +1066,7 @@ onMounted(async () => {
       qrModalOpen.value = true
     }
     const { qr, ...rest } = route.query
-    router.replace({ query: rest, hash: route.hash })
+    router.replace(adminRouteLocation(rest))
   }
 })
 
@@ -1554,8 +1627,8 @@ onBeforeUnmount(() => {
       >
         <template v-if="isNarrowLayout && isTournamentActive && matches.length">
           <div class="admin-mobile-surface" role="tablist" :aria-label="t('tournament.tabsLabel')" @keydown="onSurfaceTabKeydown">
-            <button id="admin-surface-matches" type="button" role="tab" aria-controls="admin-mobile-panel" :tabindex="adminMobileBracketSurface === 'matches' ? 0 : -1" :aria-selected="adminMobileBracketSurface === 'matches'" :class="{ active: adminMobileBracketSurface === 'matches' }" @click="adminMobileBracketSurface = 'matches'">{{ t('mobile.matches') }}</button>
-            <button id="admin-surface-overview" type="button" role="tab" aria-controls="admin-mobile-panel" :tabindex="adminMobileBracketSurface === 'overview' ? 0 : -1" :aria-selected="adminMobileBracketSurface === 'overview'" :class="{ active: adminMobileBracketSurface === 'overview' }" @click="adminMobileBracketSurface = 'overview'">{{ t('mobile.overview') }}</button>
+            <button id="admin-surface-matches" type="button" role="tab" aria-controls="admin-mobile-panel" :tabindex="adminMobileBracketSurface === 'matches' ? 0 : -1" :aria-selected="adminMobileBracketSurface === 'matches'" :class="{ active: adminMobileBracketSurface === 'matches' }" @click="setAdminMobileBracketSurface('matches')">{{ t('mobile.matches') }}</button>
+            <button id="admin-surface-overview" type="button" role="tab" aria-controls="admin-mobile-panel" :tabindex="adminMobileBracketSurface === 'overview' ? 0 : -1" :aria-selected="adminMobileBracketSurface === 'overview'" :class="{ active: adminMobileBracketSurface === 'overview' }" @click="setAdminMobileBracketSurface('overview')">{{ t('mobile.overview') }}</button>
           </div>
         </template>
         <div id="admin-mobile-panel" :role="isNarrowLayout && isTournamentActive && matches.length ? 'tabpanel' : undefined" :aria-labelledby="isNarrowLayout && isTournamentActive && matches.length ? `admin-surface-${adminMobileBracketSurface}` : undefined">
@@ -1887,7 +1960,7 @@ onBeforeUnmount(() => {
         :scoring-config="tournament.scoring_config || {}"
         :team-a="teamLabel(selectedLiveMatch.side_a_entry_id)"
         :team-b="teamLabel(selectedLiveMatch.side_b_entry_id)"
-        @close="selectedLiveMatch = null"
+        @close="closeAdminScoreModal"
         @changed="scheduleScoreReload"
       />
 
@@ -1910,7 +1983,7 @@ onBeforeUnmount(() => {
         :can-edit-final="canEditFinalScores"
         :can-live-score="canUseLiveScoring"
         :live-status="liveScoresByMatch[selectedRrMatch.id]?.status || null"
-        @close="selectedRrMatch = null"
+        @close="closeAdminScoreModal"
         @saved="refreshScoreData"
         @start-live="startLiveFromRrModal"
       />

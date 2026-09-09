@@ -59,42 +59,47 @@ async function loadTournaments() {
   loading.value = true
   loadError.value = ''
 
-  const { data, error } = await supabase
-    .from('tournament_admins')
-    .select(
-      `
-      tournament_id,
-      role,
-      tournaments (
-        id,
-        name,
-        slug,
-        sport,
-        format,
-        category,
-        status,
-        set_format,
-        doubles_pairing_mode,
-        created_at
+  try {
+    const { data, error } = await supabase
+      .from('tournament_admins')
+      .select(
+        `
+        tournament_id,
+        role,
+        tournaments (
+          id,
+          name,
+          slug,
+          sport,
+          format,
+          category,
+          status,
+          set_format,
+          doubles_pairing_mode,
+          created_at
+        )
+      `,
       )
-    `,
-    )
-    .eq('user_id', auth.user.id)
+      .eq('user_id', auth.user.id)
 
-  loading.value = false
+    if (error) {
+      loadError.value = error.message
+      tournaments.value = []
+      return
+    }
 
-  if (error) {
-    loadError.value = error.message
+    const rows = data || []
+    const list = rows
+      .map((row) => row.tournaments ? { ...row.tournaments, currentRole: row.role } : null)
+      .filter((t) => t != null)
+    list.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    tournaments.value = list
+  } catch (error) {
+    loadError.value = error?.message || t('drafts.unavailable')
     tournaments.value = []
-    return
+  } finally {
+    loading.value = false
   }
-
-  const rows = data || []
-  const list = rows
-    .map((row) => row.tournaments ? { ...row.tournaments, currentRole: row.role } : null)
-    .filter((t) => t != null)
-  list.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-  tournaments.value = list
 }
 
 function tournamentTarget(item) {

@@ -87,29 +87,33 @@ async function submit() {
     ? form.memberTwo
     : null
 
-  const { error } = await supabase.rpc('register_entry', {
-    p_slug: props.tournament.slug,
-    p_entry_type: entryType.value,
-    p_phone_or_email: form.phoneOrEmail,
-    p_member_one: form.memberOne,
-    p_member_two: memberTwo,
-    p_display_name: form.displayName || null,
-  })
+  try {
+    const { error } = await supabase.rpc('register_entry', {
+      p_slug: props.tournament.slug,
+      p_entry_type: entryType.value,
+      p_phone_or_email: form.phoneOrEmail,
+      p_member_one: form.memberOne,
+      p_member_two: memberTwo,
+      p_display_name: form.displayName || null,
+    })
 
-  loading.value = false
+    if (error) {
+      errorText.value = error.message || t('registrationForm.error')
+      return
+    }
 
-  if (error) {
-    errorText.value = error.message || t('registrationForm.error')
-    return
+    submitted.value = true
+    form.displayName = ''
+    form.phoneOrEmail = ''
+    form.memberOne = ''
+    form.memberTwo = ''
+    contactTouched.value = false
+    emit('submitted')
+  } catch (error) {
+    errorText.value = error?.message || t('registrationForm.error')
+  } finally {
+    loading.value = false
   }
-
-  submitted.value = true
-  form.displayName = ''
-  form.phoneOrEmail = ''
-  form.memberOne = ''
-  form.memberTwo = ''
-  contactTouched.value = false
-  emit('submitted')
 }
 </script>
 

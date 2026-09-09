@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { confirmDialog } from '../lib/confirmDialog'
 import AppModal from './AppModal.vue'
@@ -8,6 +8,8 @@ import { normalizeTennisState, pointLabel } from '../lib/useTennisScoring'
 import { useDeferredChangeover } from '../lib/liveSides'
 import { supabase } from '../lib/supabase'
 import { liveRuleHint, tennisRulesSummary, scoringError } from '../lib/tennisRules'
+import { useOnlineStatus } from '../lib/useOnlineStatus'
+import { useAuthStore } from '../stores/auth'
 
 const props = defineProps({
   canStopLive: { type: Boolean, default: false },
@@ -33,11 +35,16 @@ const props = defineProps({
 const emit = defineEmits(['close', 'changed'])
 
 const { t } = useI18n()
+const auth = useAuthStore()
+const sessionOwnerId = auth.user?.id || ''
+const isSessionCurrent = () => Boolean(sessionOwnerId) && auth.user?.id === sessionOwnerId
 
 const currentLiveScore = ref(props.liveScore)
 const loading = ref(false)
 const errorText = ref('')
 const pendingTaps = ref(0)
+const cancelledTaps = ref(0)
+const isOnline = useOnlineStatus()
 
 watch(
   () => props.liveScore,
@@ -60,6 +67,7 @@ const isFinished = computed(() => currentLiveScore.value?.status === 'finished' 
 const isStopped = computed(() => currentLiveScore.value?.status === 'stopped')
 const isActive = computed(() => currentLiveScore.value?.status === 'active' && !isFinished.value)
 const statusText = computed(() => {
+  if (!currentLiveScore.value) return loading.value ? t('live.starting') : t('live.notStarted')
   if (isFinished.value) return t('live.finished')
   if (isStopped.value) return t('live.stopped')
   return t('live.active')
@@ -100,11 +108,12 @@ function teamName(side) {
 }
 
 async function setSides({ swapped = null, auto = null }) {
-  if (savingSides.value) return
+  if (savingSides.value || !isSessionCurrent()) return
   pendingSwapped.value = swapped === null ? baseSwapped.value : swapped
   pendingAuto.value = auto === null ? autoSides.value : auto
 
   if (!currentLiveScore.value) { hasPendingSides.value = true; return }
+  if (!isOnline.value) return
 
   savingSides.value = true
   errorText.value = ''
@@ -114,6 +123,7 @@ async function setSides({ swapped = null, auto = null }) {
       p_swapped: swapped,
       p_auto: auto,
     })
+    if (!isSessionCurrent()) return
     if (error) throw error
     if (!currentLiveScore.value || data.revision >= currentLiveScore.value.revision) currentLiveScore.value = data
     hasPendingSides.value = false
@@ -144,35 +154,88 @@ async function flushPendingSides() {
 }
 
 let starting = null
+let startRequested = false
+let retryStartAfterOffline = false
+let disposed = false
 function ensureStarted() {
-  if (!starting) starting = startSession().finally(() => { starting = null })
+  if (!isSessionCurrent()) return Promise.resolve()
+  startRequested = true
+  if (!starting) {
+    starting = startSession().finally(() => {
+      starting = null
+      if (!disposed && startRequested && isOnline.value) void ensureStarted()
+    })
+  }
   return starting
 }
 
 onMounted(() => { if (!props.liveScore) ensureStarted() })
+onBeforeUnmount(() => {
+  disposed = true
+  startRequested = false
+  retryStartAfterOffline = false
+})
 
-async function startSession() {
-  if (currentLiveScore.value?.status === 'active' || currentLiveScore.value?.status === 'finished') {
+watch(isOnline, (online) => {
+  if (!online) {
+    if (startRequested) retryStartAfterOffline = true
+    invalidateTapQueue()
     return
   }
+  if (startRequested) void ensureStarted()
+})
+
+watch(() => auth.user?.id, (userId) => {
+  if (userId === sessionOwnerId) return
+  startRequested = false
+  retryStartAfterOffline = false
+  invalidateTapQueue({ includeInFlight: true })
+  emit('close')
+})
+
+async function startSession() {
+  if (!isSessionCurrent()) return
+  if (currentLiveScore.value?.status === 'active' || currentLiveScore.value?.status === 'finished') {
+    startRequested = false
+    retryStartAfterOffline = false
+    return
+  }
+  if (!isOnline.value) {
+    retryStartAfterOffline = true
+    return
+  }
+  retryStartAfterOffline = false
   loading.value = true
   errorText.value = ''
 
-  const { data, error } = await supabase.rpc('start_live_match', {
-    p_match_id: props.match.id,
-    p_expected_revision: props.match.score_revision,
-  })
+  try {
+    const { data, error } = await supabase.rpc('start_live_match', {
+      p_match_id: props.match.id,
+      p_expected_revision: props.match.score_revision,
+    })
+    if (!isSessionCurrent()) return
 
-  loading.value = false
-  if (error) {
-    errorText.value = scoringError(error.message, t)
+    if (error) {
+      if (!isOnline.value) retryStartAfterOffline = true
+      if (!retryStartAfterOffline) startRequested = false
+      errorText.value = isOnline.value ? scoringError(error.message, t) : ''
+      emit('changed')
+      return
+    }
+
+    startRequested = false
+    retryStartAfterOffline = false
+    if (!currentLiveScore.value || data.revision >= currentLiveScore.value.revision) currentLiveScore.value = data
+    await flushPendingSides()
     emit('changed')
-    return
+  } catch (error) {
+    if (!isOnline.value) retryStartAfterOffline = true
+    if (!retryStartAfterOffline) startRequested = false
+    errorText.value = isOnline.value ? scoringError(error?.message, t) : ''
+    emit('changed')
+  } finally {
+    loading.value = false
   }
-
-  if (!currentLiveScore.value || data.revision >= currentLiveScore.value.revision) currentLiveScore.value = data
-  await flushPendingSides()
-  emit('changed')
 }
 
 // Keep the revision produced by our own queue. Realtime updates must never
@@ -180,27 +243,44 @@ async function startSession() {
 let tapQueue = Promise.resolve()
 let queueEpoch = 0
 let queueRevision = null
+const pendingTapItems = new Set()
+function invalidateTapQueue({ includeInFlight = false } = {}) {
+  queueEpoch += 1
+  let cancelled = 0
+  pendingTapItems.forEach(item => {
+    if (item.cancelled || (!includeInFlight && item.inFlight)) return
+    item.cancelled = true
+    cancelled += 1
+  })
+  cancelledTaps.value += cancelled
+}
 function record(side) {
-  if (!isActive.value || savingSides.value) return
+  if (!isSessionCurrent() || !isActive.value || savingSides.value || !isOnline.value) return
   if (pendingTaps.value === 0) queueRevision = revision.value
-  const epoch = queueEpoch
+  const item = { epoch: queueEpoch, inFlight: false, cancelled: false }
+  pendingTapItems.add(item)
   pendingTaps.value += 1
-  tapQueue = tapQueue.then(() => doRecord(side, epoch)).catch(() => {
-    queueEpoch += 1
+  tapQueue = tapQueue.then(() => doRecord(side, item)).catch(() => {
+    invalidateTapQueue({ includeInFlight: true })
     errorText.value = t('scoringFlow.unavailable')
     emit('changed')
-  }).finally(() => { pendingTaps.value = Math.max(0, pendingTaps.value - 1) })
+  }).finally(() => {
+    pendingTapItems.delete(item)
+    pendingTaps.value = Math.max(0, pendingTaps.value - 1)
+  })
 }
-async function doRecord(side, epoch) {
-  if (epoch !== queueEpoch || !isActive.value) return
+async function doRecord(side, item) {
+  if (!isSessionCurrent() || item.cancelled || item.epoch !== queueEpoch || !isActive.value || !isOnline.value) return
+  item.inFlight = true
   loading.value = true
   errorText.value = ''
   try {
     const { data, error } = await supabase.rpc('record_point', {
       p_match_id: props.match.id, p_side: side, p_expected_revision: queueRevision,
     })
+    if (!isSessionCurrent()) return
     if (error) {
-      queueEpoch += 1
+      invalidateTapQueue({ includeInFlight: true })
       errorText.value = scoringError(error.message, t)
       emit('changed')
       return
@@ -208,31 +288,46 @@ async function doRecord(side, epoch) {
     queueRevision = data.revision
     if (!currentLiveScore.value || data.revision >= currentLiveScore.value.revision) currentLiveScore.value = data
     emit('changed')
-  } finally { loading.value = false }
+  } catch (error) {
+    invalidateTapQueue({ includeInFlight: true })
+    errorText.value = scoringError(error?.message, t)
+    emit('changed')
+  } finally {
+    item.inFlight = false
+    loading.value = false
+  }
 }
 
 async function stopLive() {
-  if (!props.canStopLive || loading.value || pendingTaps.value || !isActive.value) return
+  if (!isSessionCurrent() || !props.canStopLive || loading.value || pendingTaps.value || !isActive.value || !isOnline.value) return
   const expected = revision.value
   if (!(await confirmDialog(t('scoringFlow.stopConfirm'), { danger: true }))) return
+  if (!isSessionCurrent() || !isOnline.value) return
   queueEpoch += 1
   loading.value = true
   errorText.value = ''
 
-  const { data, error } = await supabase.rpc('stop_live_match', {
-    p_match_id: props.match.id,
-    p_expected_revision: expected,
-  })
+  try {
+    const { data, error } = await supabase.rpc('stop_live_match', {
+      p_match_id: props.match.id,
+      p_expected_revision: expected,
+    })
+    if (!isSessionCurrent()) return
 
-  loading.value = false
-  if (error) {
-    errorText.value = scoringError(error.message, t)
+    if (error) {
+      errorText.value = isOnline.value ? scoringError(error.message, t) : ''
+      emit('changed')
+      return
+    }
+
+    if (!currentLiveScore.value || data.revision >= currentLiveScore.value.revision) currentLiveScore.value = data
     emit('changed')
-    return
+  } catch (error) {
+    errorText.value = isOnline.value ? scoringError(error?.message, t) : ''
+    emit('changed')
+  } finally {
+    loading.value = false
   }
-
-  if (!currentLiveScore.value || data.revision >= currentLiveScore.value.revision) currentLiveScore.value = data
-  emit('changed')
 }
 </script>
 
@@ -253,7 +348,7 @@ async function stopLive() {
 
       <div class="live-sides">
         <label class="switch">
-          <input type="checkbox" :checked="autoSides" :disabled="savingSides || (currentLiveScore && loading) || pendingTaps > 0" @change="toggleAutoSides" />
+          <input type="checkbox" :checked="autoSides" :disabled="!isSessionCurrent() || !isOnline || savingSides || (currentLiveScore && loading) || pendingTaps > 0" @change="toggleAutoSides" />
           <span class="switch__track"><span class="switch__thumb"></span></span>
           <span class="switch__label">{{ t('live.autoSwap') }}</span>
         </label>
@@ -262,7 +357,7 @@ async function stopLive() {
           type="button"
           :aria-label="t('live.swapSides')"
           :title="t('live.swapSides')"
-          :disabled="savingSides || (currentLiveScore && loading) || pendingTaps > 0"
+          :disabled="!isSessionCurrent() || !isOnline || savingSides || (currentLiveScore && loading) || pendingTaps > 0"
           @click="toggleSwapSides"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -296,7 +391,7 @@ async function stopLive() {
             :key="side"
             class="live-tap"
             type="button"
-            :disabled="!isActive || savingSides"
+            :disabled="!isSessionCurrent() || !isOnline || !isActive || savingSides"
             @click="record(side)"
           >
             <span class="live-tap__name">{{ teamName(side) }}</span>
@@ -305,14 +400,14 @@ async function stopLive() {
       </template>
 
       <div class="live-modal__footer">
-        <button class="btn btn--ghost btn--sm" type="button" :disabled="!canUndo || !isActive" @click="record('undo')">
+        <button class="btn btn--ghost btn--sm" type="button" :disabled="!isSessionCurrent() || !isOnline || !canUndo || !isActive" @click="record('undo')">
           {{ t('live.undo') }}
         </button>
         <button
           v-if="isStopped || !currentLiveScore"
           class="btn btn--ghost btn--sm"
           type="button"
-          :disabled="loading"
+          :disabled="!isSessionCurrent() || loading"
           @click="ensureStarted"
         >
           {{ t('scoringFlow.resume') }}
@@ -321,16 +416,20 @@ async function stopLive() {
           v-else-if="isActive && canStopLive"
           class="btn btn--ghost btn--sm"
           type="button"
-          :disabled="loading || pendingTaps > 0"
+          :disabled="!isSessionCurrent() || !isOnline || loading || pendingTaps > 0"
           @click="stopLive"
         >
           {{ t('scoringFlow.stop') }}
         </button>
-        <span class="live-modal__rev">rev {{ revision }}<template v-if="pendingTaps"> · +{{ pendingTaps }}</template></span>
+        <span v-if="pendingTaps" class="live-modal__pending" role="status" aria-live="polite">
+          {{ t('live.pendingPoints', { count: pendingTaps }) }}
+        </span>
       </div>
 
       <p v-if="isStopped" class="alert alert--info" role="status">{{ t('scoringFlow.resumeRequired') }}</p>
       <p v-if="isActive && !canStopLive" class="muted">{{ t('scoringFlow.counterStop') }}</p>
+      <p v-if="!isOnline" class="error-text" role="alert">{{ t('sync.offline') }}</p>
+      <p v-if="cancelledTaps" class="error-text live-modal__cancelled" role="alert">{{ t('live.cancelledPoints', { count: cancelledTaps }) }}</p>
       <p v-if="errorText" class="error-text" role="alert">{{ errorText }}</p>
     </div>
   </AppModal>
@@ -508,7 +607,7 @@ async function stopLive() {
   padding-top: var(--space-2);
 }
 
-.live-modal__rev {
+.live-modal__pending {
   margin-left: auto;
   font-family: var(--font-mono);
   font-size: 0.72rem;

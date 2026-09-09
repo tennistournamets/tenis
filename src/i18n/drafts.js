@@ -14,6 +14,8 @@ export const draftMessages = {
     registrationChanged: 'Условия регистрации изменились. Ваш ввод сохранён. Проверьте новые условия перед отправкой.',
     registrationClosed: 'Регистрация закрыта. Ваш ввод сохранён в этой форме.',
     review: 'Я проверил новые условия',
+    restored: 'Черновик из этой вкладки восстановлен.',
+    discardStored: 'Очистить черновик',
   },
   en: {
     matchRemoved: 'This match was deleted or the bracket was rebuilt. Your input is still visible; it cannot be saved to the old match.',
@@ -29,6 +31,8 @@ export const draftMessages = {
     unavailable: 'Could not load current data. Your draft is preserved.',
     registrationChanged: 'Registration conditions changed. Your draft is preserved. Review the new conditions before submitting.',
     registrationClosed: 'Registration is closed. Your draft is preserved in this form.', review: 'I reviewed the new conditions',
+    restored: 'Your draft from this tab was restored.',
+    discardStored: 'Clear draft',
   },
   lt: {
     matchRemoved: 'Rungtynės pašalintos arba tinklelis sukurtas iš naujo. Įvestas rezultatas liko matomas; senoms rungtynėms jo išsaugoti negalima.',
@@ -44,5 +48,7 @@ export const draftMessages = {
     unavailable: 'Nepavyko įkelti naujausių duomenų. Juodraštis liko formoje.',
     registrationChanged: 'Registracijos sąlygos pasikeitė. Įvestis išsaugota formoje. Prieš siųsdami peržiūrėkite naujas sąlygas.',
     registrationClosed: 'Registracija uždaryta. Įvestis išsaugota šioje formoje.', review: 'Peržiūrėjau naujas sąlygas',
+    restored: 'Atkurtas šio skirtuko juodraštis.',
+    discardStored: 'Išvalyti juodraštį',
   },
 }

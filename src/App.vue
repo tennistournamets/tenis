@@ -8,12 +8,14 @@ import LanguageSwitcher from './components/LanguageSwitcher.vue'
 import ThemeToggle from './components/ThemeToggle.vue'
 import { confirmLeaveForms, withApprovedDeparture } from './lib/unsavedChanges'
 import { headerTitle } from './lib/headerTitle'
+import { useOnlineStatus } from './lib/useOnlineStatus'
 import { useAuthStore } from './stores/auth'
 
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const { t, locale } = useI18n()
+const isOnline = useOnlineStatus()
 
 const profileOpen = ref(false)
 const profileRoot = ref(null)
@@ -36,10 +38,26 @@ watchEffect(() => {
 })
 watch(() => route.fullPath, () => closeProfile())
 
+async function loadAccountContext() {
+  await Promise.allSettled([
+    auth.loadTournamentRoles(),
+    auth.loadPlayerContext(),
+  ])
+}
+
 onMounted(async () => {
-  await auth.init()
-  auth.loadTournamentRoles()
+  try {
+    await auth.init()
+  } catch {
+    // Route-level loading surfaces the actionable authentication error.
+  }
 })
+
+watch(
+  [() => auth.ready, () => auth.user?.id],
+  ([ready]) => { if (ready) void loadAccountContext() },
+  { immediate: true },
+)
 
 const layout = computed(() => {
   if (route.name === 'home') {
@@ -54,10 +72,21 @@ const layout = computed(() => {
   return 'default'
 })
 
-const userInitial = computed(() => {
-  const name = auth.user?.user_metadata?.full_name || auth.user?.email || ''
-  return name.charAt(0).toUpperCase()
-})
+const profileName = computed(() => (
+  auth.currentPlayer?.display_name
+  || auth.user?.user_metadata?.full_name
+  || auth.user?.email
+  || ''
+))
+
+const userInitial = computed(() => profileName.value.charAt(0).toUpperCase())
+
+const profileAvatar = computed(() => (
+  auth.currentPlayer?.avatar_url
+  || auth.user?.user_metadata?.avatar_url
+  || auth.user?.user_metadata?.picture
+  || ''
+))
 
 async function toggleProfile() {
   profileOpen.value = !profileOpen.value
@@ -118,11 +147,12 @@ function goToSettings() {
             :aria-controls="profileOpen ? profileId : undefined"
             @click="toggleProfile"
           >
-            <span class="profile-menu__avatar">{{ userInitial }}</span>
+            <img v-if="profileAvatar" class="profile-menu__avatar profile-menu__avatar--image" :src="profileAvatar" alt="" />
+            <span v-else class="profile-menu__avatar">{{ userInitial }}</span>
           </button>
           <div v-if="profileOpen" :id="profileId" class="profile-menu__dropdown" role="group" :aria-label="t('a11y.profileMenu')">
             <div class="profile-menu__info">
-              <span class="profile-menu__name">{{ auth.user.user_metadata?.full_name || auth.user.email }}</span>
+              <span class="profile-menu__name">{{ profileName }}</span>
               <span class="profile-menu__email">{{ auth.user.email }}</span>
             </div>
             <div class="profile-menu__divider" />
@@ -147,6 +177,15 @@ function goToSettings() {
       </div>
     </header>
 
+    <div
+      v-if="!isOnline"
+      class="app-offline-banner alert alert--error"
+      :class="{ 'app-offline-banner--login': layout === 'login' }"
+      role="status"
+    >
+      {{ t('sync.offline') }}
+    </div>
+
     <main
       id="main-content"
       ref="mainContent"
@@ -162,3 +201,21 @@ function goToSettings() {
     <ConfirmDialog />
   </div>
 </template>
+
+<style scoped>
+.profile-menu__avatar--image {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+}
+
+.app-offline-banner {
+  width: min(calc(100% - (2 * var(--space-4))), 1400px);
+  margin: var(--space-3) auto 0;
+}
+
+.app-offline-banner--login {
+  margin-top: calc(64px + var(--space-3));
+}
+</style>

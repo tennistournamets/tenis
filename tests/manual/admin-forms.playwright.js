@@ -14,6 +14,7 @@ async page => {
   await page.evaluate(async () => {
     document.querySelector('#app').__vue_app__?.unmount()
     const dependencyUrl = name => performance.getEntriesByType('resource').find(entry => entry.name.includes(`/node_modules/.vite/deps/${name}.js?v=`))?.name || `/node_modules/.vite/deps/${name}.js`
+    const sourceUrl = path => performance.getEntriesByType('resource').find(entry => entry.name.includes(path))?.name || path
     const vue = await import(dependencyUrl('vue'))
     const { createI18n } = await import(dependencyUrl('vue-i18n'))
     const { createRouter, createMemoryHistory } = await import(dependencyUrl('vue-router'))
@@ -21,8 +22,10 @@ async page => {
     const { messages } = await import('/src/i18n/messages.js')
     const { supabase } = await import('/src/lib/supabase.js')
     const { useAuthStore } = await import('/src/stores/auth.js')
-    const { hasUnsavedChanges } = await import('/src/lib/unsavedChanges.js')
-    const { settleConfirm } = await import('/src/lib/confirmDialog.js')
+    // Reuse the exact HMR-versioned modules loaded by App. Importing the same
+    // source without its `?t=` suffix creates a second private form registry.
+    const { hasUnsavedChanges } = await import(sourceUrl('/src/lib/unsavedChanges.js'))
+    const { settleConfirm } = await import(sourceUrl('/src/lib/confirmDialog.js'))
     const { default: ConfirmDialog } = await import('/src/components/ConfirmDialog.vue')
     const clone = value => JSON.parse(JSON.stringify(value))
     const base = { id: 'admin-forms', slug: 'admin-forms', name: 'Form Cup', description: '', category: 'singles', sport: 'tennis',

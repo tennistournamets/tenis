@@ -156,7 +156,7 @@ function scrollTo(id) {
     </nav>
 
     <section id="top" class="landing-hero">
-      <div class="hero-watermark" aria-hidden="true">CUP</div>
+      <div class="hero-watermark" aria-hidden="true">01</div>
       <div class="landing-hero__content">
         <p class="cinema-kicker"><span class="status-dot"></span>{{ t('home.cinematic.badge') }}</p>
         <h1 class="landing-hero__title">{{ t('home.cinematic.title') }}<span class="landing-hero__title-accent">{{ t('home.cinematic.titleAccent') }}</span></h1>
@@ -174,7 +174,7 @@ function scrollTo(id) {
       </div>
       <div class="landing-hero__visual" data-stage="hero">
         <LandingStill kind="cup" />
-        <span class="hero-coordinate" aria-hidden="true">BRK / 001 — TOURNAMENT DAY</span>
+        <span class="hero-coordinate" aria-hidden="true">{{ t('home.cinematic.heroCoordinate') }}</span>
         <div v-tilt="5" class="match-ticket">
           <div class="match-ticket__top"><span>{{ t('home.cinematic.liveTitle') }}</span><span class="match-ticket__live"><i></i> {{ t('home.cinematic.demo') }}</span></div>
           <p class="match-ticket__meta">{{ t('home.cinematic.bracketType') }} <span>·</span> {{ t('home.cinematic.tournamentStatus') }}</p>
@@ -183,7 +183,7 @@ function scrollTo(id) {
           <div class="match-ticket__bottom"><span class="status-dot"></span>{{ t('home.cinematic.point') }}<span aria-hidden="true">↗</span></div>
         </div>
       </div>
-      <div class="hero-bottom"><a href="#how-it-works" @click.prevent="scrollTo('how-it-works')"><span class="scroll-arrow" aria-hidden="true">↓</span>{{ t('home.cinematic.scroll') }}</a><span class="hero-sports">ENTRIES <i>/</i> BRACKETS <i>/</i> CHAMPIONS</span></div>
+      <div class="hero-bottom"><a href="#how-it-works" @click.prevent="scrollTo('how-it-works')"><span class="scroll-arrow" aria-hidden="true">↓</span>{{ t('home.cinematic.scroll') }}</a><span class="hero-sports">{{ t('home.cinematic.heroFlow') }}</span></div>
     </section>
 
     <div class="cinema-manifesto"><span>{{ t('home.cinematic.strip1') }}</span><span>{{ t('home.cinematic.strip2') }} <i aria-hidden="true">↘</i></span></div>
@@ -209,7 +209,7 @@ function scrollTo(id) {
       <div class="cinema-section-head cinema-section-head--split reveal"><div><p class="landing-eyebrow">02 / {{ t('home.cinematic.formatEyebrow') }}</p><h2>{{ t('home.cinematic.formatTitle') }}</h2></div><p class="cinema-section-copy">{{ t('home.cinematic.formatText') }}</p></div>
       <div class="sport-tiles format-tiles">
         <article v-for="(format, i) in formats" :key="format" class="sport-tile format-tile">
-          <div class="sport-tile__top"><span>0{{ i + 1 }}</span><span>FORMAT / {{ ['KNOCKOUT', 'LEAGUE', 'GROUPS', 'DOUBLE ELIM.'][i] }}</span></div>
+          <div class="sport-tile__top"><span>0{{ i + 1 }}</span><span>{{ t('home.cinematic.formatLabel') }} / {{ t(`home.cinematic.${format}Title`) }}</span></div>
           <div v-if="!compact" class="sport-tile__stage" :data-stage="`format-${format}`" aria-hidden="true"><LandingStill /></div>
           <div class="sport-tile__copy reveal"><h3 class="sport-tile__title">{{ t(`home.cinematic.${format}Title`) }}</h3><p class="sport-tile__text">{{ t(`home.cinematic.${format}Text`) }}</p></div>
         </article>

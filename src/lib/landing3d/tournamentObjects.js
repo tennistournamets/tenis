@@ -69,7 +69,7 @@ export function makeEntryCard({ name = 'ORBIT', seed = '01', color = '#d1f64b' }
     ctx.beginPath(); ctx.roundRect(4, 4, w - 8, h - 8, 24); ctx.fill()
     ctx.fillStyle = '#93a89f'
     ctx.font = '500 23px system-ui, sans-serif'
-    ctx.fillText('BRACKETA / ENTRY', 38, 67)
+    ctx.fillText('BRACKETA / 01', 38, 67)
     ctx.strokeStyle = '#4e665c'; ctx.lineWidth = 2
     ctx.beginPath(); ctx.moveTo(38, 100); ctx.lineTo(w - 38, 100); ctx.stroke()
     ctx.fillStyle = color
@@ -79,10 +79,10 @@ export function makeEntryCard({ name = 'ORBIT', seed = '01', color = '#d1f64b' }
     ctx.fillStyle = '#f0f5ec'
     ctx.fillText(name, 37, 424)
     ctx.fillStyle = '#93a89f'; ctx.font = '400 23px system-ui, sans-serif'
-    ctx.fillText('TOURNAMENT PARTICIPANT', 38, 475)
+    ctx.fillText('01 / 16', 38, 475)
     ctx.fillStyle = color
     ctx.beginPath(); ctx.arc(48, 587, 6, 0, Math.PI * 2); ctx.fill()
-    ctx.font = '500 23px system-ui, sans-serif'; ctx.fillText('READY TO COMPETE', 68, 596)
+    ctx.font = '500 23px system-ui, sans-serif'; ctx.fillText('01 / 08', 68, 596)
     ctx.fillStyle = '#78938a'
     for (let i = 0; i < 32; i++) ctx.fillRect(38 + i * 13.4, 636, i % 3 ? 3 : 7, 14)
   })
@@ -141,8 +141,8 @@ export function makeStandings() {
   addMesh(group, new RoundedBoxGeometry(4.0, 2.8, 0.18, 3, 0.1), dark())
   const face = faceTexture(800, 560, (ctx, w, h) => {
     ctx.fillStyle = '#102222'; ctx.beginPath(); ctx.roundRect(4, 4, w - 8, h - 8, 20); ctx.fill()
-    ctx.fillStyle = '#91a79e'; ctx.font = '500 22px system-ui, sans-serif'; ctx.fillText('BRACKETA / STANDINGS', 40, 60)
-    ctx.fillStyle = '#eef4e9'; ctx.font = '600 38px system-ui, sans-serif'; ctx.fillText('LEAGUE TABLE', 40, 116)
+    ctx.fillStyle = '#91a79e'; ctx.font = '500 22px system-ui, sans-serif'; ctx.fillText('BRACKETA / 02', 40, 60)
+    ctx.fillStyle = '#eef4e9'; ctx.font = '600 38px system-ui, sans-serif'; ctx.fillText('01 / 04', 40, 116)
     const teams = ['ORBIT', 'NOVA', 'ATLAS', 'PULSE']
     teams.forEach((name, i) => {
       const y = 197 + i * 91

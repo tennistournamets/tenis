@@ -68,6 +68,8 @@ async function reloadResult(m) {
     if(latest) fieldsFor(latest)
     errorText.value=''
     emit('saved')
+  } catch {
+    errorText.value = t('scoringFlow.unavailable')
   } finally { savingId.value = '' }
 }
 async function save(m) {

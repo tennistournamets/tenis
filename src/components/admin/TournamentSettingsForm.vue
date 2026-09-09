@@ -60,10 +60,10 @@ async function saveTournamentSettings() {
   const revision = settingsDraft.revision.value
   const categoryChanged = submitted.category !== settingsDraft.baseline.value.category
   const expectedMatches = matchVersions(props.matches)
-  if (categoryChanged && props.matches.length && !(await confirmDialog(t('drafts.categoryReset'), { danger: true }))) return
   settingsSaving.value = true
   settingsError.value = ''
   try {
+    if (categoryChanged && props.matches.length && !(await confirmDialog(t('drafts.categoryReset'), { danger: true }))) return
     const { slug, ...patch } = submitted
     patch.description = patch.description || null
     patch.contact_phone = patch.contact_phone?.trim() || null

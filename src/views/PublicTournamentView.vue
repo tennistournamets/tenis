@@ -2,6 +2,7 @@
 import { tennisRulesSummary } from '../lib/tennisRules'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRoute, useRouter } from 'vue-router'
 
 import BracketBoard from '../components/BracketBoard.vue'
 import StandingsTable from '../components/StandingsTable.vue'
@@ -29,8 +30,21 @@ const props = defineProps({
 })
 
 const { t } = useI18n()
+// The fallback keeps isolated component previews functional; routed product
+// pages always receive the real Vue Router instances.
+const route = useRoute() || { query: {}, hash: '' }
+const router = useRouter() || {
+  push: () => Promise.resolve(),
+  replace: () => Promise.resolve(),
+  back: () => {},
+}
 const isNarrowLayout = useNarrowLayout()
-const mobileSurface = ref('matches')
+const PUBLIC_MOBILE_SURFACES = ['matches', 'overview']
+const queryValue = value => Array.isArray(value) ? value[0] : value
+const publicSurfaceFromQuery = value => PUBLIC_MOBILE_SURFACES.includes(queryValue(value))
+  ? queryValue(value)
+  : 'matches'
+const mobileSurface = ref(publicSurfaceFromQuery(route.query.view))
 
 const tournament = ref(null)
 useHeaderTitle(() => tournament.value?.name)
@@ -80,6 +94,62 @@ const selectedLiveMatch = computed(() => (
 const selectedLiveScore = computed(() => (
   selectedLiveMatch.value ? liveScoresByMatch.value[selectedLiveMatch.value.id] || null : null
 ))
+
+let pushedLiveMatchId = null
+
+function routeLocation(query) {
+  return { query, hash: route.hash }
+}
+
+function setMobileSurface(surface) {
+  if (!PUBLIC_MOBILE_SURFACES.includes(surface)) return
+  mobileSurface.value = surface
+  if (queryValue(route.query.view) === surface) return
+  void router.replace(routeLocation({ ...route.query, view: surface }))
+}
+
+function openPublicLive(match) {
+  const current = matches.value.find(row => row.id === match?.id)
+  if (!current || !liveScoresByMatch.value[current.id]) return
+  selectedLiveMatchId.value = current.id
+  if (queryValue(route.query.live) === current.id) return
+  pushedLiveMatchId = current.id
+  void router.push(routeLocation({ ...route.query, live: current.id })).catch(() => {
+    if (pushedLiveMatchId === current.id) pushedLiveMatchId = null
+    selectedLiveMatchId.value = null
+  })
+}
+
+function replaceWithoutLiveQuery() {
+  const { live, ...query } = route.query
+  if (live === undefined) return
+  void router.replace(routeLocation(query))
+}
+
+function closePublicLive() {
+  const matchId = selectedLiveMatchId.value || queryValue(route.query.live)
+  const shouldGoBack = Boolean(matchId && pushedLiveMatchId === matchId && queryValue(route.query.live) === matchId)
+  selectedLiveMatchId.value = null
+  pushedLiveMatchId = null
+  if (shouldGoBack) router.back()
+  else replaceWithoutLiveQuery()
+}
+
+function syncPublicLiveFromRoute() {
+  const matchId = queryValue(route.query.live)
+  if (!matchId) {
+    selectedLiveMatchId.value = null
+    pushedLiveMatchId = null
+    return
+  }
+  const exists = matches.value.some(match => match.id === matchId)
+  if (exists && liveScoresByMatch.value[matchId]) {
+    selectedLiveMatchId.value = matchId
+    return
+  }
+  selectedLiveMatchId.value = null
+  if (tournament.value && !loading.value) replaceWithoutLiveQuery()
+}
 
 function teamLabel(entryId) {
   if (!entryId) {
@@ -220,17 +290,15 @@ function setupRealtime(id) {
   })
 }
 
-watch(selectedLiveMatchId, (matchId) => {
-  if (matchId && !matches.value.some((match) => match.id === matchId)) {
-    selectedLiveMatchId.value = null
-  }
+watch(() => route.query.view, value => {
+  mobileSurface.value = publicSurfaceFromQuery(value)
 })
 
-watch(matches, () => {
-  if (selectedLiveMatchId.value && !matches.value.some((match) => match.id === selectedLiveMatchId.value)) {
-    selectedLiveMatchId.value = null
-  }
-})
+watch(
+  [() => route.query.live, matches, liveScores, loading, () => tournament.value?.id],
+  syncPublicLiveFromRoute,
+  { immediate: true },
+)
 
 onMounted(initialLoad)
 
@@ -241,6 +309,7 @@ watch(
     teardownRealtime()
     registrationDirty.value = false
     loadError.value = ''
+    pushedLiveMatchId = null
     resetTournamentData()
     initialLoad()
   },
@@ -369,10 +438,10 @@ onBeforeUnmount(() => {
 
       <template v-else-if="isNarrowLayout">
         <div class="mobile-surface-switch" role="tablist" :aria-label="t('tournament.tabsLabel')" @keydown="onTabKeydown">
-          <button id="pub-tab-matches" type="button" role="tab" aria-controls="pub-mobile-panel" :tabindex="mobileSurface === 'matches' ? 0 : -1" :aria-selected="mobileSurface === 'matches'" :class="{ active: mobileSurface === 'matches' }" @click="mobileSurface = 'matches'">
+          <button id="pub-tab-matches" type="button" role="tab" aria-controls="pub-mobile-panel" :tabindex="mobileSurface === 'matches' ? 0 : -1" :aria-selected="mobileSurface === 'matches'" :class="{ active: mobileSurface === 'matches' }" @click="setMobileSurface('matches')">
             {{ t('mobile.matches') }}
           </button>
-          <button id="pub-tab-overview" type="button" role="tab" aria-controls="pub-mobile-panel" :tabindex="mobileSurface === 'overview' ? 0 : -1" :aria-selected="mobileSurface === 'overview'" :class="{ active: mobileSurface === 'overview' }" @click="mobileSurface = 'overview'">
+          <button id="pub-tab-overview" type="button" role="tab" aria-controls="pub-mobile-panel" :tabindex="mobileSurface === 'overview' ? 0 : -1" :aria-selected="mobileSurface === 'overview'" :class="{ active: mobileSurface === 'overview' }" @click="setMobileSurface('overview')">
             {{ t('mobile.overview') }}
           </button>
         </div>
@@ -384,7 +453,7 @@ onBeforeUnmount(() => {
             :sets-by-match="setsByMatch"
             :entries-map="entriesMap"
             :live-scores-by-match="liveScoresByMatch"
-            @view-live="selectedLiveMatchId = $event.id"
+            @view-live="openPublicLive"
           />
         </div>
 
@@ -395,18 +464,18 @@ onBeforeUnmount(() => {
           </div>
           <div v-if="matches.length" class="card rr-cross-card" style="margin-top: var(--space-4)">
             <h3 class="section-title">{{ t('standings.crossTable') }}</h3>
-            <RoundRobinCrossTable :matches="matches" :entries-map="entriesMap" :standings="standings" :family="sportCfg.scoringFamily" :live-scores-by-match="liveScoresByMatch" @view-live="selectedLiveMatchId = $event.id" />
+            <RoundRobinCrossTable :matches="matches" :entries-map="entriesMap" :standings="standings" :family="sportCfg.scoringFamily" :live-scores-by-match="liveScoresByMatch" @view-live="openPublicLive" />
           </div>
         </template>
         <template v-else-if="isGroupsPlayoff">
           <div v-if="groups.length" class="card"><h3 class="section-title">{{ t('admin.groupStage') }}</h3><GroupStageBoard :groups="groupsView" :entries-map="entriesMap" :family="sportCfg.scoringFamily" /></div>
-          <div v-if="playoffMatches.length" class="card" style="margin-top: var(--space-4)"><h3 class="section-title">{{ t('admin.playoff') }}</h3><BracketBoard :matches="playoffMatches" :sets-by-match="setsByMatch" :entries-map="entriesMap" :live-scores-by-match="liveScoresByMatch" @view-live="selectedLiveMatchId = $event.id" /></div>
+          <div v-if="playoffMatches.length" class="card" style="margin-top: var(--space-4)"><h3 class="section-title">{{ t('admin.playoff') }}</h3><BracketBoard :matches="playoffMatches" :sets-by-match="setsByMatch" :entries-map="entriesMap" :live-scores-by-match="liveScoresByMatch" @view-live="openPublicLive" /></div>
         </template>
         <div v-else-if="isDoubleElim" class="card">
-          <DoubleElimBoard :matches="matches" :sets-by-match="setsByMatch" :entries-map="entriesMap" :live-scores-by-match="liveScoresByMatch" @view-live="selectedLiveMatchId = $event.id" />
+          <DoubleElimBoard :matches="matches" :sets-by-match="setsByMatch" :entries-map="entriesMap" :live-scores-by-match="liveScoresByMatch" @view-live="openPublicLive" />
         </div>
         <div v-else class="card">
-          <BracketBoard :matches="matches" :sets-by-match="setsByMatch" :entries-map="entriesMap" :live-scores-by-match="liveScoresByMatch" @view-live="selectedLiveMatchId = $event.id" />
+          <BracketBoard :matches="matches" :sets-by-match="setsByMatch" :entries-map="entriesMap" :live-scores-by-match="liveScoresByMatch" @view-live="openPublicLive" />
         </div>
         </div>
       </template>
@@ -424,7 +493,7 @@ onBeforeUnmount(() => {
             :standings="standings"
             :family="sportCfg.scoringFamily"
             :live-scores-by-match="liveScoresByMatch"
-            @view-live="selectedLiveMatchId = $event.id"
+            @view-live="openPublicLive"
           />
         </div>      </template>
 
@@ -440,7 +509,7 @@ onBeforeUnmount(() => {
             :sets-by-match="setsByMatch"
             :entries-map="entriesMap"
             :live-scores-by-match="liveScoresByMatch"
-            @view-live="selectedLiveMatchId = $event.id"
+            @view-live="openPublicLive"
           />
         </div>
       </template>
@@ -452,7 +521,7 @@ onBeforeUnmount(() => {
           :sets-by-match="setsByMatch"
           :entries-map="entriesMap"
           :live-scores-by-match="liveScoresByMatch"
-          @view-live="selectedLiveMatchId = $event.id"
+          @view-live="openPublicLive"
         />
       </div>
 
@@ -463,7 +532,7 @@ onBeforeUnmount(() => {
           :sets-by-match="setsByMatch"
           :entries-map="entriesMap"
           :live-scores-by-match="liveScoresByMatch"
-          @view-live="selectedLiveMatchId = $event.id"
+          @view-live="openPublicLive"
         />
       </div>
 
@@ -472,7 +541,7 @@ onBeforeUnmount(() => {
         :live-score="selectedLiveScore"
         :team-a="teamLabel(selectedLiveMatch.side_a_entry_id)"
         :team-b="teamLabel(selectedLiveMatch.side_b_entry_id)"
-        @close="selectedLiveMatchId = null"
+        @close="closePublicLive"
       />
     </template>
   </div>
