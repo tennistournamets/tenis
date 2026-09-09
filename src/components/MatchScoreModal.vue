@@ -223,7 +223,7 @@ async function save() {
       <div class="modal-dialog__head">
         <div>
           <h2>{{ t('standings.matchScore') }}</h2>
-          <p class="muted">{{ teamLabel(match.side_a_entry_id) }} vs {{ teamLabel(match.side_b_entry_id) }}</p>
+          <p class="muted msm-matchup">{{ teamLabel(match.side_a_entry_id) }} vs {{ teamLabel(match.side_b_entry_id) }}</p>
         </div>
         <button class="modal-close" type="button" :aria-label="t('actions.close')" @click="close">×</button>
       </div>
@@ -297,6 +297,13 @@ async function save() {
 </template>
 
 <style scoped>
+.msm-matchup {
+  display: -webkit-box;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
 .msm-grid {
   display: flex;
   flex-direction: column;

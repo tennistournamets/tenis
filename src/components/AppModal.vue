@@ -9,18 +9,39 @@ defineProps({
 
 const emit = defineEmits(['close'])
 const dialog = ref(null)
+const viewportStyle = ref({})
 let unlockPage = null
 let returnFocus = null
 let backdropPointer = false
+let visualViewport = null
+
+function syncVisualViewport() {
+  if (!visualViewport) {
+    viewportStyle.value = {}
+    return
+  }
+  viewportStyle.value = {
+    '--modal-viewport-top': `${Math.max(0, visualViewport.offsetTop)}px`,
+    '--modal-viewport-left': `${Math.max(0, visualViewport.offsetLeft)}px`,
+    '--modal-viewport-width': `${visualViewport.width}px`,
+    '--modal-viewport-height': `${visualViewport.height}px`,
+  }
+}
 
 onMounted(() => {
   returnFocus = document.activeElement
   unlockPage = lockPageScroll()
+  visualViewport = window.visualViewport
+  syncVisualViewport()
+  visualViewport?.addEventListener('resize', syncVisualViewport)
+  visualViewport?.addEventListener('scroll', syncVisualViewport)
   // The browser's top layer also makes every underlying page/dialog inert.
   dialog.value.showModal()
 })
 
 onBeforeUnmount(() => {
+  visualViewport?.removeEventListener('resize', syncVisualViewport)
+  visualViewport?.removeEventListener('scroll', syncVisualViewport)
   dialog.value?.close()
   unlockPage?.()
   if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true })
@@ -58,6 +79,7 @@ function onBackdropClick(event) {
     <dialog
       ref="dialog"
       class="modal-backdrop"
+      :style="viewportStyle"
       :role="role"
       aria-modal="true"
       :aria-label="label"

@@ -591,13 +591,17 @@ async function stopLive() {
 }
 
 .live-tap__name {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
   font-family: var(--font-display);
   font-size: 1.25rem;
   font-weight: 700;
   letter-spacing: -0.01em;
   color: var(--text);
   text-align: center;
-  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .live-modal__footer {

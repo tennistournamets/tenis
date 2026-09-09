@@ -211,8 +211,9 @@ function goToSettings() {
 }
 
 .app-offline-banner {
-  width: min(calc(100% - (2 * var(--space-4))), 1400px);
-  margin: var(--space-3) auto 0;
+  width: auto;
+  max-width: 1400px;
+  margin: var(--space-3) calc(var(--space-4) + var(--safe-area-right)) 0 calc(var(--space-4) + var(--safe-area-left));
 }
 
 .app-offline-banner--login {

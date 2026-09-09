@@ -15,9 +15,11 @@ async page => {
     document.querySelector('#app').__vue_app__?.unmount()
     const vue = await import('/node_modules/.vite/deps/vue.js')
     const { createI18n } = await import('/node_modules/.vite/deps/vue-i18n.js')
+    const { createPinia } = await import('/node_modules/.vite/deps/pinia.js')
     const { createRouter, createMemoryHistory } = await import('/node_modules/.vite/deps/vue-router.js')
     const { messages } = await import('/src/i18n/messages.js')
     const { supabase } = await import('/src/lib/supabase.js')
+    const { useAuthStore } = await import('/src/stores/auth.js')
     const i18n = createI18n({ legacy: false, locale: 'ru', messages })
     const initialState = { points: { a: 0, b: 0 }, games: { a: 0, b: 0 }, sets: [], winner: null }
     window.ui = { vue, i18n, app: null, calls: [], mode: '', initialState, refreshes: 0,
@@ -46,8 +48,15 @@ async page => {
       const { default: component } = await import(`/src/${file}.vue`)
       ui.props = vue.reactive(props)
       const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/:pathMatch(.*)*', component: { render: () => null } }] })
+      const pinia = createPinia()
+      const auth = useAuthStore(pinia)
+      auth.$patch({
+        ready: true,
+        user: { id: 'ui-operator', email: 'ui-operator@example.test', user_metadata: {} },
+        session: { user: { id: 'ui-operator' } },
+      })
       ui.app = vue.createApp({ render: () => vue.h(component, ui.props) })
-      ui.app.use(i18n).use(router).mount('#app')
+      ui.app.use(i18n).use(router).use(pinia).mount('#app')
       await vue.nextTick()
       return document.body.innerText
     }
