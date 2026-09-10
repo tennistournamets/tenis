@@ -13,6 +13,7 @@ const translateY = ref(0)
 const isPanning = ref(false)
 const isFullscreen = ref(false)
 const spaceHeld = ref(false)
+const autoFit = ref(true)
 
 const MIN_SCALE = 0.1
 const MAX_SCALE = 3
@@ -27,6 +28,7 @@ const transformStyle = () => {
 /* ── Zoom ── */
 function onWheel(e) {
   e.preventDefault()
+  autoFit.value = false
   const rect = containerRef.value.getBoundingClientRect()
   const cursorX = e.clientX - rect.left
   const cursorY = e.clientY - rect.top
@@ -52,6 +54,7 @@ function zoomOut() {
 }
 
 function zoomToCenter(factor) {
+  autoFit.value = false
   const rect = containerRef.value.getBoundingClientRect()
   const cx = rect.width / 2
   const cy = rect.height / 2
@@ -86,6 +89,7 @@ function fitToView() {
   scale.value = newScale
   translateX.value = (cRect.width - contentW * newScale) / 2
   translateY.value = (cRect.height - contentH * newScale) / 2
+  autoFit.value = true
   emitTransform()
 }
 
@@ -93,6 +97,7 @@ function resetView() {
   scale.value = 1
   translateX.value = 0
   translateY.value = 0
+  autoFit.value = false
   emitTransform()
 }
 
@@ -136,6 +141,7 @@ function onPointerDown(e) {
 }
 
 function startPan(e) {
+  autoFit.value = false
   isPanning.value = true
   panStartX = e.clientX
   panStartY = e.clientY
@@ -179,6 +185,7 @@ function getTouchDist(touches) {
 function onTouchStart(e) {
   if (e.touches.length === 2) {
     e.preventDefault()
+    autoFit.value = false
     touchPanning = true
     lastTouchDist = getTouchDist(e.touches)
     const center = getTouchCenter(e.touches)
@@ -259,11 +266,23 @@ function emitTransform() {
 }
 
 /* ── Lifecycle ── */
+let resizeObserver = null
+let resizeFrame = 0
+
 onMounted(() => {
   window.addEventListener('keydown', onKeyDown)
   window.addEventListener('keyup', onKeyUp)
   document.addEventListener('fullscreenchange', onFullscreenChange)
   document.addEventListener('webkitfullscreenchange', onFullscreenChange)
+  if ('ResizeObserver' in window) {
+    resizeObserver = new ResizeObserver(() => {
+      if (!autoFit.value) return
+      cancelAnimationFrame(resizeFrame)
+      resizeFrame = requestAnimationFrame(fitToView)
+    })
+    if (containerRef.value) resizeObserver.observe(containerRef.value)
+    if (contentRef.value) resizeObserver.observe(contentRef.value)
+  }
 })
 
 onBeforeUnmount(() => {
@@ -271,6 +290,8 @@ onBeforeUnmount(() => {
   window.removeEventListener('keyup', onKeyUp)
   document.removeEventListener('fullscreenchange', onFullscreenChange)
   document.removeEventListener('webkitfullscreenchange', onFullscreenChange)
+  resizeObserver?.disconnect()
+  cancelAnimationFrame(resizeFrame)
 })
 
 defineExpose({ fitToView, resetView, scale, translateX, translateY })
@@ -302,14 +323,14 @@ defineExpose({ fitToView, resetView, scale, translateX, translateY })
     </div>
 
     <div class="infinite-canvas__toolbar">
-      <button type="button" class="ic-btn" :title="t('bracket.fitView')" @click="fitToView">
+      <button type="button" class="ic-btn" :title="t('bracket.fitView')" :aria-label="t('bracket.fitView')" @click="fitToView">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="4.5" stroke="currentColor" stroke-width="1.5"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="8" r="1" fill="currentColor"/></svg>
       </button>
-      <button type="button" class="ic-btn recenter" :title="t('bracket.resetView')" @click="fitToView">
+      <button type="button" class="ic-btn recenter" :title="t('bracket.resetView')" :aria-label="t('bracket.resetView')" @click="fitToView">
         <svg style="position: relative; top: 4px;" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 8a6 6 0 1111.5-2.5M14 2v4h-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
       <span class="ic-zoom-label">{{ Math.round(scale * 100) }}%</span>
-      <button type="button" class="ic-btn" :title="t('bracket.fullscreen')" @click="toggleFullscreen">
+      <button type="button" class="ic-btn" :title="t('bracket.fullscreen')" :aria-label="t('bracket.fullscreen')" @click="toggleFullscreen">
         <svg v-if="!isFullscreen" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 10v4h4M14 6V2h-4M2 6V2h4M14 10v4h-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
         <svg v-else width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6 14v-4H2M10 2v4h4M6 2v4H2M10 14v-4h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>

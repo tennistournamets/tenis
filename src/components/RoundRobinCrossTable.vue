@@ -59,15 +59,18 @@ function onCell(rowId, colId) {
 </script>
 
 <template>
-  <div class="rr-cross-wrap">
+  <div class="rr-cross-wrap" tabindex="0" role="region" :aria-label="t('standings.crossTable')">
     <table class="rr-cross">
+      <caption class="sr-only">{{ t('standings.crossTable') }}</caption>
       <thead>
         <tr>
-          <th class="rr-cross__name-col">{{ t('standings.team') }}</th>
+          <th scope="col" class="rr-cross__name-col">{{ t('standings.team') }}</th>
           <th
             v-for="colId in model.participants"
             :key="colId"
             class="rr-cross__num"
+            scope="col"
+            :aria-label="label(colId)"
           >
             <span class="tooltip-wrapper rr-cross__head-tip" :data-tooltip="label(colId)" tabindex="0">
               <span class="rr-cross__head-name">{{ shortLabel(colId) }}</span>
@@ -77,9 +80,9 @@ function onCell(rowId, colId) {
       </thead>
       <tbody>
         <tr v-for="(rowId, ri) in model.participants" :key="rowId">
-          <td class="rr-cross__name-col">
+          <th scope="row" class="rr-cross__name-col">
             <span class="rr-cross__rank">{{ ri + 1 }}.</span> {{ label(rowId) }}
-          </td>
+          </th>
           <td
             v-for="colId in model.participants"
             :key="colId"
@@ -94,6 +97,7 @@ function onCell(rowId, colId) {
                 :is="cell(rowId, colId).live || (clickable && cell(rowId, colId).target) ? 'button' : 'span'"
                 :type="cell(rowId, colId).live || (clickable && cell(rowId, colId).target) ? 'button' : undefined"
                 class="rr-cross__result"
+                :aria-label="cell(rowId, colId).live || (clickable && cell(rowId, colId).target) ? t('a11y.matchAction', { action: t(cell(rowId, colId).live ? 'mobile.watchLive' : 'standings.matchScore'), teamA: label(rowId), teamB: label(colId) }) : undefined"
                 :class="{
                   'rr-cross__result--btn': cell(rowId, colId).live || (clickable && cell(rowId, colId).target),
                   'rr-cross__result--won': cell(rowId, colId).won,
@@ -139,7 +143,7 @@ function onCell(rowId, colId) {
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
-.rr-cross th {
+.rr-cross thead th {
   font-family: var(--font-mono);
   font-size: 0.7rem;
   font-weight: 600;
@@ -178,7 +182,6 @@ function onCell(rowId, colId) {
   display: inline-block;
   max-width: 100%;
   cursor: default;
-  outline: none;
 }
 .rr-cross__head-name {
   display: inline-block;
@@ -223,6 +226,8 @@ function onCell(rowId, colId) {
   font-weight: 600;
 }
 .rr-cross__result--btn {
+  min-height: 44px;
+  min-width: 44px;
   cursor: pointer;
   transition: color 0.12s;
 }

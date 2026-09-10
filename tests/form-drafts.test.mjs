@@ -44,15 +44,16 @@ test('undoing all local edits follows the latest snapshot instead of leaving sta
   assert.equal(d.form.name, 'Changed remotely'); assert.equal(d.revision.value, 2)
 })
 test('route cancellation, confirmation and native reload protect all registered forms', async () => {
-  let dirty = true, busy = false
-  const unregister = registerUnsavedForm(() => dirty, () => busy)
+  let dirty = true, busy = false, discarded = 0
+  const unregister = registerUnsavedForm(() => dirty, () => busy, () => { discarded += 1 })
   try {
     assert.equal(hasUnsavedChanges(), true)
     const event = { preventDefault() { this.prevented = true } }; beforeUnload(event)
     assert.equal(event.prevented, true); assert.equal(event.returnValue, '')
     const cancelled = confirmLeaveForms(x => x); assert.equal(confirmState.open, true)
-    settleConfirm(false); assert.equal(await cancelled, false); assert.equal(dirty, true)
+    settleConfirm(false); assert.equal(await cancelled, false); assert.equal(dirty, true); assert.equal(discarded, 0)
     const accepted = confirmLeaveForms(x => x); settleConfirm(true); assert.equal(await accepted, true)
+    assert.equal(discarded, 1)
     busy = true; dirty = false
     assert.equal(await confirmLeaveForms(x => x), false)
     assert.equal(await withApprovedDeparture(() => confirmLeaveForms(x => x)), true)

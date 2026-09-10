@@ -14,6 +14,7 @@ async page => {
   await page.evaluate(async () => {
     document.querySelector('#app').__vue_app__?.unmount()
     const dependencyUrl = name => performance.getEntriesByType('resource').find(entry => entry.name.includes(`/node_modules/.vite/deps/${name}.js?v=`))?.name || `/node_modules/.vite/deps/${name}.js`
+    const sourceUrl = path => performance.getEntriesByType('resource').find(entry => entry.name.includes(path))?.name || path
     const vue = await import(dependencyUrl('vue'))
     const { createI18n } = await import(dependencyUrl('vue-i18n'))
     const { createRouter, createMemoryHistory } = await import(dependencyUrl('vue-router'))
@@ -21,8 +22,10 @@ async page => {
     const { messages } = await import('/src/i18n/messages.js')
     const { supabase } = await import('/src/lib/supabase.js')
     const { useAuthStore } = await import('/src/stores/auth.js')
-    const { hasUnsavedChanges } = await import('/src/lib/unsavedChanges.js')
-    const { settleConfirm } = await import('/src/lib/confirmDialog.js')
+    // Reuse the exact HMR-versioned modules loaded by App. Importing the same
+    // source without its `?t=` suffix creates a second private form registry.
+    const { hasUnsavedChanges } = await import(sourceUrl('/src/lib/unsavedChanges.js'))
+    const { settleConfirm } = await import(sourceUrl('/src/lib/confirmDialog.js'))
     const { default: ConfirmDialog } = await import('/src/components/ConfirmDialog.vue')
     const clone = value => JSON.parse(JSON.stringify(value))
     const base = { id: 'admin-forms', slug: 'admin-forms', name: 'Form Cup', description: '', category: 'singles', sport: 'tennis',
@@ -120,6 +123,15 @@ async page => {
   await page.locator('.confirm-dialog .btn--danger').click()
   await page.waitForFunction(() => af.saved === 1)
   check(await page.evaluate(() => af.calls[0].args.p_expected_matches[0].revision === 7 && !('slug' in af.calls[0].args.p_patch)), 'Settings: category reset preserves expected match versions and immutable slug')
+
+  await page.evaluate(() => af.mount('components/admin/TournamentSettingsForm', { tournament: { ...af.base, status: 'in_progress' } }))
+  check(!await page.locator('#adm-name').isDisabled() && !await page.locator('#adm-desc').isDisabled(), 'Settings: active tournament name and description remain editable')
+  check(await page.locator('#adm-cat').isDisabled() && await page.locator('#adm-status').isDisabled(), 'Settings: active tournament structure and status remain locked')
+  check(!await page.locator('#adm-contact-phone').isDisabled() && await page.locator('#adm-publish-contact').isDisabled(), 'Settings: organizer contact remains editable and unpublished without a value')
+  await page.locator('#adm-contact-phone').fill(' +370 600 00000 ')
+  await page.locator('#adm-publish-contact').check()
+  await page.locator('.admin-settings-card__footer .btn--primary').click()
+  check(await page.evaluate(() => af.calls[0].args.p_patch.contact_phone === '+370 600 00000' && af.calls[0].args.p_patch.publish_contact === true), 'Settings: explicit contact publication is saved with normalized public details')
 
   for (const locale of ['ru', 'en', 'lt']) {
     await page.evaluate(locale => { af.i18n.global.locale.value = locale }, locale)

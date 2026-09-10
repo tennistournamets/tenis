@@ -1,11 +1,14 @@
 <script setup>
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 
+import { normalizeTournamentSlug } from '../lib/tournamentSlug'
+import { tournamentShareUrl } from '../lib/shareLink'
 import { supabase } from '../lib/supabase'
-import { useUnsavedChanges } from '../lib/unsavedChanges'
+import { confirmDiscard, useUnsavedChanges, withApprovedDeparture } from '../lib/unsavedChanges'
 import { cloneForm, sameForm } from '../lib/formDraft'
+import { clearSessionDraft, readSessionDraft, userDraftKey, writeSessionDraft } from '../lib/sessionDraft'
 import { useAuthStore } from '../stores/auth'
 import { getSportConfig, resolveCategory } from '../lib/sportConfig'
 import SportPicker from '../components/SportPicker.vue'
@@ -19,7 +22,16 @@ const auth = useAuthStore()
 
 const saving = ref(false)
 const errorText = ref('')
+const stepHeading = ref(null)
+const wizardRoot = ref(null)
+const slugInput = ref(null)
+const formError = ref(null)
+const slugError = ref('')
+const fallbackSlug = `tournament-${crypto.randomUUID().slice(0, 8)}`
 const step = ref(1) // 1 = sport, 2 = format, 3 = details
+const draftKey = ref('')
+const draftReady = ref(false)
+const draftRestored = ref(false)
 
 const form = reactive({
   name: '',
@@ -40,7 +52,21 @@ const form = reactive({
 })
 
 const initialForm = cloneForm(form)
-const unregisterDraft = useUnsavedChanges(() => !sameForm(form, initialForm), () => saving.value)
+const hasDraftChanges = () => step.value !== 1 || !sameForm(form, initialForm)
+function clearWizardDraft() {
+  clearSessionDraft(draftKey.value)
+}
+const unregisterDraft = useUnsavedChanges(hasDraftChanges, () => saving.value, clearWizardDraft)
+
+watch([form, step], () => {
+  if (!draftReady.value) return
+  if (!hasDraftChanges()) {
+    clearWizardDraft()
+    draftRestored.value = false
+    return
+  }
+  writeSessionDraft(draftKey.value, { step: step.value, form: cloneForm(form) })
+}, { deep: true })
 
 const cfg = computed(() => getSportConfig(form.sport))
 const effectiveCategory = computed(() => resolveCategory(form.sport, form.category))
@@ -70,18 +96,23 @@ watch(() => form.sport, (sport) => {
   }
 })
 
-function slugify(value) {
-  const normalized = value
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, '-')
-    .replace(/[^a-z0-9-]/g, '')
+const resolvedSlug = computed(() => normalizeTournamentSlug(form.slug.trim() || form.name) || fallbackSlug)
+const publicLink = computed(() => tournamentShareUrl(resolvedSlug.value))
+watch(() => form.slug, () => { slugError.value = '' })
+watch(step, async () => {
+  await nextTick()
+  stepHeading.value?.focus({ preventScroll: true })
+  // The app header wraps on narrow phones. Show the progress and the new heading
+  // below its actual height instead of scrolling the heading behind a fixed offset.
+  const headerHeight = document.querySelector('.app-header')?.getBoundingClientRect().height || 0
+  const top = (wizardRoot.value?.getBoundingClientRect().top || 0) + window.scrollY - headerHeight - 12
+  window.scrollTo({ top: Math.max(0, top), behavior: 'instant' })
+})
 
-  if (normalized) {
-    return normalized
-  }
-
-  return `tournament-${Date.now()}`
+async function showCreateError(target) {
+  await nextTick()
+  target.value?.focus({ preventScroll: true })
+  target.value?.scrollIntoView({ block: 'center', behavior: 'instant' })
 }
 
 async function createTournament() {
@@ -89,71 +120,127 @@ async function createTournament() {
     return
   }
 
-  saving.value = true
   errorText.value = ''
-
-  const slug = slugify(form.slug || form.name)
-  const category = effectiveCategory.value
-
-  const { data: newId, error } = await supabase.rpc('create_tournament', {
-    p_name: form.name,
-    p_slug: slug,
-    p_description: form.description || null,
-    p_sport: form.sport,
-    p_format: form.format,
-    p_category: category,
-    p_set_format: cfg.value.supportsSetFormat ? form.set_format : null,
-    p_is_public: form.is_public,
-    p_doubles_pairing_mode:
-      category === 'doubles' && cfg.value.supportsDoublesPairing
-        ? (form.doubles_pairing_random ? 'pick_random' : 'pre_agreed')
-        : null,
-    p_format_config: {},
-    p_scoring_config: form.sport === 'tennis'
-      ? { ...form.scoring_config, gender: form.gender }
-      : cfg.value.supportsSetFormat ? { tiebreak_to: Number(form.tiebreak_to), gender: form.gender } : { gender: form.gender },
-    p_contact_phone: form.contact_phone.trim() || null,
-    p_contact_email: form.contact_email.trim() || null,
-  })
-
-  saving.value = false
-
-  if (error) {
-    errorText.value = error.message
+  slugError.value = ''
+  if (form.slug.trim() && !normalizeTournamentSlug(form.slug)) {
+    slugError.value = t('mobile.invalidSlug')
+    await showCreateError(slugInput)
     return
   }
+  saving.value = true
+  const slug = resolvedSlug.value
+  const category = effectiveCategory.value
 
-  unregisterDraft()
-  if (newId) {
+  try {
+    const { data: newId, error } = await supabase.rpc('create_tournament', {
+      p_name: form.name,
+      p_slug: slug,
+      p_description: form.description || null,
+      p_sport: form.sport,
+      p_format: form.format,
+      p_category: category,
+      p_set_format: cfg.value.supportsSetFormat ? form.set_format : null,
+      p_is_public: form.is_public,
+      p_doubles_pairing_mode:
+        category === 'doubles' && cfg.value.supportsDoublesPairing
+          ? (form.doubles_pairing_random ? 'pick_random' : 'pre_agreed')
+          : null,
+      p_format_config: {},
+      p_scoring_config: form.sport === 'tennis'
+        ? { ...form.scoring_config, gender: form.gender }
+        : cfg.value.supportsSetFormat ? { tiebreak_to: Number(form.tiebreak_to), gender: form.gender } : { gender: form.gender },
+      p_contact_phone: form.contact_phone.trim() || null,
+      p_contact_email: form.contact_email.trim() || null,
+    })
+
+    if (error) {
+      if (error.code === '23505') {
+        slugError.value = t('mobile.slugTaken')
+        saving.value = false
+        await showCreateError(slugInput)
+      } else {
+        errorText.value = t('mobile.createFailed')
+        await showCreateError(formError)
+      }
+      return
+    }
+
+    if (!newId) throw new Error('Missing tournament ID')
+    clearWizardDraft()
+    unregisterDraft()
     const query = form.is_public && form.generate_qr ? { qr: '1' } : undefined
     await router.replace({ name: 'admin-tournament', params: { id: newId }, query })
-  } else {
-    await router.replace({ name: 'admin-tournaments' })
+  } catch {
+    errorText.value = t('mobile.createFailed')
+    await showCreateError(formError)
+  } finally {
+    saving.value = false
   }
 }
 
-function cancel() {
-  router.push({ name: 'admin-tournaments' })
+async function cancel() {
+  if (!(await confirmDiscard(t, hasDraftChanges(), saving.value))) return
+  clearWizardDraft()
+  unregisterDraft()
+  await withApprovedDeparture(() => router.push({ name: 'admin-tournaments' }))
+}
+
+function discardStoredDraft() {
+  Object.assign(form, cloneForm(initialForm))
+  step.value = 1
+  errorText.value = ''
+  slugError.value = ''
+  draftRestored.value = false
+  clearWizardDraft()
 }
 
 onMounted(async () => {
   await auth.init()
+  draftKey.value = userDraftKey('create-tournament', auth.user?.id)
+  const stored = readSessionDraft(draftKey.value)
+  if (stored?.form && Number.isInteger(stored.step) && stored.step >= 1 && stored.step <= 3) {
+    const restored = {}
+    for (const [key, fallback] of Object.entries(initialForm)) {
+      const value = stored.form[key]
+      if (value === undefined) continue
+      if (fallback && typeof fallback === 'object') {
+        if (value && typeof value === 'object' && !Array.isArray(value)) restored[key] = cloneForm(value)
+      } else if (typeof value === typeof fallback) {
+        restored[key] = value
+      }
+    }
+    Object.assign(form, restored)
+    if (!['tennis', 'padel', 'football'].includes(form.sport)) form.sport = initialForm.sport
+    if (!getSportConfig(form.sport).allowedFormats.includes(form.format)) form.format = initialForm.format
+    if (!['singles', 'doubles'].includes(form.category)) form.category = initialForm.category
+    if (!['best_of_3', 'best_of_5'].includes(form.set_format)) form.set_format = initialForm.set_format
+    if (!['men', 'women'].includes(form.gender)) form.gender = initialForm.gender
+    step.value = stored.step
+    draftRestored.value = hasDraftChanges()
+  }
+  draftReady.value = true
 })
 </script>
 
 <template>
-  <div class="wizard">
+  <div ref="wizardRoot" class="wizard">
+    <div v-if="draftRestored" class="alert alert--info wizard__draft" role="status">
+      <span>{{ t('drafts.restored') }}</span>
+      <button type="button" class="btn btn--ghost btn--sm" :disabled="saving" @click="discardStoredDraft">
+        {{ t('drafts.discardStored') }}
+      </button>
+    </div>
     <!-- Wizard chrome header -->
     <header class="wizard__head">
       <div class="wizard__brand">
         <span class="wizard__title">{{ t('admin.wizardTitle') }}</span>
-        <button v-if="step > 1" type="button" class="wizard__sport-pill" @click="step = 1">
+        <button v-if="step > 1" type="button" class="wizard__sport-pill" :disabled="saving" @click="step = 1">
           <span>{{ SPORT_ICONS[form.sport] }}</span>
           {{ t('sport.' + form.sport) }}
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
         </button>
       </div>
-      <div class="wizard__progress-wrap">
+      <div class="wizard__progress-wrap" role="status" aria-live="polite">
         <div class="wizard__progress" aria-hidden="true">
           <span v-for="i in 3" :key="i" class="wizard__seg" :class="{ 'wizard__seg--on': step >= i }" />
         </div>
@@ -165,7 +252,7 @@ onMounted(async () => {
     <!-- Step 1: sport -->
     <div v-if="step === 1" class="wizard__body">
       <div class="wizard__lead">
-        <h1 class="wizard__heading">{{ t('admin.stepSport') }}</h1>
+        <h1 ref="stepHeading" class="wizard__heading" tabindex="-1">{{ t('admin.stepSport') }}</h1>
         <p class="muted">{{ t('admin.wizardSportHint') }}</p>
       </div>
       <SportPicker v-model="form.sport" />
@@ -174,7 +261,7 @@ onMounted(async () => {
     <!-- Step 2: format -->
     <div v-else-if="step === 2" class="wizard__body">
       <div class="wizard__lead">
-        <h1 class="wizard__heading">{{ t('admin.stepFormat') }}</h1>
+        <h1 ref="stepHeading" class="wizard__heading" tabindex="-1">{{ t('admin.stepFormat') }}</h1>
         <p class="muted">{{ t('admin.wizardFormatHint') }}</p>
       </div>
       <FormatPicker v-model="form.format" :sport="form.sport" />
@@ -185,7 +272,7 @@ onMounted(async () => {
       <form id="wizard-form" class="wizard__form" @submit.prevent="createTournament">
         <fieldset :disabled="saving" style="display: contents">
         <div class="wizard__lead">
-          <h1 class="wizard__heading">{{ t('admin.stepDetails') }}</h1>
+          <h1 ref="stepHeading" class="wizard__heading" tabindex="-1">{{ t('admin.stepDetails') }}</h1>
           <p class="muted">{{ t('admin.wizardPreviewHint') }}</p>
         </div>
 
@@ -204,8 +291,12 @@ onMounted(async () => {
 
           <div class="form-field">
             <label for="create-slug">{{ t('admin.slug') }}</label>
-            <input id="create-slug" v-model="form.slug" class="input" type="text" placeholder="summer-cup-2026" />
+            <input id="create-slug" ref="slugInput" v-model="form.slug" class="input" type="text" maxlength="80"
+              autocapitalize="none" spellcheck="false" placeholder="summer-cup-2026"
+              :aria-invalid="Boolean(slugError)" aria-describedby="create-slug-preview create-slug-error" />
             <p class="wizard__field-hint">{{ t('admin.slugHint') }}</p>
+            <p id="create-slug-preview" class="wizard__link-preview"><span>{{ t('mobile.linkPreview') }}</span><br />{{ publicLink }}</p>
+            <p v-if="slugError" id="create-slug-error" class="error-text" role="alert">{{ slugError }}</p>
           </div>
         </section>
 
@@ -292,7 +383,7 @@ onMounted(async () => {
           </label>
         </section>
 
-        <p v-if="errorText" class="error-text">{{ errorText }}</p>
+        <p v-if="errorText" ref="formError" class="error-text" role="alert" tabindex="-1">{{ errorText }}</p>
       </fieldset>
       </form>
 
@@ -350,6 +441,14 @@ onMounted(async () => {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow-sm);
+}
+
+.wizard__draft {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin: 0;
 }
 
 .wizard__head {
@@ -428,6 +527,7 @@ onMounted(async () => {
 .wizard__lead { display: flex; flex-direction: column; gap: 4px; }
 
 .wizard__heading {
+  scroll-margin-top: 96px;
   font-family: var(--font-display);
   font-weight: 800;
   font-size: 1.5rem;
@@ -613,6 +713,15 @@ onMounted(async () => {
 @media (max-width: 760px) {
   .wizard__body--split { grid-template-columns: 1fr; }
   .wizard__preview { position: static; }
-  .wizard__progress-wrap { display: none; }
+  .wizard { padding: 16px; }
+  .wizard__head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; }
+  .wizard__brand { min-width: 0; flex-wrap: wrap; gap: 8px; }
+  .wizard__head > .btn { min-height: 44px; }
+  .wizard__progress-wrap { display: flex; grid-column: 1 / -1; grid-row: 2; width: 100%; justify-content: space-between; margin: 0; }
+  .wizard__sport-pill { min-height: 44px; }
+  .wizard__step-count { white-space: nowrap; }
 }
+.wizard__link-preview { font-size: .8125rem; line-height: 1.6; overflow-wrap: anywhere; color: var(--muted); }
+.wizard__link-preview span { font-weight: 600; }
+#create-slug { scroll-margin-top: 96px; }
 </style>

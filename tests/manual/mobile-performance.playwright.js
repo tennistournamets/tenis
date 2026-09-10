@@ -4,6 +4,7 @@
 async page => {
   const origin = await page.evaluate(() => location.origin)
   if (!/^http:\/\/127\.0\.0\.1:\d+$/.test(origin)) throw new Error('Use the local performance server')
+  page.setDefaultTimeout(60000)
   const cdp = await page.context().newCDPSession(page)
   await cdp.send('Network.enable')
   await cdp.send('Network.setCacheDisabled', { cacheDisabled: true })
@@ -23,7 +24,7 @@ async page => {
     new PerformanceObserver(list => { for (const e of list.getEntries()) perfCheck.longTasks.push(e.duration) })
       .observe({ type: 'longtask', buffered: true })
     new MutationObserver(() => {
-      if (!perfCheck.ready && document.querySelector('.match-card__live')) perfCheck.ready = performance.now()
+      if (!perfCheck.ready && document.querySelector('.mobile-match__actions .btn--primary, .match-card__live')) perfCheck.ready = performance.now()
       if (!perfCheck.live && document.querySelector('.live-scoreboard')) perfCheck.live = performance.now()
       if (!perfCheck.updated && document.querySelector('.live-scoreboard__point')?.textContent === '15') perfCheck.updated = performance.now()
     }).observe(document, { childList: true, subtree: true, characterData: true })
@@ -63,14 +64,14 @@ async page => {
       revision = 0; requests.length = 0
       await cdp.send('Network.clearBrowserCache')
       await page.goto(`${origin}/tournaments/perf-cup`, { waitUntil: 'domcontentloaded' })
-      await page.waitForSelector('.match-card__live')
+      await page.waitForSelector('.mobile-match__actions .btn--primary, .match-card__live')
       await page.waitForTimeout(200)
       const initial = await page.evaluate(() => ({ ...perfCheck,
         fcp: performance.getEntriesByName('first-contentful-paint')[0]?.startTime,
         js: performance.getEntriesByType('resource').filter(r => r.name.endsWith('.js')).map(r => ({ file: r.name.split('/').pop(), encoded: r.encodedBodySize, decoded: r.decodedBodySize })),
         overflow: document.documentElement.scrollWidth > innerWidth }))
       const initialRequests = [...requests]
-      await page.evaluate(() => { perfCheck.click = performance.now(); document.querySelector('.match-card__live').click() })
+      await page.evaluate(() => { perfCheck.click = performance.now(); document.querySelector('.mobile-match__actions .btn--primary, .match-card__live').click() })
       await page.waitForSelector('.live-scoreboard')
       const beforeUpdate = requests.length
       revision = 1
@@ -91,7 +92,7 @@ async page => {
     await page.evaluate(() => {
       navigator.connection.saveData = false
       perfCheck.sceneClick = performance.now()
-      document.querySelector('.match-card__live').click()
+      document.querySelector('.mobile-match__actions .btn--primary, .match-card__live').click()
     })
     await page.waitForSelector('.live-scoreboard')
     const scoreWhileLoading = await page.locator('.live-scoreboard__point').first().innerText()
@@ -123,7 +124,7 @@ async page => {
       HTMLCanvasElement.prototype.getContext = function(kind, ...args) {
         return String(kind).startsWith('webgl') ? null : getContext.call(this, kind, ...args)
       }
-      document.querySelector('.match-card__live').click()
+      document.querySelector('.mobile-match__actions .btn--primary, .match-card__live').click()
     })
     await page.waitForSelector('.rally__scene')
     threeD.noWebglFallback = await page.locator('.live-scoreboard__point').first().innerText() === '15'
@@ -132,7 +133,7 @@ async page => {
       await page.keyboard.press('Escape')
       await page.locator('.lang-dropdown__trigger').click()
       await page.getByRole('option', { name: option }).click()
-      await page.locator('.match-card__live').click()
+      await page.locator('.mobile-match__actions .btn--primary, .match-card__live').click()
       await page.waitForSelector('.live-scoreboard')
       translations.push({ option, correct: await page.locator('.live-modal h2').innerText() === title })
     }

@@ -21,7 +21,8 @@ const { t } = useI18n()
 function settingsFields(data) {
   return { name: data.name, slug: data.slug || '', description: data.description || '', category: data.category,
     set_format: data.set_format, scoring_config: cloneForm(data.scoring_config || {}),
-    doubles_pairing_mode: data.doubles_pairing_mode || 'pre_agreed', status: data.status, is_public: Boolean(data.is_public) }
+    doubles_pairing_mode: data.doubles_pairing_mode || 'pre_agreed', status: data.status, is_public: Boolean(data.is_public),
+    contact_phone: data.contact_phone || '', contact_email: data.contact_email || '', publish_contact: Boolean(data.publish_contact) }
 }
 const settingsDraft = useFormDraft(settingsFields(props.tournament))
 const settingsForm = settingsDraft.form
@@ -32,7 +33,8 @@ const settingsError = ref('')
 const statusValue = computed({ get: () => settingsForm.status, set: value => { settingsForm.status = value } })
 const isTournamentActive = computed(() => props.tournament.status === 'in_progress')
 const isTournamentFinished = computed(() => props.tournament.status === 'completed')
-const fieldsDisabled = computed(() => isTournamentActive.value || isTournamentFinished.value || settingsSaving.value || props.busy || !props.canManage)
+const formDisabled = computed(() => settingsSaving.value || props.busy || !props.canManage)
+const structureDisabled = computed(() => isTournamentActive.value || isTournamentFinished.value || formDisabled.value)
 const sportCfg = computed(() => getSportConfig(props.tournament.sport || 'tennis'))
 // Server snapshots cannot overwrite local edits or silently rebase revisions.
 watch(() => props.tournament, data => settingsDraft.receive(settingsFields(data), data.settings_revision), { immediate: true })
@@ -58,12 +60,15 @@ async function saveTournamentSettings() {
   const revision = settingsDraft.revision.value
   const categoryChanged = submitted.category !== settingsDraft.baseline.value.category
   const expectedMatches = matchVersions(props.matches)
-  if (categoryChanged && props.matches.length && !(await confirmDialog(t('drafts.categoryReset'), { danger: true }))) return
   settingsSaving.value = true
   settingsError.value = ''
   try {
+    if (categoryChanged && props.matches.length && !(await confirmDialog(t('drafts.categoryReset'), { danger: true }))) return
     const { slug, ...patch } = submitted
     patch.description = patch.description || null
+    patch.contact_phone = patch.contact_phone?.trim() || null
+    patch.contact_email = patch.contact_email?.trim() || null
+    patch.publish_contact = Boolean(patch.publish_contact && (patch.contact_phone || patch.contact_email))
     patch.doubles_pairing_mode = patch.category === 'doubles' ? patch.doubles_pairing_mode : null
     const { data, error } = await supabase.rpc('update_tournament_settings', {
       p_tournament_id: props.tournament.id, p_patch: patch, p_expected_revision: revision,
@@ -102,7 +107,7 @@ async function saveTournamentSettings() {
         class="input"
         type="text"
         required
-        :disabled="fieldsDisabled"
+        :disabled="formDisabled"
       />
     </div>
 
@@ -113,9 +118,27 @@ async function saveTournamentSettings() {
         v-model="settingsForm.description"
         class="input"
         rows="3"
-        :disabled="fieldsDisabled"
+        :disabled="formDisabled"
       />
     </div>
+
+    <fieldset class="contact-settings" :disabled="formDisabled">
+      <legend>{{ t('mobile.organizerContacts') }}</legend>
+      <div class="grid-2">
+        <div class="form-field">
+          <label for="adm-contact-phone">{{ t('admin.contactPhone') }}</label>
+          <input id="adm-contact-phone" v-model="settingsForm.contact_phone" class="input" type="tel" autocomplete="tel" />
+        </div>
+        <div class="form-field">
+          <label for="adm-contact-email">{{ t('admin.contactEmail') }}</label>
+          <input id="adm-contact-email" v-model="settingsForm.contact_email" class="input" type="email" autocomplete="email" />
+        </div>
+      </div>
+      <label class="checkbox-row" for="adm-publish-contact">
+        <input id="adm-publish-contact" v-model="settingsForm.publish_contact" type="checkbox" :disabled="!settingsForm.contact_phone && !settingsForm.contact_email" />
+        {{ t('mobile.publishContacts') }}
+      </label>
+    </fieldset>
 
     <p class="muted" style="font-size: var(--font-sm)">
       {{ t('sport.' + (tournament.sport || 'tennis')) }} · {{ t('tournamentFormat.' + (tournament.format || 'single_elimination')) }}
@@ -124,7 +147,7 @@ async function saveTournamentSettings() {
     <div v-if="sportCfg.supportsCategory || sportCfg.supportsSetFormat" class="grid-2">
       <div v-if="sportCfg.supportsCategory" class="form-field">
         <label for="adm-cat">{{ t('admin.category') }}</label>
-        <select id="adm-cat" v-model="settingsForm.category" class="input" :disabled="fieldsDisabled">
+        <select id="adm-cat" v-model="settingsForm.category" class="input" :disabled="structureDisabled">
           <option value="singles">{{ t('tournament.singles') }}</option>
           <option value="doubles">{{ t('tournament.doubles') }}</option>
         </select>
@@ -132,14 +155,14 @@ async function saveTournamentSettings() {
 
       <div v-if="sportCfg.supportsSetFormat" class="form-field">
         <label for="adm-format">{{ t('admin.setFormat') }}</label>
-        <select id="adm-format" v-model="settingsForm.set_format" class="input" :disabled="fieldsDisabled">
+        <select id="adm-format" v-model="settingsForm.set_format" class="input" :disabled="structureDisabled">
           <option value="best_of_3">{{ t('format.best_of_3') }}</option>
           <option value="best_of_5">{{ t('format.best_of_5') }}</option>
         </select>
       </div>
     </div>
 
-    <TennisRulesSettings v-if="tournament.sport === 'tennis'" v-model="settingsForm.scoring_config" id-prefix="settings-tennis" :disabled="fieldsDisabled" />
+    <TennisRulesSettings v-if="tournament.sport === 'tennis'" v-model="settingsForm.scoring_config" id-prefix="settings-tennis" :disabled="structureDisabled" />
 
     <label v-if="sportCfg.supportsDoublesPairing && settingsForm.category === 'doubles'" class="checkbox-row">
       <input
@@ -147,7 +170,7 @@ async function saveTournamentSettings() {
         type="checkbox"
         true-value="pick_random"
         false-value="pre_agreed"
-        :disabled="fieldsDisabled"
+        :disabled="structureDisabled"
       />
       {{ t('admin.pickRandomPairs') }}
     </label>
@@ -155,17 +178,17 @@ async function saveTournamentSettings() {
     <div class="admin-settings-fields">
       <div class="form-field admin-settings-fields__status">
         <label for="adm-status">{{ t('admin.status') }}</label>
-        <select id="adm-status" v-model="statusValue" class="input" :disabled="fieldsDisabled">
-          <option value="draft" :disabled="fieldsDisabled">{{ t('tournament.draft') }}</option>
-          <option value="registration_open" :disabled="fieldsDisabled">{{ t('tournament.registration_open') }}</option>
-          <option value="registration_closed" :disabled="fieldsDisabled">{{ t('tournament.registration_closed') }}</option>
+        <select id="adm-status" v-model="statusValue" class="input" :disabled="structureDisabled">
+          <option value="draft" :disabled="structureDisabled">{{ t('tournament.draft') }}</option>
+          <option value="registration_open" :disabled="structureDisabled">{{ t('tournament.registration_open') }}</option>
+          <option value="registration_closed" :disabled="structureDisabled">{{ t('tournament.registration_closed') }}</option>
           <option v-if="isTournamentActive" value="in_progress" disabled>{{ t('tournament.in_progress') }}</option>
           <option v-if="isTournamentFinished" value="completed" disabled>{{ t('tournament.completed') }}</option>
         </select>
       </div>
 
       <label class="checkbox-row admin-settings-fields__public" for="adm-public">
-        <input id="adm-public" v-model="settingsForm.is_public" type="checkbox" :disabled="fieldsDisabled" />
+        <input id="adm-public" v-model="settingsForm.is_public" type="checkbox" :disabled="formDisabled" />
         {{ t('admin.isPublic') }}
       </label>
     </div>
@@ -183,3 +206,8 @@ async function saveTournamentSettings() {
     </footer>
   </section>
 </template>
+
+<style scoped>
+.contact-settings { margin: 0; padding: 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.contact-settings legend { padding: 0 6px; font-weight: 750; }
+</style>

@@ -12,11 +12,13 @@ import FootballScoreEditor from '../components/FootballScoreEditor.vue'
 import GroupStageBoard from '../components/GroupStageBoard.vue'
 import DoubleElimBoard from '../components/DoubleElimBoard.vue'
 import { scoringFamily, getSportConfig } from '../lib/sportConfig'
+import { scoringAccess, matchScoringAction } from '../lib/scoringAccess'
 import LiveScoringModal from '../components/LiveScoringModal.vue'
 import TournamentQrModal from '../components/TournamentQrModal.vue'
 import ScoreEditor from '../components/ScoreEditor.vue'
 import ManualEntryForm from '../components/admin/ManualEntryForm.vue'
 import TournamentSettingsForm from '../components/admin/TournamentSettingsForm.vue'
+import TournamentMatchList from '../components/TournamentMatchList.vue'
 import { scoringError } from '../lib/tennisRules'
 import { sameForm, cloneForm, matchVersions } from '../lib/formDraft'
 import { useUnsavedChanges, confirmDiscard, withApprovedDeparture } from '../lib/unsavedChanges'
@@ -28,6 +30,9 @@ import { readAdminTournamentSnapshot } from '../lib/tournamentRepository'
 import { indexEntries, groupSetsByMatch, indexLiveScores, buildGroupsView } from '../lib/tournamentProjections'
 import CopyTournamentLink from '../components/CopyTournamentLink.vue'
 import { useAuthStore } from '../stores/auth'
+import { useNarrowLayout } from '../lib/useNarrowLayout'
+import { useHeaderTitle } from '../lib/headerTitle'
+import { onTabKeydown as onSurfaceTabKeydown } from '../lib/tabNavigation'
 
 const props = defineProps({
   id: {
@@ -37,11 +42,36 @@ const props = defineProps({
 })
 
 const { t } = useI18n()
-const route = useRoute()
-const router = useRouter()
+// The fallback keeps isolated component previews functional; routed product
+// pages always receive the real Vue Router instances.
+const route = useRoute() || { query: {}, hash: '' }
+const router = useRouter() || {
+  push: () => Promise.resolve(),
+  replace: () => Promise.resolve(),
+  back: () => {},
+}
 const auth = useAuthStore()
+const isNarrowLayout = useNarrowLayout()
+const ADMIN_MOBILE_SURFACES = ['matches', 'overview']
+const queryValue = value => Array.isArray(value) ? value[0] : value
+const adminSurfaceFromQuery = value => ADMIN_MOBILE_SURFACES.includes(queryValue(value))
+  ? queryValue(value)
+  : 'matches'
+const adminMobileBracketSurface = ref(adminSurfaceFromQuery(route.query.surface))
+
+function adminRouteLocation(query) {
+  return { query, hash: window.location.hash || route.hash }
+}
+
+function setAdminMobileBracketSurface(surface) {
+  if (!ADMIN_MOBILE_SURFACES.includes(surface)) return
+  adminMobileBracketSurface.value = surface
+  if (queryValue(route.query.surface) === surface) return
+  void router.replace(adminRouteLocation({ ...route.query, surface }))
+}
 
 const tournament = ref(null)
+useHeaderTitle(() => tournament.value?.name)
 const entries = ref([])
 const matches = ref([])
 const standings = ref([])
@@ -85,6 +115,7 @@ const pairingConflict = computed(() => manualPairingOpen.value && pairingBaselin
   pairingBaseline.value.settings_revision !== tournament.value?.settings_revision))
 const manualPairSlots = ref([])
 const manualPairingDragOver = ref(null)
+const selectedPairPlayer = ref(null)
 const pairingEditMode = ref(false)
 const editModePlayers = ref([])
 
@@ -97,6 +128,7 @@ const setsByMatch = computed(() => groupSetsByMatch(matchSets.value))
 const liveScoresByMatch = computed(() => indexLiveScores(liveScores.value))
 
 const pendingEntries = computed(() => entries.value.filter((entry) => entry.status === 'pending'))
+const rejectedEntries = computed(() => entries.value.filter((entry) => entry.status === 'rejected'))
 const approvedEntries = computed(() => entries.value.filter((entry) => entry.status === 'approved'))
 
 const unpairedEntries = computed(() => {
@@ -169,10 +201,13 @@ const canStartTournament = computed(
 )
 const isTournamentActive = computed(() => tournament.value?.status === 'in_progress')
 const isTournamentFinished = computed(() => tournament.value?.status === 'completed')
-const canManageTournament = computed(() => currentUserRole.value === 'owner' || currentUserRole.value === 'editor')
+const showAdminBracketOverview = computed(() => !isNarrowLayout.value || !isTournamentActive.value || adminMobileBracketSurface.value === 'overview')
+const scoreAccess = computed(() => scoringAccess(tournament.value, currentUserRole.value))
+const canManageTournament = computed(() => scoreAccess.value.manager)
 const canLiveScoreRole = computed(() => ['owner', 'editor', 'counter'].includes(currentUserRole.value))
-const canEditScores = computed(() => isTournamentActive.value && canLiveScoreRole.value)
-const canEditFinalScores = computed(() => isTournamentActive.value && canManageTournament.value)
+const canEditScores = computed(() => scoreAccess.value.scores)
+const canUseLiveScoring = computed(() => scoreAccess.value.live)
+const canEditFinalScores = computed(() => scoreAccess.value.final)
 
 const showStartButton = computed(() => {
   const s = tournament.value?.status
@@ -189,43 +224,58 @@ const startBlockReason = computed(() => {
 async function startTournament() {
   if (actionLoading.value || settingsSaving.value) return
   const revision = tournament.value.settings_revision
-  if (!(await confirmDialog(t('admin.startTournamentConfirm')))) return
   actionLoading.value = true
-  const { data, error } = await supabase.rpc('update_tournament_settings', {
-    p_tournament_id: props.id, p_patch: { status: 'in_progress' }, p_expected_revision: revision,
-  })
-  actionLoading.value = false
-  if (error) { errorText.value = scoringError(error.message, t); await loadTournament(); return }
-  acceptTournament(data)
-  await loadAll(true)
+  errorText.value = ''
+  try {
+    if (!(await confirmDialog(t('admin.startTournamentConfirm')))) return
+    const { data, error } = await supabase.rpc('update_tournament_settings', {
+      p_tournament_id: props.id, p_patch: { status: 'in_progress' }, p_expected_revision: revision,
+    })
+    if (error) throw error
+    acceptTournament(data)
+    await loadAll(true)
+  } catch (error) {
+    errorText.value = scoringError(error?.message, t)
+    try { await loadTournament() } catch { /* Keep the actionable mutation error. */ }
+  } finally { actionLoading.value = false }
 }
 
 async function finishTournament() {
   if (actionLoading.value || settingsSaving.value) return
   const revision = tournament.value.settings_revision
-  if (!(await confirmDialog(t('admin.finishTournamentConfirm')))) return
   actionLoading.value = true
-  const { data, error } = await supabase.rpc('update_tournament_settings', {
-    p_tournament_id: props.id, p_patch: { status: 'completed' }, p_expected_revision: revision,
-  })
-  actionLoading.value = false
-  if (error) { errorText.value = scoringError(error.message, t); await loadTournament(); return }
-  acceptTournament(data)
-  await loadAll(true)
+  errorText.value = ''
+  try {
+    if (!(await confirmDialog(t('admin.finishTournamentConfirm')))) return
+    const { data, error } = await supabase.rpc('update_tournament_settings', {
+      p_tournament_id: props.id, p_patch: { status: 'completed' }, p_expected_revision: revision,
+    })
+    if (error) throw error
+    acceptTournament(data)
+    await loadAll(true)
+  } catch (error) {
+    errorText.value = scoringError(error?.message, t)
+    try { await loadTournament() } catch { /* Keep the actionable mutation error. */ }
+  } finally { actionLoading.value = false }
 }
 
 async function stopTournament() {
   if (actionLoading.value || settingsSaving.value) return
   const revision = tournament.value.settings_revision
-  if (!(await confirmDialog(t('admin.stopTournamentConfirm')))) return
   actionLoading.value = true
-  const { data, error } = await supabase.rpc('update_tournament_settings', {
-    p_tournament_id: props.id, p_patch: { status: 'registration_closed' }, p_expected_revision: revision,
-  })
-  actionLoading.value = false
-  if (error) { errorText.value = scoringError(error.message, t); await loadTournament(); return }
-  acceptTournament(data)
-  await loadAll(true)
+  errorText.value = ''
+  try {
+    if (!(await confirmDialog(t('admin.stopTournamentConfirm')))) return
+    const { data, error } = await supabase.rpc('update_tournament_settings', {
+      p_tournament_id: props.id, p_patch: { status: 'registration_closed' }, p_expected_revision: revision,
+    })
+    if (error) throw error
+    acceptTournament(data)
+    await loadAll(true)
+  } catch (error) {
+    errorText.value = scoringError(error?.message, t)
+    try { await loadTournament() } catch { /* Keep the actionable mutation error. */ }
+  } finally { actionLoading.value = false }
 }
 
 const entryEditState = ref(null)
@@ -292,46 +342,37 @@ function setupRealtime() {
 }
 
 async function updateEntryStatus(entryId, status) {
+  if (actionLoading.value) return
   actionLoading.value = true
   errorText.value = ''
-
-  const { error } = await supabase.from('entries').update({ status }).eq('id', entryId)
-
-  actionLoading.value = false
-
-  if (error) {
-    errorText.value = error.message
-    return
-  }
-
-  await loadAll()
+  try {
+    const { error } = await supabase.from('entries').update({ status }).eq('id', entryId)
+    if (error) throw error
+    await loadAll()
+  } catch (error) {
+    errorText.value = scoringError(error?.message, t)
+  } finally { actionLoading.value = false }
 }
 
 async function approveAllPending() {
+  if (actionLoading.value) return
   if (pendingEntries.value.length < 2) {
     return
   }
-  if (!(await confirmDialog(t('admin.approveAllConfirm')))) {
-    return
-  }
-
   actionLoading.value = true
-  errorText.value = ''
-
-  const { error } = await supabase
-    .from('entries')
-    .update({ status: 'approved' })
-    .eq('tournament_id', props.id)
-    .eq('status', 'pending')
-
-  actionLoading.value = false
-
-  if (error) {
-    errorText.value = error.message
-    return
-  }
-
-  await loadAll()
+  try {
+    if (!(await confirmDialog(t('admin.approveAllConfirm')))) return
+    errorText.value = ''
+    const { error } = await supabase
+      .from('entries')
+      .update({ status: 'approved' })
+      .eq('tournament_id', props.id)
+      .eq('status', 'pending')
+    if (error) throw error
+    await loadAll()
+  } catch (error) {
+    errorText.value = scoringError(error?.message, t)
+  } finally { actionLoading.value = false }
 }
 
 const hasBracket = computed(() => matches.value.length > 0)
@@ -358,40 +399,37 @@ const groupsView = computed(() =>
 const selectedRrMatch = ref(null)
 
 function openRrMatch(match) {
-  if (!canEditFinalScores.value && !canEditScores.value) return
-  selectedRrMatch.value = match
+  const current = matches.value.find(row => row.id === match?.id)
+  if (!current || !matchScoringAction(tournament.value, currentUserRole.value, current)) return
+  if (!canEditFinalScores.value) return openLiveScoring(current)
+  openAdminScoreRoute(current, 'result')
 }
 
 function startLiveFromRrModal(match) {
-  selectedRrMatch.value = null
-  openLiveScoring(match)
+  const current = matches.value.find(row => row.id === match?.id)
+  if (matchScoringAction(tournament.value, currentUserRole.value, current) !== 'live') return
+  replaceAdminScoreRoute(current, 'live')
 }
 
 async function formRandomPairs() {
+  if (actionLoading.value) return
   if (unpairedCount.value % 2 !== 0) {
     errorText.value = t('admin.oddUnpairedWarning', { count: unpairedCount.value })
     return
   }
 
-  if (!(await confirmDialog(t('admin.formPairsConfirm')))) {
-    return
-  }
-
   actionLoading.value = true
-  errorText.value = ''
-
-  const { error } = await supabase.rpc('form_random_pairs', {
-    p_tournament_id: props.id,
-  })
-
-  actionLoading.value = false
-
-  if (error) {
-    errorText.value = error.message
-    return
-  }
-
-  await loadEntries()
+  try {
+    if (!(await confirmDialog(t('admin.formPairsConfirm')))) return
+    errorText.value = ''
+    const { error } = await supabase.rpc('form_random_pairs', {
+      p_tournament_id: props.id,
+    })
+    if (error) throw error
+    await loadEntries()
+  } catch (error) {
+    errorText.value = scoringError(error?.message, t)
+  } finally { actionLoading.value = false }
 }
 
 function openManualPairing() {
@@ -413,6 +451,7 @@ async function closeManualPairing(force = false) {
   manualPairingOpen.value = false
   manualPairSlots.value = []
   manualPairingDragOver.value = null
+  selectedPairPlayer.value = null
   pairingEditMode.value = false
   editModePlayers.value = []
   pairingBaseline.value = null
@@ -470,7 +509,11 @@ function onSlotDrop(event, slotIndex, position) {
   } catch {
     return
   }
-  if (!payload.entryId) return
+  movePairPlayer(payload, slotIndex, position)
+}
+
+function movePairPlayer(payload, slotIndex, position) {
+  if (!payload?.entryId || actionLoading.value) return
 
   const entry = findEntryById(payload.entryId)
   if (!entry) return
@@ -491,10 +534,32 @@ function onSlotDrop(event, slotIndex, position) {
   slot[targetKey] = entry
 }
 
+function selectPairPlayer(entry, fromSlot = null, fromPosition = null) {
+  if (actionLoading.value) return
+  const current = selectedPairPlayer.value
+  if (current?.entryId === entry.id && current?.fromSlot === fromSlot && current?.fromPosition === fromPosition) {
+    selectedPairPlayer.value = null
+    return
+  }
+  selectedPairPlayer.value = { entryId: entry.id, fromSlot, fromPosition }
+}
+
+function assignSelectedPlayer(slotIndex, position) {
+  if (!selectedPairPlayer.value) return
+  movePairPlayer(selectedPairPlayer.value, slotIndex, position)
+  selectedPairPlayer.value = null
+}
+
+function activatePairSlot(entry, slotIndex, position) {
+  if (selectedPairPlayer.value) assignSelectedPlayer(slotIndex, position)
+  else if (entry) selectPairPlayer(entry, slotIndex, position)
+}
+
 function removeFromSlot(slotIndex, position) {
   if (actionLoading.value) return
   const key = position === 'A' ? 'playerA' : 'playerB'
   manualPairSlots.value[slotIndex][key] = null
+  selectedPairPlayer.value = null
 }
 
 async function reloadPairingDraft() {
@@ -513,18 +578,22 @@ async function saveManualPairs() {
   const pairs = manualPairSlots.value.filter(s => s.playerA && s.playerB).map(s => [s.playerA.memberId,s.playerB.memberId])
   if (!pairs.length) return
   const baseline = cloneForm(pairingBaseline.value)
-  if (matches.value.length && !(await confirmDialog(t('drafts.pairingReset'), { danger: true }))) return
   actionLoading.value = true
   errorText.value = ''
-  const { error } = await supabase.rpc('save_tournament_pairs', {
-    p_tournament_id: props.id, p_pairs: pairs, p_replace: pairingEditMode.value,
-    p_expected_entries: baseline.entries, p_expected_matches: baseline.matches,
-    p_expected_revision: baseline.settings_revision,
-  })
-  actionLoading.value = false
-  if (error) { errorText.value = scoringError(error.message, t); await loadEntries(); return }
-  await closeManualPairing(true)
-  await loadAll(true)
+  try {
+    if (matches.value.length && !(await confirmDialog(t('drafts.pairingReset'), { danger: true }))) return
+    const { error } = await supabase.rpc('save_tournament_pairs', {
+      p_tournament_id: props.id, p_pairs: pairs, p_replace: pairingEditMode.value,
+      p_expected_entries: baseline.entries, p_expected_matches: baseline.matches,
+      p_expected_revision: baseline.settings_revision,
+    })
+    if (error) throw error
+    await closeManualPairing(true)
+    await loadAll(true)
+  } catch (error) {
+    errorText.value = scoringError(error?.message, t)
+    try { await loadEntries() } catch { /* Preserve the local pairing draft. */ }
+  } finally { actionLoading.value = false }
 }
 
 function openEditPairing() {
@@ -568,106 +637,88 @@ function openEditPairing() {
 }
 
 async function generateBracket() {
+  if (actionLoading.value) return
   const fn = hasBracket.value ? 'rebuild_bracket' : 'generate_bracket'
 
-  if (hasBracket.value && !(await confirmDialog(t('admin.rebuildConfirm')))) {
-    return
-  }
-
   actionLoading.value = true
-  errorText.value = ''
-
-  const { error } = await supabase.rpc(fn, {
-    p_tournament_id: props.id,
-    p_mode: drawMode.value,
-    p_manual_order: null,
-  })
-
-  actionLoading.value = false
-
-  if (error) {
-    errorText.value = error.message
-    return
-  }
-
-  await loadAll()
+  try {
+    if (hasBracket.value && !(await confirmDialog(t('admin.rebuildConfirm')))) return
+    errorText.value = ''
+    const { error } = await supabase.rpc(fn, {
+      p_tournament_id: props.id,
+      p_mode: drawMode.value,
+      p_manual_order: null,
+    })
+    if (error) throw error
+    await loadAll()
+  } catch (error) {
+    errorText.value = scoringError(error?.message, t)
+  } finally { actionLoading.value = false }
 }
 
 async function generateGroups() {
-  if (hasGroups.value && !(await confirmDialog(t('admin.rebuildConfirm')))) {
-    return
-  }
+  if (actionLoading.value) return
   actionLoading.value = true
-  errorText.value = ''
-  const { error } = await supabase.rpc('generate_groups', {
-    p_tournament_id: props.id,
-    p_group_count: Number(groupCount.value) || 2,
-  })
-  actionLoading.value = false
-  if (error) {
-    errorText.value = error.message
-    return
-  }
-  await loadAll()
+  try {
+    if (hasGroups.value && !(await confirmDialog(t('admin.rebuildConfirm')))) return
+    errorText.value = ''
+    const { error } = await supabase.rpc('generate_groups', {
+      p_tournament_id: props.id,
+      p_group_count: Number(groupCount.value) || 2,
+    })
+    if (error) throw error
+    await loadAll()
+  } catch (error) {
+    errorText.value = scoringError(error?.message, t)
+  } finally { actionLoading.value = false }
 }
 
 async function startPlayoff() {
+  if (actionLoading.value) return
   actionLoading.value = true
   errorText.value = ''
-  const { error } = await supabase.rpc('generate_group_playoff', {
-    p_tournament_id: props.id,
-  })
-  actionLoading.value = false
-  if (error) {
-    errorText.value = error.message
-    return
-  }
-  await loadAll()
+  try {
+    const { error } = await supabase.rpc('generate_group_playoff', {
+      p_tournament_id: props.id,
+    })
+    if (error) throw error
+    await loadAll()
+  } catch (error) {
+    errorText.value = scoringError(error?.message, t)
+  } finally { actionLoading.value = false }
 }
 
 async function generateSchedule() {
-  if (hasBracket.value && !(await confirmDialog(t('admin.rebuildConfirm')))) {
-    return
-  }
-
+  if (actionLoading.value) return
   actionLoading.value = true
-  errorText.value = ''
-
-  const { error } = await supabase.rpc('generate_round_robin', {
-    p_tournament_id: props.id,
-  })
-
-  actionLoading.value = false
-
-  if (error) {
-    errorText.value = error.message
-    return
-  }
-
-  await loadAll()
+  try {
+    if (hasBracket.value && !(await confirmDialog(t('admin.rebuildConfirm')))) return
+    errorText.value = ''
+    const { error } = await supabase.rpc('generate_round_robin', {
+      p_tournament_id: props.id,
+    })
+    if (error) throw error
+    await loadAll()
+  } catch (error) {
+    errorText.value = scoringError(error?.message, t)
+  } finally { actionLoading.value = false }
 }
 
 async function resetBracket() {
-  if (!(await confirmDialog(t('admin.resetBracketConfirm'), { danger: true }))) {
-    return
-  }
-
+  if (actionLoading.value) return
   actionLoading.value = true
-  errorText.value = ''
-
-  const { error } = await supabase
-    .from('matches')
-    .delete()
-    .eq('tournament_id', props.id)
-
-  actionLoading.value = false
-
-  if (error) {
-    errorText.value = error.message
-    return
-  }
-
-  await loadAll()
+  try {
+    if (!(await confirmDialog(t('admin.resetBracketConfirm'), { danger: true }))) return
+    errorText.value = ''
+    const { error } = await supabase
+      .from('matches')
+      .delete()
+      .eq('tournament_id', props.id)
+    if (error) throw error
+    await loadAll()
+  } catch (error) {
+    errorText.value = scoringError(error?.message, t)
+  } finally { actionLoading.value = false }
 }
 
 const displayMatches = computed(() =>
@@ -747,22 +798,19 @@ async function saveBracketLayout() {
     side_b_entry_id: m.side_b_entry_id || null,
   }))
 
-  const { error } = await supabase.rpc('save_bracket_layout', {
-    p_tournament_id: props.id,
-    p_layout: layout,
-    p_expected_matches: matchVersions(bracketBaseline.value),
-  })
-
-  actionLoading.value = false
-
-  if (error) {
-    errorText.value = scoringError(error.message, t)
-    await loadMatchesAndSets()
-    return
-  }
-
-  await cancelBracketEditing(true)
-  await loadAll()
+  try {
+    const { error } = await supabase.rpc('save_bracket_layout', {
+      p_tournament_id: props.id,
+      p_layout: layout,
+      p_expected_matches: matchVersions(bracketBaseline.value),
+    })
+    if (error) throw error
+    await cancelBracketEditing(true)
+    await loadAll()
+  } catch (error) {
+    errorText.value = scoringError(error?.message, t)
+    try { await loadMatchesAndSets() } catch { /* Keep the local layout draft and original error. */ }
+  } finally { actionLoading.value = false }
 }
 
 async function addAdmin() {
@@ -773,65 +821,52 @@ async function addAdmin() {
 
   actionLoading.value = true
   errorText.value = ''
-
-  const { error } = await supabase.rpc('add_tournament_admin_by_email', {
-    p_tournament_id: props.id,
-    p_email: addAdminForm.email,
-    p_role: addAdminForm.role,
-  })
-
-  actionLoading.value = false
-
-  if (error) {
-    errorText.value = error.message
-    return
-  }
-
-  addAdminForm.email = ''
-  addAdminForm.role = 'editor'
-  await loadAll()
+  try {
+    const { error } = await supabase.rpc('add_tournament_admin_by_email', {
+      p_tournament_id: props.id,
+      p_email: addAdminForm.email,
+      p_role: addAdminForm.role,
+    })
+    if (error) throw error
+    addAdminForm.email = ''
+    addAdminForm.role = 'editor'
+    await loadAll()
+  } catch (error) {
+    errorText.value = scoringError(error?.message, t)
+  } finally { actionLoading.value = false }
 }
 
 async function removeAdmin(adminId) {
+  if (actionLoading.value) return
   actionLoading.value = true
   errorText.value = ''
-
-  const { error } = await supabase.rpc('remove_tournament_admin', {
-    p_tournament_id: props.id,
-    p_admin_id: adminId,
-  })
-
-  actionLoading.value = false
-
-  if (error) {
-    errorText.value = error.message
-    return
-  }
-
-  await loadAll()
+  try {
+    const { error } = await supabase.rpc('remove_tournament_admin', {
+      p_tournament_id: props.id,
+      p_admin_id: adminId,
+    })
+    if (error) throw error
+    await loadAll()
+  } catch (error) {
+    errorText.value = scoringError(error?.message, t)
+  } finally { actionLoading.value = false }
 }
 
 async function deleteTournament() {
-  if (!(await confirmDialog(t('admin.deleteTournamentConfirm'), { danger: true }))) {
-    return
-  }
-
+  if (actionLoading.value) return
   actionLoading.value = true
-  errorText.value = ''
-
-  stopRealtime?.(); stopRealtime = null
-
-  const { error } = await supabase.from('tournaments').delete().eq('id', props.id)
-
-  actionLoading.value = false
-
-  if (error) {
-    errorText.value = error.message
-    return
-  }
-
-  unregisterDrafts()
-  await withApprovedDeparture(() => router.replace({ name: 'admin-tournaments' }))
+  try {
+    if (!(await confirmDialog(t('admin.deleteTournamentConfirm'), { danger: true }))) return
+    errorText.value = ''
+    stopRealtime?.(); stopRealtime = null
+    const { error } = await supabase.from('tournaments').delete().eq('id', props.id)
+    if (error) throw error
+    unregisterDrafts()
+    await withApprovedDeparture(() => router.replace({ name: 'admin-tournaments' }))
+  } catch (error) {
+    errorText.value = scoringError(error?.message, t)
+    if (!stopRealtime) setupRealtime()
+  } finally { actionLoading.value = false }
 }
 
 function statusBadgeClass(status) {
@@ -850,17 +885,17 @@ function statusBadgeClass(status) {
 const TABS = ['entries', 'bracket', 'scores', 'settings']
 
 function isTabEnabled(tab) {
-  if (!canManageTournament.value) {
-    return tab === 'bracket'
-  }
-  return tab !== 'scores' || canEditScores.value
+  if (tab === 'bracket') return true
+  if (tab === 'scores') return canEditScores.value
+  return canManageTournament.value
 }
 
 const enabledTabs = computed(() => TABS.filter(isTabEnabled))
+const defaultTab = () => canManageTournament.value ? 'entries' : canEditScores.value ? 'scores' : 'bracket'
 
 function readHashTab() {
   const h = window.location.hash.replace('#', '')
-  const fallback = canManageTournament.value ? 'entries' : 'bracket'
+  const fallback = defaultTab()
   if (!TABS.includes(h)) return fallback
   return isTabEnabled(h) ? h : fallback
 }
@@ -915,23 +950,105 @@ function onTabKeydown(event) {
 
 watch(canEditScores, () => {
   if (!isTabEnabled(activeTab.value)) {
-    setTab(canManageTournament.value ? 'entries' : 'bracket')
+    setTab(defaultTab())
   }
 })
 
 watch(canManageTournament, () => {
   if (!isTabEnabled(activeTab.value)) {
-    setTab(canManageTournament.value ? 'entries' : 'bracket')
+    setTab(defaultTab())
   }
 })
 
 function openLiveScoring(match) {
-  selectedLiveMatch.value = match
+  const current = matches.value.find(row => row.id === match?.id)
+  const action = matchScoringAction(tournament.value, currentUserRole.value, current)
+  if (action === 'live' || action === 'result') openAdminScoreRoute(current, action)
 }
 
 const selectedLiveScore = computed(() => (
   selectedLiveMatch.value ? liveScoresByMatch.value[selectedLiveMatch.value.id] : null
 ))
+
+let pushedScoreRouteKey = null
+const scoreRouteKey = (matchId, mode) => matchId && mode ? `${mode}:${matchId}` : null
+
+function setSelectedScoreMatch(match, mode) {
+  selectedLiveMatch.value = mode === 'live' ? match : null
+  selectedRrMatch.value = mode === 'result' ? match : null
+}
+
+function openAdminScoreRoute(match, mode) {
+  if (!match?.id) return
+  const key = scoreRouteKey(match.id, mode)
+  setSelectedScoreMatch(match, mode)
+  if (scoreRouteKey(queryValue(route.query.match), queryValue(route.query.score)) === key) return
+  pushedScoreRouteKey = key
+  void router.push(adminRouteLocation({ ...route.query, match: match.id, score: mode })).catch(() => {
+    if (pushedScoreRouteKey === key) pushedScoreRouteKey = null
+    setSelectedScoreMatch(null, null)
+  })
+}
+
+function replaceAdminScoreRoute(match, mode) {
+  if (!match?.id) return
+  const previousKey = scoreRouteKey(queryValue(route.query.match), queryValue(route.query.score))
+  const nextKey = scoreRouteKey(match.id, mode)
+  if (pushedScoreRouteKey === previousKey) pushedScoreRouteKey = nextKey
+  setSelectedScoreMatch(match, mode)
+  void router.replace(adminRouteLocation({ ...route.query, match: match.id, score: mode }))
+}
+
+function replaceWithoutAdminScoreQuery() {
+  const { match, score, ...query } = route.query
+  if (match === undefined && score === undefined) return
+  void router.replace(adminRouteLocation(query))
+}
+
+function closeAdminScoreModal() {
+  const key = scoreRouteKey(queryValue(route.query.match), queryValue(route.query.score))
+  const shouldGoBack = Boolean(key && pushedScoreRouteKey === key)
+  setSelectedScoreMatch(null, null)
+  pushedScoreRouteKey = null
+  if (shouldGoBack) router.back()
+  else replaceWithoutAdminScoreQuery()
+}
+
+function syncAdminScoreFromRoute() {
+  const matchId = queryValue(route.query.match)
+  const mode = queryValue(route.query.score)
+  const key = scoreRouteKey(matchId, mode)
+  if (!matchId && !mode) {
+    setSelectedScoreMatch(null, null)
+    pushedScoreRouteKey = null
+    return
+  }
+  const current = matches.value.find(row => row.id === matchId)
+  const action = current ? matchScoringAction(tournament.value, currentUserRole.value, current) : null
+  const modeAllowed = mode === 'live'
+    ? action === 'live'
+    : mode === 'result' && canEditFinalScores.value && current?.side_a_entry_id && current?.side_b_entry_id
+  if (key && modeAllowed) {
+    setSelectedScoreMatch(current, mode)
+    if (pushedScoreRouteKey && pushedScoreRouteKey !== key) pushedScoreRouteKey = null
+    return
+  }
+  setSelectedScoreMatch(null, null)
+  if (tournament.value && !loading.value) {
+    pushedScoreRouteKey = null
+    replaceWithoutAdminScoreQuery()
+  }
+}
+
+watch(() => route.query.surface, value => {
+  adminMobileBracketSurface.value = adminSurfaceFromQuery(value)
+})
+
+watch(
+  [() => route.query.match, () => route.query.score, matches, currentUserRole, loading, () => tournament.value?.id],
+  syncAdminScoreFromRoute,
+  { immediate: true },
+)
 
 const hasOtherDrafts = computed(() => Boolean(addAdminForm.email) || addAdminForm.role !== 'editor')
 const unregisterDrafts = useUnsavedChanges(() => hasOtherDrafts.value || bracketHasChanges.value || pairingDirty.value,
@@ -949,7 +1066,7 @@ onMounted(async () => {
       qrModalOpen.value = true
     }
     const { qr, ...rest } = route.query
-    router.replace({ query: rest, hash: route.hash })
+    router.replace(adminRouteLocation(rest))
   }
 })
 
@@ -1003,6 +1120,7 @@ onBeforeUnmount(() => {
             <CopyTournamentLink
               v-if="showPublicShareActions"
               :slug="tournament.slug"
+              :name="tournament.name"
             />
 
             <button
@@ -1029,6 +1147,10 @@ onBeforeUnmount(() => {
               </button>
             </span>
 
+            <p v-if="showStartButton && startBlockReason" class="admin-start-reason" role="status">
+              {{ startBlockReason }}
+            </p>
+
             <button
               v-if="isTournamentActive"
               class="btn btn--ghost btn--sm"
@@ -1042,6 +1164,8 @@ onBeforeUnmount(() => {
         </div>
 
       </section>
+
+      <p v-if="currentUserRole === 'counter' && isGoalsSport" class="alert alert--info" role="status">{{ t('mobile.finalScoreRole') }}</p>
 
       <div role="tablist" class="tab-group" @keydown="onTabKeydown">
         <button
@@ -1059,7 +1183,6 @@ onBeforeUnmount(() => {
           <span v-if="pendingEntries.length" class="tab__badge">{{ pendingEntries.length }}</span>
         </button>
         <button
-          v-if="canManageTournament"
           id="tab-bracket"
           role="tab"
           class="tab"
@@ -1170,6 +1293,22 @@ onBeforeUnmount(() => {
               </div>
             </div>
             <p v-else class="muted">{{ t('admin.noPending') }}</p>
+
+            <details v-if="rejectedEntries.length" class="rejected-entries">
+              <summary>
+                {{ t('mobile.rejectedEntries') }}
+                <span class="badge badge--neutral">{{ rejectedEntries.length }}</span>
+              </summary>
+              <div class="stack stack--sm rejected-entries__list">
+                <div v-for="entry in rejectedEntries" :key="entry.id" class="participant-item">
+                  <span class="entry-avatar">{{ entryInitials(entry) }}</span>
+                  <strong class="entry-name">{{ entryLabel(entry) }}</strong>
+                  <button class="btn btn--ghost btn--sm" type="button" :disabled="actionLoading" @click="updateEntryStatus(entry.id, 'pending')">
+                    {{ t('mobile.restoreEntry') }}
+                  </button>
+                </div>
+              </div>
+            </details>
           </div>
 
           <div v-if="!isTournamentActive" class="divider" />
@@ -1250,18 +1389,25 @@ onBeforeUnmount(() => {
               </div>
               <div class="manual-pairing-pool">
                 <h4 class="manual-pairing-pool__title">{{ t('admin.manualPairingPool') }}</h4>
+                <p class="pairing-tap-hint" role="status">
+                  {{ selectedPairPlayer ? t('mobile.selectedPlayer', { name: entryLabel(findEntryById(selectedPairPlayer.entryId)) }) : t('mobile.selectPlayerHint') }}
+                </p>
                 <div v-if="unassignedPlayers.length" class="manual-pairing-pool__list">
-                  <span
+                  <button
                     v-for="entry in unassignedPlayers"
                     :key="entry.id"
+                    type="button"
                     class="manual-pairing-pool__chip"
+                    :class="{ 'manual-pairing-pool__chip--selected': selectedPairPlayer?.entryId === entry.id && selectedPairPlayer?.fromSlot == null }"
+                    :aria-pressed="selectedPairPlayer?.entryId === entry.id && selectedPairPlayer?.fromSlot == null"
                     draggable="true"
                     @dragstart="onPlayerDragStart($event, entry, null, null)"
                     @dragend="onPlayerDragEnd"
+                    @click="selectPairPlayer(entry)"
                   >
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                     {{ entryLabel(entry) }}
-                  </span>
+                  </button>
                 </div>
                 <p v-else class="muted" style="font-size: 0.875rem">{{ t('admin.allPlayersAssigned') }}</p>
               </div>
@@ -1276,11 +1422,17 @@ onBeforeUnmount(() => {
                       'pair-slot__zone--drag-over': manualPairingDragOver === `${idx}-A`,
                     }"
                     :draggable="!!slot.playerA"
+                    role="button"
+                    tabindex="0"
+                    :aria-label="t('mobile.selectBracketSlot', { name: slot.playerA ? entryLabel(slot.playerA) : t('admin.emptySlot') })"
                     @dragstart="slot.playerA && onPlayerDragStart($event, slot.playerA, idx, 'A')"
                     @dragend="onPlayerDragEnd"
                     @dragover="onSlotDragOver($event, idx, 'A')"
                     @dragleave="onSlotDragLeave($event, idx, 'A')"
                     @drop="onSlotDrop($event, idx, 'A')"
+                    @click="activatePairSlot(slot.playerA, idx, 'A')"
+                    @keydown.enter="activatePairSlot(slot.playerA, idx, 'A')"
+                    @keydown.space.prevent="activatePairSlot(slot.playerA, idx, 'A')"
                   >
                     <template v-if="slot.playerA">
                       <span class="pair-slot__player">{{ entryLabel(slot.playerA) }}</span>
@@ -1288,7 +1440,7 @@ onBeforeUnmount(() => {
                         class="pair-slot__remove"
                         type="button"
                         aria-label="Remove"
-                        @click="removeFromSlot(idx, 'A')"
+                        @click.stop="removeFromSlot(idx, 'A')"
                       >&times;</button>
                     </template>
                     <span v-else class="pair-slot__placeholder">{{ t('admin.emptySlot') }}</span>
@@ -1300,11 +1452,17 @@ onBeforeUnmount(() => {
                       'pair-slot__zone--drag-over': manualPairingDragOver === `${idx}-B`,
                     }"
                     :draggable="!!slot.playerB"
+                    role="button"
+                    tabindex="0"
+                    :aria-label="t('mobile.selectBracketSlot', { name: slot.playerB ? entryLabel(slot.playerB) : t('admin.emptySlot') })"
                     @dragstart="slot.playerB && onPlayerDragStart($event, slot.playerB, idx, 'B')"
                     @dragend="onPlayerDragEnd"
                     @dragover="onSlotDragOver($event, idx, 'B')"
                     @dragleave="onSlotDragLeave($event, idx, 'B')"
                     @drop="onSlotDrop($event, idx, 'B')"
+                    @click="activatePairSlot(slot.playerB, idx, 'B')"
+                    @keydown.enter="activatePairSlot(slot.playerB, idx, 'B')"
+                    @keydown.space.prevent="activatePairSlot(slot.playerB, idx, 'B')"
                   >
                     <template v-if="slot.playerB">
                       <span class="pair-slot__player">{{ entryLabel(slot.playerB) }}</span>
@@ -1312,7 +1470,7 @@ onBeforeUnmount(() => {
                         class="pair-slot__remove"
                         type="button"
                         aria-label="Remove"
-                        @click="removeFromSlot(idx, 'B')"
+                        @click.stop="removeFromSlot(idx, 'B')"
                       >&times;</button>
                     </template>
                     <span v-else class="pair-slot__placeholder">{{ t('admin.emptySlot') }}</span>
@@ -1348,18 +1506,25 @@ onBeforeUnmount(() => {
               </div>
               <div class="manual-pairing-pool">
                 <h4 class="manual-pairing-pool__title">{{ t('admin.manualPairingPool') }}</h4>
+                <p class="pairing-tap-hint" role="status">
+                  {{ selectedPairPlayer ? t('mobile.selectedPlayer', { name: entryLabel(findEntryById(selectedPairPlayer.entryId)) }) : t('mobile.selectPlayerHint') }}
+                </p>
                 <div v-if="unassignedPlayers.length" class="manual-pairing-pool__list">
-                  <span
+                  <button
                     v-for="entry in unassignedPlayers"
                     :key="entry.id"
+                    type="button"
                     class="manual-pairing-pool__chip"
+                    :class="{ 'manual-pairing-pool__chip--selected': selectedPairPlayer?.entryId === entry.id && selectedPairPlayer?.fromSlot == null }"
+                    :aria-pressed="selectedPairPlayer?.entryId === entry.id && selectedPairPlayer?.fromSlot == null"
                     draggable="true"
                     @dragstart="onPlayerDragStart($event, entry, null, null)"
                     @dragend="onPlayerDragEnd"
+                    @click="selectPairPlayer(entry)"
                   >
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                     {{ entryLabel(entry) }}
-                  </span>
+                  </button>
                 </div>
                 <p v-else class="muted" style="font-size: 0.875rem">{{ t('admin.allPlayersAssigned') }}</p>
               </div>
@@ -1374,11 +1539,17 @@ onBeforeUnmount(() => {
                       'pair-slot__zone--drag-over': manualPairingDragOver === `${idx}-A`,
                     }"
                     :draggable="!!slot.playerA"
+                    role="button"
+                    tabindex="0"
+                    :aria-label="t('mobile.selectBracketSlot', { name: slot.playerA ? entryLabel(slot.playerA) : t('admin.emptySlot') })"
                     @dragstart="slot.playerA && onPlayerDragStart($event, slot.playerA, idx, 'A')"
                     @dragend="onPlayerDragEnd"
                     @dragover="onSlotDragOver($event, idx, 'A')"
                     @dragleave="onSlotDragLeave($event, idx, 'A')"
                     @drop="onSlotDrop($event, idx, 'A')"
+                    @click="activatePairSlot(slot.playerA, idx, 'A')"
+                    @keydown.enter="activatePairSlot(slot.playerA, idx, 'A')"
+                    @keydown.space.prevent="activatePairSlot(slot.playerA, idx, 'A')"
                   >
                     <template v-if="slot.playerA">
                       <span class="pair-slot__player">{{ entryLabel(slot.playerA) }}</span>
@@ -1386,7 +1557,7 @@ onBeforeUnmount(() => {
                         class="pair-slot__remove"
                         type="button"
                         aria-label="Remove"
-                        @click="removeFromSlot(idx, 'A')"
+                        @click.stop="removeFromSlot(idx, 'A')"
                       >&times;</button>
                     </template>
                     <span v-else class="pair-slot__placeholder">{{ t('admin.emptySlot') }}</span>
@@ -1398,11 +1569,17 @@ onBeforeUnmount(() => {
                       'pair-slot__zone--drag-over': manualPairingDragOver === `${idx}-B`,
                     }"
                     :draggable="!!slot.playerB"
+                    role="button"
+                    tabindex="0"
+                    :aria-label="t('mobile.selectBracketSlot', { name: slot.playerB ? entryLabel(slot.playerB) : t('admin.emptySlot') })"
                     @dragstart="slot.playerB && onPlayerDragStart($event, slot.playerB, idx, 'B')"
                     @dragend="onPlayerDragEnd"
                     @dragover="onSlotDragOver($event, idx, 'B')"
                     @dragleave="onSlotDragLeave($event, idx, 'B')"
                     @drop="onSlotDrop($event, idx, 'B')"
+                    @click="activatePairSlot(slot.playerB, idx, 'B')"
+                    @keydown.enter="activatePairSlot(slot.playerB, idx, 'B')"
+                    @keydown.space.prevent="activatePairSlot(slot.playerB, idx, 'B')"
                   >
                     <template v-if="slot.playerB">
                       <span class="pair-slot__player">{{ entryLabel(slot.playerB) }}</span>
@@ -1410,7 +1587,7 @@ onBeforeUnmount(() => {
                         class="pair-slot__remove"
                         type="button"
                         aria-label="Remove"
-                        @click="removeFromSlot(idx, 'B')"
+                        @click.stop="removeFromSlot(idx, 'B')"
                       >&times;</button>
                     </template>
                     <span v-else class="pair-slot__placeholder">{{ t('admin.emptySlot') }}</span>
@@ -1448,6 +1625,16 @@ onBeforeUnmount(() => {
         class="tab-panel"
         :class="{ 'tab-panel--active': activeTab === 'bracket' }"
       >
+        <template v-if="isNarrowLayout && isTournamentActive && matches.length">
+          <div class="admin-mobile-surface" role="tablist" :aria-label="t('tournament.tabsLabel')" @keydown="onSurfaceTabKeydown">
+            <button id="admin-surface-matches" type="button" role="tab" aria-controls="admin-mobile-panel" :tabindex="adminMobileBracketSurface === 'matches' ? 0 : -1" :aria-selected="adminMobileBracketSurface === 'matches'" :class="{ active: adminMobileBracketSurface === 'matches' }" @click="setAdminMobileBracketSurface('matches')">{{ t('mobile.matches') }}</button>
+            <button id="admin-surface-overview" type="button" role="tab" aria-controls="admin-mobile-panel" :tabindex="adminMobileBracketSurface === 'overview' ? 0 : -1" :aria-selected="adminMobileBracketSurface === 'overview'" :class="{ active: adminMobileBracketSurface === 'overview' }" @click="setAdminMobileBracketSurface('overview')">{{ t('mobile.overview') }}</button>
+          </div>
+        </template>
+        <div id="admin-mobile-panel" :role="isNarrowLayout && isTournamentActive && matches.length ? 'tabpanel' : undefined" :aria-labelledby="isNarrowLayout && isTournamentActive && matches.length ? `admin-surface-${adminMobileBracketSurface}` : undefined">
+          <section v-if="isNarrowLayout && isTournamentActive && matches.length && adminMobileBracketSurface === 'matches'" class="card mobile-score-center" style="margin-top: var(--space-3)">
+            <TournamentMatchList :matches="matches" :entries-map="entriesMap" :sets-by-match="setsByMatch" :live-scores-by-match="liveScoresByMatch" :can-edit-final="canEditFinalScores" :can-live-score="canUseLiveScoring" @edit-result="openRrMatch" @view-live="openLiveScoring" />
+          </section>
         <!-- Round-robin: schedule + standings + fixtures -->
         <template v-if="isRoundRobin">
           <section v-if="canManageTournament && !isTournamentActive" class="card stack stack--sm">
@@ -1464,7 +1651,7 @@ onBeforeUnmount(() => {
             </div>
           </section>
 
-          <section v-if="standings.length" class="card stack stack--sm" style="margin-top: var(--space-4)">
+          <section v-if="standings.length && showAdminBracketOverview" class="card stack stack--sm" style="margin-top: var(--space-4)">
             <h2 class="section-title">{{ t('standings.title') }}</h2>
             <RoundRobinStandings
               :rows="standings"
@@ -1506,12 +1693,12 @@ onBeforeUnmount(() => {
             </div>
           </section>
 
-          <section v-if="hasGroups" class="card stack stack--sm" style="margin-top: var(--space-4)">
+          <section v-if="hasGroups && showAdminBracketOverview" class="card stack stack--sm" style="margin-top: var(--space-4)">
             <h2 class="section-title">{{ t('admin.groupStage') }}</h2>
             <GroupStageBoard :groups="groupsView" :entries-map="entriesMap" :family="tournamentScoringFamily" />
           </section>
 
-          <section v-if="hasPlayoff" class="card stack stack--sm" style="margin-top: var(--space-4)">
+          <section v-if="hasPlayoff && showAdminBracketOverview" class="card stack stack--sm" style="margin-top: var(--space-4)">
             <h2 class="section-title">{{ t('admin.playoff') }}</h2>
             <BracketBoard
               :matches="playoffMatches"
@@ -1572,7 +1759,7 @@ onBeforeUnmount(() => {
           </template>
         </section>
 
-        <section v-if="!isRoundRobin && !isGroupsPlayoff" class="card stack stack--sm" style="margin-top: var(--space-4)">
+        <section v-if="!isRoundRobin && !isGroupsPlayoff && showAdminBracketOverview" class="card stack stack--sm" style="margin-top: var(--space-4)">
           <DoubleElimBoard
             v-if="isDoubleElim"
             :matches="displayMatches"
@@ -1618,6 +1805,8 @@ onBeforeUnmount(() => {
         </section>
       </div>
 
+      </div>
+
       <div
         id="panel-scores"
         role="tabpanel"
@@ -1625,8 +1814,20 @@ onBeforeUnmount(() => {
         class="tab-panel"
         :class="{ 'tab-panel--active': activeTab === 'scores' }"
       >
+        <section v-if="isNarrowLayout" class="card mobile-score-center">
+          <TournamentMatchList
+            :matches="matches"
+            :entries-map="entriesMap"
+            :sets-by-match="setsByMatch"
+            :live-scores-by-match="liveScoresByMatch"
+            :can-edit-final="canEditFinalScores"
+            :can-live-score="canUseLiveScoring"
+            @edit-result="openRrMatch"
+            @view-live="openLiveScoring"
+          />
+        </section>
         <!-- Round-robin: same crosstable as the bracket tab (no artificial rounds) -->
-        <template v-if="isRoundRobin">
+        <template v-else-if="isRoundRobin">
           <section class="card stack stack--sm rr-cross-card">
             <h2 class="section-title">{{ t('standings.crossTable') }}</h2>
             <p class="muted">{{ t('standings.clickToScore') }}</p>
@@ -1663,7 +1864,7 @@ onBeforeUnmount(() => {
           :scoring-config="tournament.scoring_config || {}"
           :category="tournament.category"
           :disabled="!canEditFinalScores"
-          :can-live-score="canEditScores"
+          :can-live-score="canUseLiveScoring"
           :live-scores-by-match="liveScoresByMatch"
           @saved="refreshScoreData"
           @start-live="openLiveScoring"
@@ -1752,14 +1953,14 @@ onBeforeUnmount(() => {
       </div>
 
       <LiveScoringModal
-        v-if="selectedLiveMatch"
+        v-if="selectedLiveMatch && canUseLiveScoring"
         :match="matches.find(m => m.id === selectedLiveMatch.id) || selectedLiveMatch"
         :can-stop-live="canManageTournament"
         :live-score="selectedLiveScore"
         :scoring-config="tournament.scoring_config || {}"
         :team-a="teamLabel(selectedLiveMatch.side_a_entry_id)"
         :team-b="teamLabel(selectedLiveMatch.side_b_entry_id)"
-        @close="selectedLiveMatch = null"
+        @close="closeAdminScoreModal"
         @changed="scheduleScoreReload"
       />
 
@@ -1780,9 +1981,9 @@ onBeforeUnmount(() => {
         :scoring-config="tournament.scoring_config || {}"
         :sets="setsByMatch[selectedRrMatch.id] || []"
         :can-edit-final="canEditFinalScores"
-        :can-live-score="canEditScores && !isGoalsSport"
+        :can-live-score="canUseLiveScoring"
         :live-status="liveScoresByMatch[selectedRrMatch.id]?.status || null"
-        @close="selectedRrMatch = null"
+        @close="closeAdminScoreModal"
         @saved="refreshScoreData"
         @start-live="startLiveFromRrModal"
       />

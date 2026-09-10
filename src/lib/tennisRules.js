@@ -108,6 +108,7 @@ export function liveRuleHint(state, t) {
 }
 
 export function scoringError(message, t) {
+  if (typeof message !== 'string' || !message) return t('scoringFlow.unavailable')
   if (message.startsWith('drafts.') || message.startsWith('tennisRules.') || message.startsWith('scoringFlow.')) return t(message)
   if (/Invalid set or tiebreak/.test(message)) return t('tennisRules.invalidScore')
   if (/Scoring rules are locked/.test(message)) return t('tennisRules.locked')

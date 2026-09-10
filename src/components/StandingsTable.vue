@@ -11,29 +11,20 @@ const { t } = useI18n()
 </script>
 
 <template>
-  <div class="standings-wrap">
+  <div class="standings-wrap" tabindex="0" role="region" :aria-label="t('standings.title')">
     <table class="standings">
+      <caption class="sr-only">{{ t('standings.title') }}</caption>
       <thead>
         <tr>
-          <th class="standings__rank">#</th>
-          <th class="standings__team">{{ t('standings.team') }}</th>
-          <th :title="t('standings.played')">{{ t('standings.played') }}</th>
-          <th :title="t('standings.won')">{{ t('standings.won') }}</th>
-          <th v-if="family === 'goals'" :title="t('standings.drawn')">{{ t('standings.drawn') }}</th>
-          <th :title="t('standings.lost')">{{ t('standings.lost') }}</th>
-          <template v-if="family === 'goals'">
-            <th :title="t('standings.for')">{{ t('standings.for') }}</th>
-            <th :title="t('standings.against')">{{ t('standings.against') }}</th>
-            <th :title="t('standings.diff')">{{ t('standings.diff') }}</th>
-          </template>
-          <th v-else :title="t('standings.sets')">{{ t('standings.sets') }}</th>
-          <th :title="t('standings.points')">{{ t('standings.points') }}</th>
+          <th scope="col" class="standings__rank" :aria-label="t('a11y.rank')">#</th>
+          <th scope="col" class="standings__team">{{ t('standings.team') }}</th>
+          <th v-for="column in (family === 'goals' ? ['played', 'won', 'drawn', 'lost', 'for', 'against', 'diff', 'points'] : ['played', 'won', 'lost', 'sets', 'points'])" :key="column" scope="col" :title="t(`a11y.stats.${column}`)" :aria-label="t(`a11y.stats.${column}`)">{{ t(`standings.${column}`) }}</th>
         </tr>
       </thead>
       <tbody>
         <tr v-for="r in rows" :key="r.entry_id">
           <td class="standings__rank">{{ r.rank }}</td>
-          <td class="standings__team">{{ r.display_name }}</td>
+          <th scope="row" class="standings__team">{{ r.display_name }}</th>
           <td>{{ r.played }}</td>
           <td>{{ r.won }}</td>
           <td v-if="family === 'goals'">{{ r.drawn }}</td>
@@ -68,7 +59,7 @@ const { t } = useI18n()
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
-.standings th {
+.standings thead th {
   font-family: var(--font-mono);
   font-size: 0.7rem;
   font-weight: 600;

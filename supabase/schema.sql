@@ -4664,6 +4664,7 @@ notify pgrst,'reload schema';
 
 -- Step 7: preserve drafts and reject stale writes to settings, layouts and pairs.
 alter table tournaments add column if not exists settings_revision integer not null default 0;
+alter table tournaments add column if not exists publish_contact boolean not null default false;
 create or replace function bump_tournament_settings_revision()
 returns trigger language plpgsql set search_path=public as $$
 begin new.settings_revision:=old.settings_revision+1; return new; end;
@@ -4703,10 +4704,11 @@ begin
  if p_expected_revision is null or p_expected_revision<>v_old.settings_revision then raise exception 'drafts.conflict'; end if;
  if jsonb_typeof(p_patch) is distinct from 'object' then raise exception 'Invalid settings'; end if;
  for k in select jsonb_object_keys(p_patch) loop
-  if k<>all(array['name','description','category','set_format','scoring_config','doubles_pairing_mode','status','is_public']) then raise exception 'Unsupported settings field'; end if;
+  if k<>all(array['name','description','category','set_format','scoring_config','doubles_pairing_mode','status','is_public','contact_phone','contact_email','publish_contact']) then raise exception 'Unsupported settings field'; end if;
  end loop;
  v_new:=jsonb_populate_record(v_old,p_patch);
- if v_new.name is null or btrim(v_new.name)='' or v_new.is_public is null or v_new.scoring_config is null then raise exception 'Invalid settings'; end if;
+ if v_new.name is null or btrim(v_new.name)='' or v_new.is_public is null or v_new.scoring_config is null or v_new.publish_contact is null then raise exception 'Invalid settings'; end if;
+ if v_new.publish_contact and nullif(btrim(coalesce(v_new.contact_phone,'')),'') is null and nullif(btrim(coalesce(v_new.contact_email,'')),'') is null then raise exception 'Contact required'; end if;
  v_category_changed:=v_old.category is distinct from v_new.category;
  if v_category_changed then
   if v_old.status in ('in_progress','completed') then raise exception 'drafts.rulesLocked'; end if;
@@ -4717,7 +4719,8 @@ begin
     or exists(select 1 from live_scores where tournament_id=p_tournament_id) then raise exception 'drafts.rulesLocked'; end if;
  end if;
  update tournaments set name=v_new.name,description=v_new.description,category=v_new.category,set_format=v_new.set_format,
-  scoring_config=v_new.scoring_config,doubles_pairing_mode=v_new.doubles_pairing_mode,status=v_new.status,is_public=v_new.is_public
+  scoring_config=v_new.scoring_config,doubles_pairing_mode=v_new.doubles_pairing_mode,status=v_new.status,is_public=v_new.is_public,
+  contact_phone=nullif(btrim(coalesce(v_new.contact_phone,'')),''),contact_email=nullif(btrim(coalesce(v_new.contact_email,'')),''),publish_contact=v_new.publish_contact
  where id=p_tournament_id returning * into v_new;
  if v_category_changed then delete from matches where tournament_id=p_tournament_id; end if;
  return to_jsonb(v_new);
@@ -4798,13 +4801,29 @@ grant execute on function get_tournament_entry_state(uuid),update_tournament_set
 notify pgrst,'reload schema';
 -- Step 8: one MVCC snapshot for visible tournament data and derived standings.
 -- SECURITY INVOKER deliberately retains table RLS and column grants.
+revoke select on public.tournaments from anon, authenticated;
+grant select (
+  id, name, slug, description, sport, format, category, set_format, status,
+  is_public, doubles_pairing_mode, format_config, scoring_config, created_by,
+  created_at, updated_at, settings_revision, publish_contact
+) on public.tournaments to anon, authenticated;
+create or replace function public.tournament_public_contact(p_tournament_id uuid)
+returns jsonb language sql stable security definer set search_path=public as $$
+ select case when t.id is null then '{}'::jsonb
+  when is_tournament_admin(t.id) or (t.is_public and t.publish_contact) then jsonb_build_object('phone',t.contact_phone,'email',t.contact_email,'published',t.publish_contact)
+  else '{}'::jsonb end from tournaments t where t.id=p_tournament_id;
+$$;
+revoke execute on function public.tournament_public_contact(uuid) from public;
+grant execute on function public.tournament_public_contact(uuid) to anon, authenticated;
 create or replace function get_tournament_sync_state(p_tournament_id uuid)
 returns jsonb language sql stable security invoker set search_path=public as $$
  select jsonb_build_object(
   'tournament', jsonb_build_object('id',t.id,'name',t.name,'slug',t.slug,'description',t.description,
    'sport',t.sport,'format',t.format,'category',t.category,'status',t.status,'set_format',t.set_format,
    'is_public',t.is_public,'doubles_pairing_mode',t.doubles_pairing_mode,'format_config',t.format_config,
-   'scoring_config',t.scoring_config,'settings_revision',t.settings_revision),
+   'scoring_config',t.scoring_config,'settings_revision',t.settings_revision,
+   'publish_contact',coalesce((tournament_public_contact(t.id)->>'published')::boolean,false),
+   'contact_phone',tournament_public_contact(t.id)->>'phone','contact_email',tournament_public_contact(t.id)->>'email'),
   'entries', coalesce((select jsonb_agg(jsonb_build_object('id',e.id,'display_name',e.display_name,
    'entry_type',e.entry_type,'status',e.status,'created_at',e.created_at,
    'entry_members',coalesce((select jsonb_agg(jsonb_build_object('id',em.id,'entry_id',em.entry_id,

@@ -32,9 +32,10 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  selectedSlotKey: { type: String, default: '' },
 })
 
-const emit = defineEmits(['swap-slots', 'view-live'])
+const emit = defineEmits(['swap-slots', 'view-live', 'select-slot'])
 
 const { t } = useI18n()
 
@@ -147,7 +148,14 @@ function rowClass(side, entryId, winner) {
     'match-card__row--drag-over': dragOverKey.value === k && props.editableSlots && !matchFinished(),
     'match-card__row--draggable': props.editableSlots && !matchFinished() && Boolean(entryId),
     'match-card__row--stacked': isStacked(entryId),
+    'match-card__row--selected': props.selectedSlotKey === k,
   }
+}
+
+function selectSlot(event, side) {
+  if (!props.editableSlots || matchFinished()) return
+  event.preventDefault()
+  emit('select-slot', { matchId: props.match.id, side })
 }
 </script>
 
@@ -157,7 +165,7 @@ function rowClass(side, entryId, winner) {
       <button
         class="match-card__score-btn"
         type="button"
-        :aria-label="t('live.start')"
+        :aria-label="`${t('standings.matchScore')}: ${memberLines(match.side_a_entry_id).join(' / ')} — ${memberLines(match.side_b_entry_id).join(' / ')}`"
         @click="emit('view-live', match)"
       >
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -174,11 +182,17 @@ function rowClass(side, entryId, winner) {
       class="match-card__row"
       :class="rowClass('a', match.side_a_entry_id, match.winner_entry_id === match.side_a_entry_id)"
       :draggable="editableSlots && !matchFinished() && Boolean(match.side_a_entry_id)"
+      :role="editableSlots && !matchFinished() ? 'button' : undefined"
+      :tabindex="editableSlots && !matchFinished() ? 0 : undefined"
+      :aria-label="editableSlots && !matchFinished() ? t('mobile.selectBracketSlot', { name: memberLines(match.side_a_entry_id).join(' / ') }) : undefined"
       @dragstart="onDragStart($event, 'a', match.side_a_entry_id)"
       @dragend="onDragEnd"
       @dragover="onDragOver($event, 'a')"
       @dragleave="onDragLeave($event, 'a')"
       @drop="onDrop($event, 'a')"
+      @click="selectSlot($event, 'a')"
+      @keydown.enter="selectSlot($event, 'a')"
+      @keydown.space="selectSlot($event, 'a')"
     >
       <div v-if="isStacked(match.side_a_entry_id)" class="match-card__members">
         <span v-for="(n, i) in memberLines(match.side_a_entry_id)" :key="`a-${i}`" class="match-card__member">{{ n }}</span>
@@ -189,11 +203,17 @@ function rowClass(side, entryId, winner) {
       class="match-card__row"
       :class="rowClass('b', match.side_b_entry_id, match.winner_entry_id === match.side_b_entry_id)"
       :draggable="editableSlots && !matchFinished() && Boolean(match.side_b_entry_id)"
+      :role="editableSlots && !matchFinished() ? 'button' : undefined"
+      :tabindex="editableSlots && !matchFinished() ? 0 : undefined"
+      :aria-label="editableSlots && !matchFinished() ? t('mobile.selectBracketSlot', { name: memberLines(match.side_b_entry_id).join(' / ') }) : undefined"
       @dragstart="onDragStart($event, 'b', match.side_b_entry_id)"
       @dragend="onDragEnd"
       @dragover="onDragOver($event, 'b')"
       @dragleave="onDragLeave($event, 'b')"
       @drop="onDrop($event, 'b')"
+      @click="selectSlot($event, 'b')"
+      @keydown.enter="selectSlot($event, 'b')"
+      @keydown.space="selectSlot($event, 'b')"
     >
       <div v-if="isStacked(match.side_b_entry_id)" class="match-card__members">
         <span v-for="(n, i) in memberLines(match.side_b_entry_id)" :key="`b-${i}`" class="match-card__member">{{ n }}</span>

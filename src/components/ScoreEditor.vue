@@ -76,6 +76,8 @@ async function reloadResult(match) {
     setForms[match.id] = scoreRows(data.sets.filter(s => s.match_id === match.id), props.setFormat).map(row => ({...row, saving:false, error:''}))
     drafts[match.id] = { revision: current.score_revision, key: rowsKey(setForms[match.id]) }
     emit('saved')
+  } catch {
+    if (setForms[match.id]?.[0]) setForms[match.id][0].error = t('scoringFlow.unavailable')
   } finally { rows.forEach(r => { r.saving = false }) }
 }
 

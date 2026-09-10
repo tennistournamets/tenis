@@ -2,6 +2,7 @@
 import { tennisRulesSummary } from '../lib/tennisRules'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRoute, useRouter } from 'vue-router'
 
 import BracketBoard from '../components/BracketBoard.vue'
 import StandingsTable from '../components/StandingsTable.vue'
@@ -10,8 +11,12 @@ import GroupStageBoard from '../components/GroupStageBoard.vue'
 import DoubleElimBoard from '../components/DoubleElimBoard.vue'
 import LiveScoreViewerModal from '../components/LiveScoreViewerModal.vue'
 import RegistrationForm from '../components/RegistrationForm.vue'
+import TournamentMatchList from '../components/TournamentMatchList.vue'
 import { entryMemberNames } from '../lib/entryDisplay'
 import { getSportConfig } from '../lib/sportConfig'
+import { useNarrowLayout } from '../lib/useNarrowLayout'
+import { useHeaderTitle } from '../lib/headerTitle'
+import { onTabKeydown } from '../lib/tabNavigation'
 import { supabase } from '../lib/supabase'
 import { createSnapshotRefresh, subscribeTournament, subscribeRefreshTriggers } from '../lib/tournamentSync'
 import { createPublicTournamentReader } from '../lib/tournamentRepository'
@@ -25,8 +30,24 @@ const props = defineProps({
 })
 
 const { t } = useI18n()
+// The fallback keeps isolated component previews functional; routed product
+// pages always receive the real Vue Router instances.
+const route = useRoute() || { query: {}, hash: '' }
+const router = useRouter() || {
+  push: () => Promise.resolve(),
+  replace: () => Promise.resolve(),
+  back: () => {},
+}
+const isNarrowLayout = useNarrowLayout()
+const PUBLIC_MOBILE_SURFACES = ['matches', 'overview']
+const queryValue = value => Array.isArray(value) ? value[0] : value
+const publicSurfaceFromQuery = value => PUBLIC_MOBILE_SURFACES.includes(queryValue(value))
+  ? queryValue(value)
+  : 'matches'
+const mobileSurface = ref(publicSurfaceFromQuery(route.query.view))
 
 const tournament = ref(null)
+useHeaderTitle(() => tournament.value?.name)
 const entries = ref([])
 const matches = ref([])
 const standings = ref([])
@@ -73,6 +94,62 @@ const selectedLiveMatch = computed(() => (
 const selectedLiveScore = computed(() => (
   selectedLiveMatch.value ? liveScoresByMatch.value[selectedLiveMatch.value.id] || null : null
 ))
+
+let pushedLiveMatchId = null
+
+function routeLocation(query) {
+  return { query, hash: route.hash }
+}
+
+function setMobileSurface(surface) {
+  if (!PUBLIC_MOBILE_SURFACES.includes(surface)) return
+  mobileSurface.value = surface
+  if (queryValue(route.query.view) === surface) return
+  void router.replace(routeLocation({ ...route.query, view: surface }))
+}
+
+function openPublicLive(match) {
+  const current = matches.value.find(row => row.id === match?.id)
+  if (!current || !liveScoresByMatch.value[current.id]) return
+  selectedLiveMatchId.value = current.id
+  if (queryValue(route.query.live) === current.id) return
+  pushedLiveMatchId = current.id
+  void router.push(routeLocation({ ...route.query, live: current.id })).catch(() => {
+    if (pushedLiveMatchId === current.id) pushedLiveMatchId = null
+    selectedLiveMatchId.value = null
+  })
+}
+
+function replaceWithoutLiveQuery() {
+  const { live, ...query } = route.query
+  if (live === undefined) return
+  void router.replace(routeLocation(query))
+}
+
+function closePublicLive() {
+  const matchId = selectedLiveMatchId.value || queryValue(route.query.live)
+  const shouldGoBack = Boolean(matchId && pushedLiveMatchId === matchId && queryValue(route.query.live) === matchId)
+  selectedLiveMatchId.value = null
+  pushedLiveMatchId = null
+  if (shouldGoBack) router.back()
+  else replaceWithoutLiveQuery()
+}
+
+function syncPublicLiveFromRoute() {
+  const matchId = queryValue(route.query.live)
+  if (!matchId) {
+    selectedLiveMatchId.value = null
+    pushedLiveMatchId = null
+    return
+  }
+  const exists = matches.value.some(match => match.id === matchId)
+  if (exists && liveScoresByMatch.value[matchId]) {
+    selectedLiveMatchId.value = matchId
+    return
+  }
+  selectedLiveMatchId.value = null
+  if (tournament.value && !loading.value) replaceWithoutLiveQuery()
+}
 
 function teamLabel(entryId) {
   if (!entryId) {
@@ -213,17 +290,15 @@ function setupRealtime(id) {
   })
 }
 
-watch(selectedLiveMatchId, (matchId) => {
-  if (matchId && !matches.value.some((match) => match.id === matchId)) {
-    selectedLiveMatchId.value = null
-  }
+watch(() => route.query.view, value => {
+  mobileSurface.value = publicSurfaceFromQuery(value)
 })
 
-watch(matches, () => {
-  if (selectedLiveMatchId.value && !matches.value.some((match) => match.id === selectedLiveMatchId.value)) {
-    selectedLiveMatchId.value = null
-  }
-})
+watch(
+  [() => route.query.live, matches, liveScores, loading, () => tournament.value?.id],
+  syncPublicLiveFromRoute,
+  { immediate: true },
+)
 
 onMounted(initialLoad)
 
@@ -234,6 +309,7 @@ watch(
     teardownRealtime()
     registrationDirty.value = false
     loadError.value = ''
+    pushedLiveMatchId = null
     resetTournamentData()
     initialLoad()
   },
@@ -284,18 +360,32 @@ onBeforeUnmount(() => {
               <span class="pub-chip__icon">{{ chip.icon }}</span>{{ chip.label }}
             </span>
           </div>
-          <p v-if="tournament.description" class="pub-hero__desc">{{ tournament.description }}</p>
-          <p v-if="tournament.sport === 'tennis'" class="pub-hero__desc">{{ tennisRulesSummary(tournament.scoring_config, t) }}</p>
+          <details
+            v-if="tournament.description || tournament.sport === 'tennis'"
+            class="pub-hero__details"
+            :open="!isNarrowLayout"
+          >
+            <summary>{{ t('mobile.tournamentDetails') }}</summary>
+            <p v-if="tournament.description" class="pub-hero__desc">{{ tournament.description }}</p>
+            <p v-if="tournament.sport === 'tennis'" class="pub-hero__desc">{{ tennisRulesSummary(tournament.scoring_config, t) }}</p>
+          </details>
+          <div v-if="tournament.publish_contact && (tournament.contact_phone || tournament.contact_email)" class="pub-contact">
+            <strong>{{ t('mobile.organizerContacts') }}</strong>
+            <a v-if="tournament.contact_phone" :href="`tel:${tournament.contact_phone}`">{{ tournament.contact_phone }}</a>
+            <a v-if="tournament.contact_email" :href="`mailto:${tournament.contact_email}`">{{ tournament.contact_email }}</a>
+          </div>
         </div>
       </section>
 
       <template v-if="tournament.status === 'registration_open' || registrationDirty">
-        <div class="tab-group" role="tablist" :aria-label="t('tournament.tabsLabel')">
+        <div class="tab-group" role="tablist" :aria-label="t('tournament.tabsLabel')" @keydown="onTabKeydown">
           <button
             type="button"
             class="tab"
             :class="{ 'tab--active': activeTab === 'registration' }"
             role="tab"
+            id="pub-tab-registration"
+            aria-controls="pub-registration-panel"
             :aria-selected="activeTab === 'registration'"
             @click="activeTab = 'registration'"
           >
@@ -315,7 +405,7 @@ onBeforeUnmount(() => {
           </span>
         </div>
 
-        <div role="tabpanel">
+        <div id="pub-registration-panel" role="tabpanel" aria-labelledby="pub-tab-registration">
           <div :class="approvedEntries.length || pendingEntries.length ? 'grid-2' : 'pub-reg-solo'">
             <div class="stack stack--sm">
               <RegistrationForm
@@ -346,6 +436,50 @@ onBeforeUnmount(() => {
         <p>{{ t('bracket.empty') }}</p>
       </div>
 
+      <template v-else-if="isNarrowLayout">
+        <div class="mobile-surface-switch" role="tablist" :aria-label="t('tournament.tabsLabel')" @keydown="onTabKeydown">
+          <button id="pub-tab-matches" type="button" role="tab" aria-controls="pub-mobile-panel" :tabindex="mobileSurface === 'matches' ? 0 : -1" :aria-selected="mobileSurface === 'matches'" :class="{ active: mobileSurface === 'matches' }" @click="setMobileSurface('matches')">
+            {{ t('mobile.matches') }}
+          </button>
+          <button id="pub-tab-overview" type="button" role="tab" aria-controls="pub-mobile-panel" :tabindex="mobileSurface === 'overview' ? 0 : -1" :aria-selected="mobileSurface === 'overview'" :class="{ active: mobileSurface === 'overview' }" @click="setMobileSurface('overview')">
+            {{ t('mobile.overview') }}
+          </button>
+        </div>
+
+        <div id="pub-mobile-panel" role="tabpanel" :aria-labelledby="`pub-tab-${mobileSurface}`">
+        <div v-if="mobileSurface === 'matches'" class="card mobile-match-card">
+          <TournamentMatchList
+            :matches="matches"
+            :sets-by-match="setsByMatch"
+            :entries-map="entriesMap"
+            :live-scores-by-match="liveScoresByMatch"
+            @view-live="openPublicLive"
+          />
+        </div>
+
+        <template v-else-if="isRoundRobin">
+          <div v-if="standings.length" class="card">
+            <h3 class="section-title">{{ t('standings.title') }}</h3>
+            <StandingsTable :rows="standings" :family="sportCfg.scoringFamily" />
+          </div>
+          <div v-if="matches.length" class="card rr-cross-card" style="margin-top: var(--space-4)">
+            <h3 class="section-title">{{ t('standings.crossTable') }}</h3>
+            <RoundRobinCrossTable :matches="matches" :entries-map="entriesMap" :standings="standings" :family="sportCfg.scoringFamily" :live-scores-by-match="liveScoresByMatch" @view-live="openPublicLive" />
+          </div>
+        </template>
+        <template v-else-if="isGroupsPlayoff">
+          <div v-if="groups.length" class="card"><h3 class="section-title">{{ t('admin.groupStage') }}</h3><GroupStageBoard :groups="groupsView" :entries-map="entriesMap" :family="sportCfg.scoringFamily" /></div>
+          <div v-if="playoffMatches.length" class="card" style="margin-top: var(--space-4)"><h3 class="section-title">{{ t('admin.playoff') }}</h3><BracketBoard :matches="playoffMatches" :sets-by-match="setsByMatch" :entries-map="entriesMap" :live-scores-by-match="liveScoresByMatch" @view-live="openPublicLive" /></div>
+        </template>
+        <div v-else-if="isDoubleElim" class="card">
+          <DoubleElimBoard :matches="matches" :sets-by-match="setsByMatch" :entries-map="entriesMap" :live-scores-by-match="liveScoresByMatch" @view-live="openPublicLive" />
+        </div>
+        <div v-else class="card">
+          <BracketBoard :matches="matches" :sets-by-match="setsByMatch" :entries-map="entriesMap" :live-scores-by-match="liveScoresByMatch" @view-live="openPublicLive" />
+        </div>
+        </div>
+      </template>
+
       <template v-else-if="isRoundRobin">
         <div v-if="standings.length" class="card">
           <h3 class="section-title">{{ t('standings.title') }}</h3>
@@ -359,7 +493,7 @@ onBeforeUnmount(() => {
             :standings="standings"
             :family="sportCfg.scoringFamily"
             :live-scores-by-match="liveScoresByMatch"
-            @view-live="selectedLiveMatchId = $event.id"
+            @view-live="openPublicLive"
           />
         </div>      </template>
 
@@ -375,7 +509,7 @@ onBeforeUnmount(() => {
             :sets-by-match="setsByMatch"
             :entries-map="entriesMap"
             :live-scores-by-match="liveScoresByMatch"
-            @view-live="selectedLiveMatchId = $event.id"
+            @view-live="openPublicLive"
           />
         </div>
       </template>
@@ -387,7 +521,7 @@ onBeforeUnmount(() => {
           :sets-by-match="setsByMatch"
           :entries-map="entriesMap"
           :live-scores-by-match="liveScoresByMatch"
-          @view-live="selectedLiveMatchId = $event.id"
+          @view-live="openPublicLive"
         />
       </div>
 
@@ -398,7 +532,7 @@ onBeforeUnmount(() => {
           :sets-by-match="setsByMatch"
           :entries-map="entriesMap"
           :live-scores-by-match="liveScoresByMatch"
-          @view-live="selectedLiveMatchId = $event.id"
+          @view-live="openPublicLive"
         />
       </div>
 
@@ -407,13 +541,17 @@ onBeforeUnmount(() => {
         :live-score="selectedLiveScore"
         :team-a="teamLabel(selectedLiveMatch.side_a_entry_id)"
         :team-b="teamLabel(selectedLiveMatch.side_b_entry_id)"
-        @close="selectedLiveMatchId = null"
+        @close="closePublicLive"
       />
     </template>
   </div>
 </template>
 
 <style scoped>
+.participant-item { flex-wrap: wrap; gap: 8px 12px; }
+.participant-item strong { flex: 1 1 180px; min-width: 0; overflow-wrap: anywhere; }
+.participant-item .badge { flex-shrink: 0; }
+
 .pub-hero {
   display: flex;
   align-items: center;
@@ -478,7 +616,43 @@ onBeforeUnmount(() => {
   line-height: 1.6;
 }
 
+.pub-hero__details summary { display: none; }
+.pub-contact { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 10px; font-size: .84rem; }
+.pub-contact a { color: var(--primary); overflow-wrap: anywhere; }
+
+.mobile-surface-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+  padding: 5px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface-row);
+}
+.mobile-surface-switch button {
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 11px;
+  color: var(--text-muted);
+  background: transparent;
+  font: inherit;
+  font-size: .86rem;
+  font-weight: 750;
+}
+.mobile-surface-switch button.active { color: var(--text); background: var(--surface); box-shadow: 0 3px 12px rgb(15 23 42 / 8%); }
+
 @media (max-width: 560px) {
-  .pub-hero { flex-direction: column; align-items: flex-start; gap: var(--space-3); }
+  .pub-hero { gap: var(--space-3); padding: 16px; }
+  .pub-hero__icon { display: none; }
+  .pub-hero__title-row { gap: 8px; }
+  .pub-hero__title-row .page-title { font-size: clamp(1.45rem, 7vw, 1.85rem); line-height: 1.08; }
+  .pub-chips { flex-wrap: nowrap; overflow-x: auto; margin-top: 8px; padding-bottom: 2px; scrollbar-width: none; }
+  .pub-chips::-webkit-scrollbar { display: none; }
+  .pub-chip { padding: 4px 9px; font-size: .76rem; }
+  .pub-hero__details { margin-top: 8px; }
+  .pub-hero__details summary { display: list-item; color: var(--primary); font-size: .84rem; font-weight: 750; cursor: pointer; }
+  .pub-hero__desc { margin-top: 8px; font-size: .9rem; line-height: 1.45; }
+  .mobile-match-card { padding: 14px; }
 }
 </style>

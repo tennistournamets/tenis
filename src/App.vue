@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref, useId, watch, watchEffect } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 
@@ -8,19 +8,56 @@ import LanguageSwitcher from './components/LanguageSwitcher.vue'
 import ThemeToggle from './components/ThemeToggle.vue'
 import { confirmLeaveForms, withApprovedDeparture } from './lib/unsavedChanges'
 import { headerTitle } from './lib/headerTitle'
+import { useOnlineStatus } from './lib/useOnlineStatus'
 import { useAuthStore } from './stores/auth'
 
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
-const { t } = useI18n()
+const { t, locale } = useI18n()
+const isOnline = useOnlineStatus()
 
 const profileOpen = ref(false)
+const profileRoot = ref(null)
+const profileTrigger = ref(null)
+const profileId = useId()
+const mainContent = ref(null)
+
+watchEffect(() => {
+  document.documentElement.lang = ['ru', 'en', 'lt'].includes(locale.value) ? locale.value : 'ru'
+  const pages = {
+    'admin-tournaments': 'admin.tournamentsListTitle',
+    'admin-tournament-new': 'admin.createTournament',
+    'admin-settings': 'admin.settingsTitle',
+    'admin-tournament': 'a11y.manageTournament',
+    'public-tournament': 'a11y.tournamentPage',
+  }
+  const namedTournament = ['admin-tournament', 'public-tournament'].includes(route.name) && headerTitle.value
+  const title = namedTournament || (pages[route.name] ? t(pages[route.name]) : '')
+  document.title = title ? `${title} — ${t('app.title')}` : t('app.title')
+})
+watch(() => route.fullPath, () => closeProfile())
+
+async function loadAccountContext() {
+  await Promise.allSettled([
+    auth.loadTournamentRoles(),
+    auth.loadPlayerContext(),
+  ])
+}
 
 onMounted(async () => {
-  await auth.init()
-  auth.loadTournamentRoles()
+  try {
+    await auth.init()
+  } catch {
+    // Route-level loading surfaces the actionable authentication error.
+  }
 })
+
+watch(
+  [() => auth.ready, () => auth.user?.id],
+  ([ready]) => { if (ready) void loadAccountContext() },
+  { immediate: true },
+)
 
 const layout = computed(() => {
   if (route.name === 'home') {
@@ -35,17 +72,38 @@ const layout = computed(() => {
   return 'default'
 })
 
-const userInitial = computed(() => {
-  const name = auth.user?.user_metadata?.full_name || auth.user?.email || ''
-  return name.charAt(0).toUpperCase()
-})
+const profileName = computed(() => (
+  auth.currentPlayer?.display_name
+  || auth.user?.user_metadata?.full_name
+  || auth.user?.email
+  || ''
+))
 
-function toggleProfile() {
+const userInitial = computed(() => profileName.value.charAt(0).toUpperCase())
+
+const profileAvatar = computed(() => (
+  auth.currentPlayer?.avatar_url
+  || auth.user?.user_metadata?.avatar_url
+  || auth.user?.user_metadata?.picture
+  || ''
+))
+
+async function toggleProfile() {
   profileOpen.value = !profileOpen.value
+  if (profileOpen.value) {
+    await nextTick()
+    profileRoot.value?.querySelector('.profile-menu__item')?.focus()
+  }
 }
 
-function closeProfile() {
+function closeProfile(restoreFocus = false) {
+  if (!profileOpen.value) return
   profileOpen.value = false
+  if (restoreFocus) profileTrigger.value?.focus()
+}
+
+function profileFocusOut(event) {
+  if (!profileRoot.value?.contains(event.relatedTarget)) closeProfile()
 }
 
 async function handleSignOut() {
@@ -64,7 +122,8 @@ function goToSettings() {
 </script>
 
 <template>
-  <div class="app-root" @click="closeProfile">
+  <div class="app-root" @click="closeProfile()">
+    <a class="skip-link" href="#main-content" @click.prevent="mainContent?.focus()">{{ t('a11y.skipContent') }}</a>
     <header v-if="layout === 'admin'" class="app-header">
       <RouterLink class="app-header__brand" :to="{ name: 'admin-tournaments' }">
         <svg class="app-header__logo" width="24" height="24" viewBox="0 0 28 28" fill="none" aria-hidden="true">
@@ -78,19 +137,22 @@ function goToSettings() {
       <div class="app-header__actions">
         <ThemeToggle />
         <LanguageSwitcher />
-        <div v-if="auth.user" class="profile-menu" @click.stop>
+        <div v-if="auth.user" ref="profileRoot" class="profile-menu" @click.stop @focusout="profileFocusOut" @keydown.esc.stop.prevent="closeProfile(true)">
           <button
+            ref="profileTrigger"
             class="profile-menu__trigger"
             type="button"
             :aria-expanded="profileOpen"
-            aria-haspopup="true"
+            :aria-label="t('a11y.profileMenu')"
+            :aria-controls="profileOpen ? profileId : undefined"
             @click="toggleProfile"
           >
-            <span class="profile-menu__avatar">{{ userInitial }}</span>
+            <img v-if="profileAvatar" class="profile-menu__avatar profile-menu__avatar--image" :src="profileAvatar" alt="" />
+            <span v-else class="profile-menu__avatar">{{ userInitial }}</span>
           </button>
-          <div v-if="profileOpen" class="profile-menu__dropdown">
+          <div v-if="profileOpen" :id="profileId" class="profile-menu__dropdown" role="group" :aria-label="t('a11y.profileMenu')">
             <div class="profile-menu__info">
-              <span class="profile-menu__name">{{ auth.user.user_metadata?.full_name || auth.user.email }}</span>
+              <span class="profile-menu__name">{{ profileName }}</span>
               <span class="profile-menu__email">{{ auth.user.email }}</span>
             </div>
             <div class="profile-menu__divider" />
@@ -108,14 +170,26 @@ function goToSettings() {
     </header>
 
     <header v-else-if="layout === 'public'" class="app-header">
-      <span class="app-header__brand">{{ headerTitle || t('app.title') }}</span>
+      <span class="app-header__brand">{{ t('app.title') }}</span>
       <div class="app-header__actions">
         <ThemeToggle />
         <LanguageSwitcher />
       </div>
     </header>
 
+    <div
+      v-if="!isOnline"
+      class="app-offline-banner alert alert--error"
+      :class="{ 'app-offline-banner--login': layout === 'login' }"
+      role="status"
+    >
+      {{ t('sync.offline') }}
+    </div>
+
     <main
+      id="main-content"
+      ref="mainContent"
+      tabindex="-1"
       class="app-main"
       :class="{
         'app-main--wide': layout === 'admin' || layout === 'public',
@@ -127,3 +201,22 @@ function goToSettings() {
     <ConfirmDialog />
   </div>
 </template>
+
+<style scoped>
+.profile-menu__avatar--image {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+}
+
+.app-offline-banner {
+  width: auto;
+  max-width: 1400px;
+  margin: var(--space-3) calc(var(--space-4) + var(--safe-area-right)) 0 calc(var(--space-4) + var(--safe-area-left));
+}
+
+.app-offline-banner--login {
+  margin-top: calc(64px + var(--space-3));
+}
+</style>

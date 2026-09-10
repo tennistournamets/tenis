@@ -41,6 +41,30 @@ const canvasRef = ref(null)
 const connectorPaths = ref([])
 const svgW = ref(0)
 const svgH = ref(0)
+const selectedSlot = ref(null)
+
+function selectSlot(slot) {
+  if (!props.editableSlots) return
+  if (!selectedSlot.value) {
+    selectedSlot.value = slot
+    return
+  }
+  if (selectedSlot.value.matchId === slot.matchId && selectedSlot.value.side === slot.side) {
+    selectedSlot.value = null
+    return
+  }
+  emit('swap-slots', {
+    fromMatchId: selectedSlot.value.matchId,
+    fromSide: selectedSlot.value.side,
+    toMatchId: slot.matchId,
+    toSide: slot.side,
+  })
+  selectedSlot.value = null
+}
+
+watch(() => props.editableSlots, (editable) => {
+  if (!editable) selectedSlot.value = null
+})
 
 const rounds = computed(() => {
   const bucket = new Map()
@@ -314,9 +338,11 @@ watch(splitSectionsFlat, () => scheduleUpdate(), { deep: true })
             :sets-by-match="setsByMatch"
             :entries-map="entriesMap"
             :editable-slots="editableSlots"
+            :selected-slot-key="selectedSlot ? `${selectedSlot.matchId}-${selectedSlot.side}` : ''"
             :live-score="liveScoresByMatch[match.id]"
             :can-live-score="canLiveScore"
             @swap-slots="emit('swap-slots', $event)"
+            @select-slot="selectSlot"
             @view-live="emit('view-live', $event)"
           />
         </section>
@@ -332,9 +358,11 @@ watch(splitSectionsFlat, () => scheduleUpdate(), { deep: true })
             :sets-by-match="setsByMatch"
             :entries-map="entriesMap"
             :editable-slots="editableSlots"
+            :selected-slot-key="selectedSlot ? `${selectedSlot.matchId}-${selectedSlot.side}` : ''"
             :live-score="liveScoresByMatch[match.id]"
             :can-live-score="canLiveScore"
             @swap-slots="emit('swap-slots', $event)"
+            @select-slot="selectSlot"
             @view-live="emit('view-live', $event)"
           />
         </section>

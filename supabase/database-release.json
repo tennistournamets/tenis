@@ -1,6 +1,11 @@
 {
-  "release": "2026-09-06-step10",
-  "forwardMigrations": [],
+  "release": "2026-09-08-mobile-step2",
+  "forwardMigrations": [
+    {
+      "path": "supabase/migrations/20260908120000_mobile_tournament_details.sql",
+      "sha256": "2e22f8e5537a52846ed06a9b56d67a8a2ed1df57eed2642af7a49e34411d2a3e"
+    }
+  ],
   "baseline": {
     "path": "supabase/migrations/20260906175207_current_model_baseline.sql",
     "sha256": "1ee2c3e687208a9409b9cdd650468522feced9509e2203906397b71c55e7df3c"

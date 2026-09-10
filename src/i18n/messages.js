@@ -1,14 +1,20 @@
+import { mobileMessages } from './mobile'
+import { accessibilityMessages } from './accessibility'
+import { cinematicMessages } from './cinematic'
 import { draftMessages } from './drafts'
 import { scoringFlowMessages } from './scoringFlow'
 import { tennisRuleMessages } from './tennisRules'
 
 export const messages = {
   ru: {
+    mobile: mobileMessages.ru,
+    a11y: accessibilityMessages.ru,
     sync: {
       unavailable: 'Не удалось обновить данные. Показано последнее полученное состояние; повторяем подключение автоматически.',
       loadFailed: 'Не удалось загрузить турнир',
       loadFailedHint: 'Проверьте подключение к интернету и повторите попытку. Загрузка повторяется автоматически.',
       retry: 'Повторить загрузку',
+      offline: 'Нет подключения к интернету. Черновики доступны, отправка станет доступна после подключения.',
     },
     drafts: draftMessages.ru,
     tennisRules: tennisRuleMessages.ru,
@@ -18,6 +24,7 @@ export const messages = {
       subtitle: 'Организация турниров, жеребьёвка и live-сетка',
     },
     home: {
+      cinematic: cinematicMessages.ru,
       description: 'Платформа для организации теннисных турниров с жеребьёвкой, live-счётом и публичными ссылками для зрителей',
       admin: {
         title: 'Организатор',
@@ -39,6 +46,7 @@ export const messages = {
         note: 'Бесплатно · без карты · зрителям не нужен аккаунт',
       },
       features: {
+        eyebrow: 'Возможности',
         title: 'Всё что нужно организатору',
         subtitle: 'Мощные инструменты для проведения турнира любого масштаба',
         bracket: {
@@ -47,7 +55,7 @@ export const messages = {
         },
         liveScore: {
           title: 'Live-счёт',
-          description: 'Поочковый ввод счёта в реальном времени. Авто-подсчёт геймов, сетов, тай-брейков. Отмена последнего действия.',
+          description: 'Поочковый live-счёт для тенниса и падела. Для футбола — итоговый счёт и пенальти.',
         },
         spectator: {
           title: 'Зрительский доступ',
@@ -59,7 +67,7 @@ export const messages = {
         },
         registration: {
           title: 'Регистрация участников',
-          description: 'Открытая форма регистрации. Подтверждение заявок, управление посевом, экспорт списка.',
+          description: 'Регистрация по ссылке. Подтверждайте заявки и управляйте списком участников.',
         },
         collaboration: {
           title: 'Командная работа',
@@ -67,6 +75,7 @@ export const messages = {
         },
       },
       howItWorks: {
+        eyebrow: 'Как это работает',
         title: 'Три шага — и играем',
         subtitle: 'Никаких таблиц в Excel и пересылки скриншотов в чат.',
         step1: {
@@ -81,6 +90,14 @@ export const messages = {
           title: 'Ведите счёт — зрители видят всё',
           description: 'Live-табло обновляется мгновенно. Победитель сам проходит дальше по сетке.',
         },
+      },
+      sports: {
+        eyebrow: 'Виды спорта',
+        title: 'Три вида спорта. Одна сетка.',
+        subtitle: 'Теннис и падел считают сеты и геймы, футбол — голы. Bracketa знает правила каждого.',
+        tennis: 'Сеты, геймы, тай-брейки. Поочковый live-счёт и авто-подсчёт.',
+        padel: 'Всегда пары. Случайная или ручная жеребьёвка партнёров.',
+        football: 'Голы и ничьи в группах, пенальти в плей-офф.',
       },
       nav: {
         howItWorks: 'Как это работает',
@@ -309,6 +326,11 @@ export const messages = {
       settingsLanguageHint: 'Тот же переключатель доступен в шапке сайта.',
       settingsAccount: 'Аккаунт',
       settingsEmail: 'Email',
+      settingsProfileName: 'Отображаемое имя',
+      settingsProfileNameHint: 'Используется в кабинете и меню аккаунта.',
+      settingsProfileSave: 'Сохранить профиль',
+      settingsProfileSaved: 'Профиль сохранён.',
+      settingsProfileError: 'Не удалось сохранить профиль. Введённое имя осталось в форме.',
       settingsNotifications: 'Уведомления',
       settingsNotificationsPlaceholder: 'Скоро здесь можно будет настроить уведомления.',
       startTournament: 'Начать турнир',
@@ -419,6 +441,10 @@ export const messages = {
       games: 'геймы',
       swapSides: 'Поменять стороны',
       autoSwap: 'Авто-смена сторон',
+      pendingPoints: 'Синхронизация очков: {count}',
+      cancelledPoints: 'Не подтверждено действий со счётом: {count}. Проверьте актуальный счёт и повторите нужные действия.',
+      starting: 'Запускаем live-счёт…',
+      notStarted: 'Live-счёт ещё не запущен',
     },
     errors: {
       generic: 'Что-то пошло не так',
@@ -676,11 +702,14 @@ export const messages = {
     },
   },
   en: {
+    mobile: mobileMessages.en,
+    a11y: accessibilityMessages.en,
     sync: {
       unavailable: 'Unable to refresh. Showing the last received data; reconnecting automatically.',
       loadFailed: 'Unable to load the tournament',
       loadFailedHint: 'Check your internet connection and try again. Loading will retry automatically.',
       retry: 'Try again',
+      offline: 'You are offline. Drafts remain available; sending will be available after reconnection.',
     },
     drafts: draftMessages.en,
     tennisRules: tennisRuleMessages.en,
@@ -690,6 +719,7 @@ export const messages = {
       subtitle: 'Run tournaments, draws, and live brackets',
     },
     home: {
+      cinematic: cinematicMessages.en,
       description: 'Platform for organizing tennis tournaments with draws, live scoring, and public spectator links',
       admin: {
         title: 'Organizer',
@@ -711,6 +741,7 @@ export const messages = {
         note: 'Free · no card · spectators need no account',
       },
       features: {
+        eyebrow: 'Features',
         title: 'Everything an organizer needs',
         subtitle: 'Powerful tools to run a tournament of any scale',
         bracket: {
@@ -719,7 +750,7 @@ export const messages = {
         },
         liveScore: {
           title: 'Live scoring',
-          description: 'Point-by-point score entry in real time. Auto calculation of games, sets, tiebreaks. Undo last action.',
+          description: 'Point-by-point live scoring for tennis and padel. Final scores and penalties for football.',
         },
         spectator: {
           title: 'Spectator access',
@@ -731,7 +762,7 @@ export const messages = {
         },
         registration: {
           title: 'Player registration',
-          description: 'Open registration form. Approve entries, manage seeding, export the list.',
+          description: 'Registration through a link. Approve entries and manage your participant list.',
         },
         collaboration: {
           title: 'Team collaboration',
@@ -739,6 +770,7 @@ export const messages = {
         },
       },
       howItWorks: {
+        eyebrow: 'How it works',
         title: 'Three steps — and you play',
         subtitle: 'No Excel spreadsheets, no forwarding screenshots to a chat.',
         step1: {
@@ -753,6 +785,14 @@ export const messages = {
           title: 'Keep score — spectators see it all',
           description: 'The live scoreboard updates instantly. The winner advances through the bracket on its own.',
         },
+      },
+      sports: {
+        eyebrow: 'Sports',
+        title: 'Three sports. One bracket.',
+        subtitle: 'Tennis and padel count sets and games, football counts goals. Bracketa knows the rules of each.',
+        tennis: 'Sets, games, tiebreaks. Point-by-point live scoring with auto totals.',
+        padel: 'Always doubles. Random or manual partner draw.',
+        football: 'Goals and draws in groups, penalties in the knockouts.',
       },
       nav: {
         howItWorks: 'How it works',
@@ -981,6 +1021,11 @@ export const messages = {
       settingsLanguageHint: 'You can also use the switcher in the site header.',
       settingsAccount: 'Account',
       settingsEmail: 'Email',
+      settingsProfileName: 'Display name',
+      settingsProfileNameHint: 'Used in the dashboard and account menu.',
+      settingsProfileSave: 'Save profile',
+      settingsProfileSaved: 'Profile saved.',
+      settingsProfileError: 'Could not save the profile. Your name remains in the form.',
       settingsNotifications: 'Notifications',
       settingsNotificationsPlaceholder: 'Notification preferences will be available here later.',
       startTournament: 'Start Tournament',
@@ -1091,6 +1136,10 @@ export const messages = {
       games: 'games',
       swapSides: 'Swap sides',
       autoSwap: 'Auto swap sides',
+      pendingPoints: 'Syncing points: {count}',
+      cancelledPoints: 'Unconfirmed scoring actions: {count}. Check the current score and repeat the required actions.',
+      starting: 'Starting live scoring…',
+      notStarted: 'Live scoring has not started',
     },
     errors: {
       generic: 'Something went wrong',
@@ -1348,11 +1397,14 @@ export const messages = {
     },
   },
   lt: {
+    mobile: mobileMessages.lt,
+    a11y: accessibilityMessages.lt,
     sync: {
       unavailable: 'Nepavyko atnaujinti duomenų. Rodomi paskutiniai gauti duomenys; ryšys atkuriamas automatiškai.',
       loadFailed: 'Nepavyko įkelti turnyro',
       loadFailedHint: 'Patikrinkite interneto ryšį ir bandykite dar kartą. Įkėlimas kartojamas automatiškai.',
       retry: 'Bandyti dar kartą',
+      offline: 'Nėra interneto ryšio. Juodraščiai išlieka, siųsti vėl galėsite atkūrus ryšį.',
     },
     drafts: draftMessages.lt,
     tennisRules: tennisRuleMessages.lt,
@@ -1362,6 +1414,7 @@ export const messages = {
       subtitle: 'Turnyrai, burtai ir gyvas tinklelis',
     },
     home: {
+      cinematic: cinematicMessages.lt,
       description: 'Platforma teniso turnyrų organizavimui su burtais, tiesioginiu rezultatų sekimu ir viešomis nuorodomis žiūrovams',
       admin: {
         title: 'Organizatorius',
@@ -1383,6 +1436,7 @@ export const messages = {
         note: 'Nemokama · be kortelės · žiūrovams paskyra nereikalinga',
       },
       features: {
+        eyebrow: 'Galimybės',
         title: 'Viskas, ko reikia organizatoriui',
         subtitle: 'Galingi įrankiai bet kokio masto turnyrui',
         bracket: {
@@ -1391,7 +1445,7 @@ export const messages = {
         },
         liveScore: {
           title: 'Tiesioginis rezultatas',
-          description: 'Taškas po taško realiuoju laiku. Automatinis žaidimų, setų, pratęsimų skaičiavimas. Paskutinio veiksmo atšaukimas.',
+          description: 'Tiesioginis taškų skaičiavimas tenisui ir padeliui. Futbolui — galutinis rezultatas ir baudiniai.',
         },
         spectator: {
           title: 'Prieiga žiūrovams',
@@ -1403,7 +1457,7 @@ export const messages = {
         },
         registration: {
           title: 'Žaidėjų registracija',
-          description: 'Atvira registracijos forma. Patvirtinkite dalyvius, tvarkykite reitingus, eksportuokite sąrašą.',
+          description: 'Registracija per nuorodą. Patvirtinkite paraiškas ir tvarkykite dalyvių sąrašą.',
         },
         collaboration: {
           title: 'Komandinis darbas',
@@ -1411,6 +1465,7 @@ export const messages = {
         },
       },
       howItWorks: {
+        eyebrow: 'Kaip tai veikia',
         title: 'Trys žingsniai — ir žaidžiame',
         subtitle: 'Jokių Excel lentelių ir ekrano nuotraukų persiuntimo į pokalbį.',
         step1: {
@@ -1425,6 +1480,14 @@ export const messages = {
           title: 'Veskite rezultatą — žiūrovai mato viską',
           description: 'Tiesioginė rezultatų lenta atsinaujina akimirksniu. Nugalėtojas pats keliauja toliau tinkleliu.',
         },
+      },
+      sports: {
+        eyebrow: 'Sporto šakos',
+        title: 'Trys sporto šakos. Vienas tinklelis.',
+        subtitle: 'Tenisas ir padelis skaičiuoja setus ir geimus, futbolas — įvarčius. Bracketa žino kiekvienos taisykles.',
+        tennis: 'Setai, geimai, pratęsimai. Tiesioginis rezultatas taškas po taško.',
+        padel: 'Visada dvejetai. Atsitiktinis arba rankinis porų sudarymas.',
+        football: 'Įvarčiai ir lygiosios grupėse, baudiniai atkrintamosiose.',
       },
       nav: {
         howItWorks: 'Kaip tai veikia',
@@ -1653,6 +1716,11 @@ export const messages = {
       settingsLanguageHint: 'Tą patį galite keisti antraštėje.',
       settingsAccount: 'Paskyra',
       settingsEmail: 'El. paštas',
+      settingsProfileName: 'Rodomas vardas',
+      settingsProfileNameHint: 'Naudojamas valdymo skydelyje ir paskyros meniu.',
+      settingsProfileSave: 'Išsaugoti profilį',
+      settingsProfileSaved: 'Profilis išsaugotas.',
+      settingsProfileError: 'Nepavyko išsaugoti profilio. Įvestas vardas liko formoje.',
       settingsNotifications: 'Pranešimai',
       settingsNotificationsPlaceholder: 'Pranešimų nustatymai bus čia vėliau.',
       startTournament: 'Pradėti turnyrą',
@@ -1763,6 +1831,10 @@ export const messages = {
       games: 'geimai',
       swapSides: 'Sukeisti puses',
       autoSwap: 'Automatinis pusių keitimas',
+      pendingPoints: 'Sinchronizuojami taškai: {count}',
+      cancelledPoints: 'Nepatvirtintų rezultato veiksmų: {count}. Patikrinkite naujausią rezultatą ir pakartokite reikiamus veiksmus.',
+      starting: 'Pradedamas tiesioginis skaičiavimas…',
+      notStarted: 'Tiesioginis skaičiavimas dar nepradėtas',
     },
     errors: {
       generic: 'Įvyko klaida',
