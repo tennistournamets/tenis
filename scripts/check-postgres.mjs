@@ -25,13 +25,22 @@ const manifest = JSON.parse(read('supabase/database-release.json'))
 const bootstrap = read('tests/helpers/supabase-bootstrap.sql')
 const catalog = read('tests/helpers/catalog.sql')
 const snapshotColumns = async db => (await db.query("select table_name,column_name from information_schema.columns where table_schema='public' order by table_name,ordinal_position")).rows
+const primaryKeys = async db => (await db.query(`select tc.table_name, kcu.column_name
+  from information_schema.table_constraints tc
+  join information_schema.key_column_usage kcu on kcu.constraint_name=tc.constraint_name and kcu.table_schema=tc.table_schema
+  where tc.table_schema='public' and tc.constraint_type='PRIMARY KEY' order by tc.table_name, kcu.ordinal_position`)).rows
 async function snapshot(db, columns) {
   const result = {}
+  const keys = await primaryKeys(db)
   for (const table of [...new Set(columns.map(c => c.table_name))]) {
     // Identifiers come from the local catalog and are still quoted.
     const quote = text => '"' + text.replaceAll('"','""') + '"'
-    const fields = columns.filter(c => c.table_name === table).map(c => quote(c.column_name)).join(',')
-    result[table] = (await db.query(`select ${fields} from public.${quote(table)} order by id`)).rows
+    const tableColumns = columns.filter(c => c.table_name === table)
+    const fields = tableColumns.map(c => quote(c.column_name)).join(',')
+    // Rows are ordered by the primary key (not every table has an `id`); a table without one uses every column.
+    const key = keys.filter(k => k.table_name === table).map(k => k.column_name)
+    const order = (key.length ? key : tableColumns.map(c => c.column_name)).map(quote).join(',')
+    result[table] = (await db.query(`select ${fields} from public.${quote(table)} order by ${order}`)).rows
   }
   return result
 }
