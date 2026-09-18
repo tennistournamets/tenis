@@ -73,7 +73,7 @@ test('contact column is inaccessible through selection, wildcard, filters, row J
 
 test('public registration stays write-only until approval and managers retain insertion with RETURNING id',async()=>{
   const t=await fixture(ctx,{count:0,isPublic:true,status:'registration_open'})
-  const {rows}=await asActor(ctx,'anon',"select register_entry($1,'singles','fixture@example.test','Private applicant') as id",[t.id])
+  const {rows}=await asActor(ctx,'anon',"select (register_entry($1,'singles','fixture@example.test','Private applicant')->>'id')::uuid as id",[t.id])
   const id=rows[0].id
   assert.deepEqual(await visible('anon',t.id),[])
   assert.deepEqual(await visible('counter',t.id),[])

@@ -4,6 +4,9 @@ import { cinematicMessages } from './cinematic'
 import { draftMessages } from './drafts'
 import { scoringFlowMessages } from './scoringFlow'
 import { tennisRuleMessages } from './tennisRules'
+import { registrationRuleMessages } from './registrationRules'
+import { scheduleMessages } from './schedule'
+import { accessMessages } from './access'
 
 export const messages = {
   ru: {
@@ -19,6 +22,9 @@ export const messages = {
     drafts: draftMessages.ru,
     tennisRules: tennisRuleMessages.ru,
     scoringFlow: scoringFlowMessages.ru,
+    registrationRules: registrationRuleMessages.ru,
+    schedule: scheduleMessages.ru,
+    access: accessMessages.ru,
     app: {
       title: 'Bracketa',
       subtitle: 'Организация турниров, жеребьёвка и live-сетка',
@@ -150,6 +156,7 @@ export const messages = {
       pending: 'Ожидает подтверждения',
       approved: 'Подтверждён',
       rejected: 'Отклонён',
+      waitlisted: 'В листе ожидания',
       singles: 'Одиночный',
       doubles: 'Парный',
       team: 'Команда',
@@ -242,7 +249,7 @@ export const messages = {
       add: 'Добавить',
       owner: 'Владелец',
       editor: 'Редактор',
-      counter: 'Счётчик',
+      counter: 'Только результаты',
       saveScore: 'Сохранить счёт',
       setsHint: 'Введите сыгранные сеты. Пустые поля не учитываются.',
       scoresLockedTooltip: 'Счёт можно вводить только после старта турнира',
@@ -272,7 +279,7 @@ export const messages = {
       tournamentsListTitle: 'Мои чемпионаты',
       tournamentsListHint: 'Кликните по чемпионату, чтобы управлять им.',
       counterTournamentsListTitle: 'Турниры для счёта',
-      counterTournamentsListHint: 'Откройте назначенный турнир, чтобы вести live-счёт матча.',
+      counterTournamentsListHint: 'Откройте назначенный турнир, чтобы вести LIVE и вносить результаты матчей.',
       filterLabel: 'Фильтр по статусу',
       filterActive: 'Активные',
       filterCompleted: 'Завершённые',
@@ -714,6 +721,9 @@ export const messages = {
     drafts: draftMessages.en,
     tennisRules: tennisRuleMessages.en,
     scoringFlow: scoringFlowMessages.en,
+    registrationRules: registrationRuleMessages.en,
+    schedule: scheduleMessages.en,
+    access: accessMessages.en,
     app: {
       title: 'Bracketa',
       subtitle: 'Run tournaments, draws, and live brackets',
@@ -845,6 +855,7 @@ export const messages = {
       pending: 'Pending approval',
       approved: 'Approved',
       rejected: 'Rejected',
+      waitlisted: 'Waitlisted',
       singles: 'Singles',
       doubles: 'Doubles',
       team: 'Team',
@@ -937,7 +948,7 @@ export const messages = {
       add: 'Add',
       owner: 'Owner',
       editor: 'Editor',
-      counter: 'Scorer',
+      counter: 'Results only',
       saveScore: 'Save score',
       setsHint: 'Enter completed sets. Empty fields are ignored.',
       scoresLockedTooltip: 'Scores can be entered only after the tournament starts',
@@ -967,7 +978,7 @@ export const messages = {
       tournamentsListTitle: 'My championships',
       tournamentsListHint: 'Click a championship to manage it.',
       counterTournamentsListTitle: 'Scorekeeping tournaments',
-      counterTournamentsListHint: 'Open an assigned tournament to run live match scoring.',
+      counterTournamentsListHint: 'Open an assigned tournament to run LIVE scoring and enter match results.',
       filterLabel: 'Filter by status',
       filterActive: 'Active',
       filterCompleted: 'Completed',
@@ -1409,6 +1420,9 @@ export const messages = {
     drafts: draftMessages.lt,
     tennisRules: tennisRuleMessages.lt,
     scoringFlow: scoringFlowMessages.lt,
+    registrationRules: registrationRuleMessages.lt,
+    schedule: scheduleMessages.lt,
+    access: accessMessages.lt,
     app: {
       title: 'Bracketa',
       subtitle: 'Turnyrai, burtai ir gyvas tinklelis',
@@ -1540,6 +1554,7 @@ export const messages = {
       pending: 'Laukia patvirtinimo',
       approved: 'Patvirtinta',
       rejected: 'Atmesta',
+      waitlisted: 'Laukiančiųjų sąraše',
       singles: 'Vienetai',
       doubles: 'Dvejetai',
       team: 'Komanda',
@@ -1632,7 +1647,7 @@ export const messages = {
       add: 'Pridėti',
       owner: 'Savininkas',
       editor: 'Redaktorius',
-      counter: 'Skaičiuotojas',
+      counter: 'Tik rezultatai',
       saveScore: 'Išsaugoti rezultatą',
       setsHint: 'Įveskite sužaistus setus. Tuščios eilutės ignoruojamos.',
       scoresLockedTooltip: 'Rezultatus galima įvesti tik prasidėjus turnyrui',
@@ -1662,7 +1677,7 @@ export const messages = {
       tournamentsListTitle: 'Mano čempionatai',
       tournamentsListHint: 'Spustelėkite čempionatą, kad jį valdytumėte.',
       counterTournamentsListTitle: 'Turnyrai rezultatams',
-      counterTournamentsListHint: 'Atidarykite priskirtą turnyrą ir veskite live mačo rezultatą.',
+      counterTournamentsListHint: 'Atidarykite priskirtą turnyrą, veskite LIVE ir įveskite rungtynių rezultatus.',
       filterLabel: 'Filtruoti pagal būseną',
       filterActive: 'Aktyvūs',
       filterCompleted: 'Baigti',

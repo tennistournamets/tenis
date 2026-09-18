@@ -14,11 +14,13 @@ test('every supported sport/format respects manager and counter scoring permissi
       assert.equal(matchScoringAction(tournament, role, ready), sport === 'football' ? 'result' : 'live')
       assert.equal(matchScoringAction(tournament, role, { ...ready, status: 'finished' }), 'result')
     }
+    // The results role enters final scores everywhere but never manages the tournament.
     const counter = scoringAccess(tournament, 'counter')
-    assert.equal(counter.final, false)
-    assert.equal(counter.scores, sport !== 'football')
-    assert.equal(matchScoringAction(tournament, 'counter', ready), sport === 'football' ? null : 'live')
-    assert.equal(matchScoringAction(tournament, 'counter', { ...ready, status: 'finished' }), null)
+    assert.equal(counter.manager, false)
+    assert.equal(counter.final, true)
+    assert.equal(counter.scores, true)
+    assert.equal(matchScoringAction(tournament, 'counter', ready), sport === 'football' ? 'result' : 'live')
+    assert.equal(matchScoringAction(tournament, 'counter', { ...ready, status: 'finished' }), 'result')
     for (const role of [null, 'viewer', 'outsider', 'platform_admin']) {
       assert.equal(scoringAccess(tournament, role).scores, false)
       assert.equal(matchScoringAction(tournament, role, ready), null)

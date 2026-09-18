@@ -43,7 +43,7 @@ if(process.argv.includes('--register-and-observe')){
   const {data,error}=await api.rpc('register_entry',{
     p_slug:tournament.slug,p_entry_type:'doubles',p_phone_or_email:`privacy-${Date.now()}@example.test`,p_member_one:'Приватность Игрок А',
   })
-  assert.ifError(error);entryId=data
+  assert.ifError(error);entryId=data?.id??data
   const {data:pending,error:pe}=await api.from('entries').select('id,status,entry_members(member_name,member_order)').eq('id',entryId)
   assert.ifError(pe);assert.deepEqual(pending,[])
   console.log(JSON.stringify({registration:'pending and hidden',entryId,awaiting:'Approve this fixture entry through the organiser UI'}))

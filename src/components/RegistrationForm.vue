@@ -6,12 +6,16 @@ import { useUnsavedChanges, confirmDiscard } from '../lib/unsavedChanges'
 import { cloneForm, sameForm } from '../lib/formDraft'
 import { supabase } from '../lib/supabase'
 import { scoringFamily } from '../lib/sportConfig'
+import { registrationDisplayState, registrationError, closedReasonKey } from '../lib/registrationRules'
 
 const props = defineProps({
   tournament: {
     type: Object,
     required: true,
   },
+  registration: { type: Object, default: null },
+  now: { type: Number, default: 0 },
+  accessToken: { type: String, default: '' },
 })
 
 const emit = defineEmits(['submitted', 'dirty'])
@@ -43,14 +47,20 @@ const form = reactive({
 const loading = ref(false)
 const errorText = ref('')
 const submitted = ref(false)
+const submittedStatus = ref('pending')
 const contactTouched = ref(false)
 
 const initialForm = cloneForm(form)
 const dirty = computed(() => !sameForm(form, initialForm))
-const conditions = () => ({ category: props.tournament.category, sport: props.tournament.sport, pairing: props.tournament.doubles_pairing_mode })
+const conditions = () => ({ category: props.tournament.category, sport: props.tournament.sport, pairing: props.tournament.doubles_pairing_mode, fee: props.registration?.fee ?? null })
 const reviewedConditions = ref(conditions())
 const conditionsChanged = computed(() => dirty.value && !sameForm(conditions(), reviewedConditions.value))
-const registrationClosed = computed(() => props.tournament.status !== 'registration_open')
+const regState = computed(() => registrationDisplayState(props.registration, props.now || Date.now(), props.tournament))
+const waitlistMode = computed(() => regState.value.waitlistOpen)
+const registrationClosed = computed(() => !regState.value.accepting && !regState.value.waitlistOpen)
+const closedMessage = computed(() => (!regState.value.known || regState.value.reason === 'status')
+  ? t('drafts.registrationClosed')
+  : t(closedReasonKey(regState.value.reason)))
 useUnsavedChanges(() => dirty.value, () => loading.value)
 watch(dirty, value => emit('dirty', value), { flush: 'sync' })
 watch(conditions, value => { if (!dirty.value) reviewedConditions.value = cloneForm(value) }, { deep: true })
@@ -88,21 +98,23 @@ async function submit() {
     : null
 
   try {
-    const { error } = await supabase.rpc('register_entry', {
+    const { data, error } = await supabase.rpc('register_entry', {
       p_slug: props.tournament.slug,
       p_entry_type: entryType.value,
       p_phone_or_email: form.phoneOrEmail,
       p_member_one: form.memberOne,
       p_member_two: memberTwo,
       p_display_name: form.displayName || null,
+      p_access_token: props.accessToken || null,
     })
 
     if (error) {
-      errorText.value = error.message || t('registrationForm.error')
+      errorText.value = registrationError(error.message, t, 'registrationForm.error')
       return
     }
 
     submitted.value = true
+    submittedStatus.value = data?.status === 'waitlisted' ? 'waitlisted' : 'pending'
     form.displayName = ''
     form.phoneOrEmail = ''
     form.memberOne = ''
@@ -110,7 +122,7 @@ async function submit() {
     contactTouched.value = false
     emit('submitted')
   } catch (error) {
-    errorText.value = error?.message || t('registrationForm.error')
+    errorText.value = registrationError(error?.message, t, 'registrationForm.error')
   } finally {
     loading.value = false
   }
@@ -127,11 +139,12 @@ async function submit() {
       </p>
     </div>
 
-    <p v-if="registrationClosed" class="alert alert--info" role="status">{{ t('drafts.registrationClosed') }}</p>
+    <p v-if="registrationClosed" class="alert alert--info" role="status">{{ closedMessage }}</p>
     <div v-else-if="conditionsChanged" class="alert alert--info" role="status">
       {{ t('drafts.registrationChanged') }}
       <button class="btn btn--ghost btn--sm" type="button" @click="reviewedConditions = conditions()">{{ t('drafts.review') }}</button>
     </div>
+    <p v-else-if="waitlistMode" class="alert alert--info" role="status">{{ t('registrationRules.waitlistNote') }}</p>
     <div class="form-field">
       <label for="reg-member-one">{{ memberOneLabel }}</label>
       <input
@@ -199,11 +212,11 @@ async function submit() {
 
     <button class="btn btn--primary" :disabled="loading || registrationClosed || conditionsChanged" type="submit">
       <span v-if="loading" class="spinner" aria-hidden="true" />
-      {{ t('registrationForm.submit') }}
+      {{ waitlistMode ? t('registrationRules.waitlistSubmit') : t('registrationForm.submit') }}
     </button>
 
     <button v-if="dirty" class="btn btn--ghost" type="button" :disabled="loading" @click="discard">{{ t('drafts.discardLeave') }}</button>
-    <div v-if="submitted" class="alert alert--success" role="status">{{ t('registrationForm.success') }}</div>
+    <div v-if="submitted" class="alert alert--success" role="status">{{ submittedStatus === 'waitlisted' ? t('registrationRules.waitlistSuccess') : t('registrationForm.success') }}</div>
     <div v-if="errorText" class="alert alert--error" role="alert">{{ errorText }}</div>
   </form>
 </template>

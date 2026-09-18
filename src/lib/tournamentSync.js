@@ -89,7 +89,7 @@ export function subscribeTournament({ client, id, name, getState, refresh, onSta
   let disposed = false
   const request = payload => { if (!disposed) refresh(payload) }
   const channel = client.channel(`${name}-${id}`)
-  for (const table of ['tournaments', 'entries', 'matches', 'live_scores', 'groups', 'tournament_admins']) {
+  for (const table of ['tournaments', 'entries', 'matches', 'live_scores', 'groups', 'tournament_admins', 'courts', 'match_schedule']) {
     const filter = `${table === 'tournaments' ? 'id' : 'tournament_id'}=eq.${id}`
     const receive = payload => { if (!disposed && isTournamentEvent(payload, id, getState())) request(payload) }
     for (const event of ['INSERT', 'UPDATE']) channel.on('postgres_changes', { event, schema: 'public', table, filter }, receive)

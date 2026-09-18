@@ -76,6 +76,7 @@ async function loadTournaments() {
           status,
           set_format,
           doubles_pairing_mode,
+          visibility,
           created_at
         )
       `,
@@ -250,6 +251,7 @@ onMounted(async () => {
                 {{ t(`tournament.${item.status}`) }}
               </span>
               <span v-if="item.currentRole && item.currentRole !== 'owner'" class="badge badge--neutral">{{ t(`admin.${item.currentRole}`) }}</span>
+              <span v-if="item.visibility && item.visibility !== 'link'" class="badge badge--neutral">{{ t(`access.visibility.${item.visibility}`) }}</span>
             </div>
             <p class="t-card__meta">{{ itemSubtitle(item) }} · {{ formatDate(item.created_at) }}</p>
           </div>

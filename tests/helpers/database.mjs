@@ -39,6 +39,13 @@ export async function createDatabase() {
   return { db, actors }
 }
 
+/** Replays every forward migration in manifest order; each must be safe to apply again. */
+export async function reapplyForwardMigrations(ctx) {
+  const root = new URL('../../', import.meta.url)
+  const release = JSON.parse(await readFile(new URL('supabase/database-release.json', root), 'utf8'))
+  for (const m of release.forwardMigrations) await ctx.db.exec(await readFile(new URL(m.path, root), 'utf8'))
+}
+
 export async function asActor(ctx, actor, sql, params = []) {
   assert.ok(actor === 'anon' || Object.hasOwn(ctx.actors, actor))
   const role = actor === 'anon' ? 'anon' : 'authenticated'
@@ -81,7 +88,7 @@ export async function matches(ctx, tournamentId) {
 
 export async function snapshot(ctx) {
   const result = {}
-  for (const table of ['tournaments','tournament_admins','entries','entry_members','players','groups','group_entries','matches','match_sets','live_scores','bracket_versions']) {
+  for (const table of ['tournaments','tournament_admins','entries','entry_members','players','groups','group_entries','matches','match_sets','live_scores','bracket_versions','courts','match_schedule']) {
     result[table] = (await ctx.db.query(`select * from public.${table} order by id`)).rows
   }
   return result

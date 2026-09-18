@@ -1,6 +1,7 @@
 <script setup>
-import { ref } from 'vue'
+import { computed, inject, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { scheduleSummary } from '../lib/schedule'
 
 import { entryMemberNames } from '../lib/entryDisplay'
 import { isByeMatch } from '../lib/bracketDisplay'
@@ -37,7 +38,16 @@ const props = defineProps({
 
 const emit = defineEmits(['swap-slots', 'view-live', 'select-slot'])
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
+
+// Provided by the tournament views: published rows for spectators, the draft for organizers.
+const scheduleView = inject('matchScheduleView', null)
+const scheduleLine = computed(() => {
+  const view = scheduleView?.value
+  const row = view?.byMatch?.[props.match.id]
+  return row ? scheduleSummary(row, { courtsById: view.courtsById, t, locale: locale.value, timeZone: view.timeZone }) : ''
+})
+const scheduleIsDraft = computed(() => Boolean(scheduleView?.value?.draftIds?.has(props.match.id)))
 
 const dragOverKey = ref(null)
 
@@ -247,5 +257,15 @@ function selectSlot(event, side) {
         <span class="match-card__score">{{ pointLabel(liveScore.state, 'a') }}:{{ pointLabel(liveScore.state, 'b') }}</span>
       </button>
     </div>
+    <div v-if="scheduleLine" class="match-card__meta match-card__schedule">
+      <span aria-hidden="true">🕒</span>
+      <span class="match-card__schedule-text">{{ scheduleLine }}</span>
+      <span v-if="scheduleIsDraft" class="badge badge--warn">{{ t('schedule.draft') }}</span>
+    </div>
   </article>
 </template>
+
+<style scoped>
+.match-card__schedule { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 0.8rem; }
+.match-card__schedule-text { overflow-wrap: anywhere; }
+</style>

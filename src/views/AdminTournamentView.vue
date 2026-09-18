@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, provide, reactive, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 
@@ -18,8 +18,14 @@ import TournamentQrModal from '../components/TournamentQrModal.vue'
 import ScoreEditor from '../components/ScoreEditor.vue'
 import ManualEntryForm from '../components/admin/ManualEntryForm.vue'
 import TournamentSettingsForm from '../components/admin/TournamentSettingsForm.vue'
+import ScheduleBoard from '../components/admin/ScheduleBoard.vue'
+import MatchScheduleModal from '../components/admin/MatchScheduleModal.vue'
+import AccessMatrix from '../components/admin/AccessMatrix.vue'
+import { accessError, assignableRoles, canEditMembership, visibilityOf } from '../lib/access'
+import { draftDiff, effectiveSchedule, indexSchedule, scheduleError, timezoneOf } from '../lib/schedule'
 import TournamentMatchList from '../components/TournamentMatchList.vue'
 import { scoringError } from '../lib/tennisRules'
+import { registrationDisplayState, registrationError } from '../lib/registrationRules'
 import { sameForm, cloneForm, matchVersions } from '../lib/formDraft'
 import { useUnsavedChanges, confirmDiscard, withApprovedDeparture } from '../lib/unsavedChanges'
 import { entryMemberNames } from '../lib/entryDisplay'
@@ -75,6 +81,11 @@ useHeaderTitle(() => tournament.value?.name)
 const entries = ref([])
 const matches = ref([])
 const standings = ref([])
+const registration = ref(null)
+const noticeText = ref('')
+const courts = ref([])
+const schedule = ref([])
+const scheduleMatch = ref(null)
 const groups = ref([])
 const groupStandings = ref({}) // group_id -> standings rows
 const groupCount = ref(2)
@@ -129,6 +140,8 @@ const liveScoresByMatch = computed(() => indexLiveScores(liveScores.value))
 
 const pendingEntries = computed(() => entries.value.filter((entry) => entry.status === 'pending'))
 const rejectedEntries = computed(() => entries.value.filter((entry) => entry.status === 'rejected'))
+// Snapshot entries arrive ordered by created_at, so this is the queue order.
+const waitlistedEntries = computed(() => entries.value.filter((entry) => entry.status === 'waitlisted'))
 const approvedEntries = computed(() => entries.value.filter((entry) => entry.status === 'approved'))
 
 const unpairedEntries = computed(() => {
@@ -208,6 +221,31 @@ const canLiveScoreRole = computed(() => ['owner', 'editor', 'counter'].includes(
 const canEditScores = computed(() => scoreAccess.value.scores)
 const canUseLiveScoring = computed(() => scoreAccess.value.live)
 const canEditFinalScores = computed(() => scoreAccess.value.final)
+const regState = computed(() => registrationDisplayState(registration.value, Date.now(), tournament.value))
+const showDeadlineHint = computed(() => canManageTournament.value && regState.value.deadlinePassed && tournament.value?.status === 'registration_open')
+const registrationSummary = computed(() => {
+  const reg = registration.value
+  if (!reg || !canManageTournament.value) return ''
+  const parts = [reg.capacity
+    ? t('registrationRules.adminSummary', { occupied: reg.occupied, capacity: reg.capacity })
+    : t('registrationRules.adminSummaryNoLimit', { occupied: reg.occupied })]
+  if (!isTournamentActive.value && !isTournamentFinished.value) parts.push(t('registrationRules.adminPending', { pending: pendingEntries.value.length }))
+  if (waitlistedEntries.value.length) parts.push(t('registrationRules.waitlistCount', { count: waitlistedEntries.value.length }))
+  return parts.join(' · ')
+})
+const waitlistSeatFree = computed(() => Boolean(registration.value?.capacity) && !registration.value.is_full && waitlistedEntries.value.length > 0)
+const scheduleIndex = computed(() => indexSchedule(schedule.value))
+const scheduleDraftCount = computed(() => draftDiff(schedule.value).count)
+// Organizers see their draft everywhere in the admin page; changed rows are marked.
+provide('matchScheduleView', computed(() => ({
+  byMatch: effectiveSchedule(schedule.value, true),
+  courtsById: Object.fromEntries(courts.value.map(c => [c.id, c])),
+  timeZone: timezoneOf(tournament.value),
+  draftIds: new Set(draftDiff(schedule.value).changed),
+})))
+function rebuildConfirmText(key) {
+  return schedule.value.length ? `${t(key)} ${t('schedule.rebuildLosesSchedule')}` : t(key)
+}
 
 const showStartButton = computed(() => {
   const s = tournament.value?.status
@@ -293,11 +331,15 @@ const snapshotRefresh = createSnapshotRefresh({
     if (adminRows) { admins.value = adminRows; adminListStale = false }
     acceptTournament(data.tournament)
     entries.value = data.entries
+    registration.value = data.registration || null
     matches.value = data.matches
     matchSets.value = data.sets
     liveScores.value = data.live
     if (selectedLiveMatch.value && !data.matches.some(m => m.id === selectedLiveMatch.value.id)) selectedLiveMatch.value = null
     groups.value = data.groups
+    courts.value = data.courts || []
+    schedule.value = data.schedule || []
+    if (scheduleMatch.value && !data.matches.some(m => m.id === scheduleMatch.value.id)) scheduleMatch.value = null
     standings.value = data.standings
     groupStandings.value = data.group_standings
     entryEditState.value = { entries: [...data.entries].sort((a,b) => a.id.localeCompare(b.id)),
@@ -345,12 +387,14 @@ async function updateEntryStatus(entryId, status) {
   if (actionLoading.value) return
   actionLoading.value = true
   errorText.value = ''
+  noticeText.value = ''
   try {
+    // The capacity trigger rejects an approval beyond the limit with registration.full.
     const { error } = await supabase.from('entries').update({ status }).eq('id', entryId)
     if (error) throw error
     await loadAll()
   } catch (error) {
-    errorText.value = scoringError(error?.message, t)
+    errorText.value = registrationError(error?.message, t)
   } finally { actionLoading.value = false }
 }
 
@@ -363,15 +407,65 @@ async function approveAllPending() {
   try {
     if (!(await confirmDialog(t('admin.approveAllConfirm')))) return
     errorText.value = ''
-    const { error } = await supabase
-      .from('entries')
-      .update({ status: 'approved' })
-      .eq('tournament_id', props.id)
-      .eq('status', 'pending')
+    noticeText.value = ''
+    const { data, error } = await supabase.rpc('approve_pending_entries', { p_tournament_id: props.id })
     if (error) throw error
+    noticeText.value = data?.skipped
+      ? t('registrationRules.approveAllResult', { approved: data.approved, skipped: data.skipped })
+      : t('registrationRules.approveAllResultAll', { approved: data?.approved ?? 0 })
     await loadAll()
   } catch (error) {
-    errorText.value = scoringError(error?.message, t)
+    errorText.value = registrationError(error?.message, t)
+  } finally { actionLoading.value = false }
+}
+
+async function saveCourts(list) {
+  if (actionLoading.value) return
+  actionLoading.value = true
+  errorText.value = ''
+  noticeText.value = ''
+  try {
+    const { error } = await supabase.rpc('save_courts', {
+      p_tournament_id: props.id, p_courts: list, p_expected_revision: tournament.value.settings_revision,
+    })
+    if (error) throw error
+    noticeText.value = t('schedule.courtsSaved')
+    await loadAll()
+  } catch (error) {
+    errorText.value = scheduleError(error?.message, t)
+    await loadAll()
+  } finally { actionLoading.value = false }
+}
+
+async function publishSchedule() {
+  if (actionLoading.value) return
+  actionLoading.value = true
+  try {
+    if (!(await confirmDialog(t('schedule.publishConfirm')))) return
+    errorText.value = ''
+    noticeText.value = ''
+    const { data, error } = await supabase.rpc('publish_schedule', { p_tournament_id: props.id })
+    if (error) throw error
+    noticeText.value = t('schedule.publishedOk', { count: data?.published ?? 0 })
+    await loadAll()
+  } catch (error) {
+    errorText.value = scheduleError(error?.message, t)
+  } finally { actionLoading.value = false }
+}
+
+async function revertSchedule() {
+  if (actionLoading.value) return
+  actionLoading.value = true
+  try {
+    if (!(await confirmDialog(t('schedule.revertConfirm'), { danger: true }))) return
+    errorText.value = ''
+    noticeText.value = ''
+    const { error } = await supabase.rpc('revert_schedule_draft', { p_tournament_id: props.id })
+    if (error) throw error
+    noticeText.value = t('schedule.revertedOk')
+    await loadAll()
+  } catch (error) {
+    errorText.value = scheduleError(error?.message, t)
   } finally { actionLoading.value = false }
 }
 
@@ -642,7 +736,7 @@ async function generateBracket() {
 
   actionLoading.value = true
   try {
-    if (hasBracket.value && !(await confirmDialog(t('admin.rebuildConfirm')))) return
+    if (hasBracket.value && !(await confirmDialog(rebuildConfirmText('admin.rebuildConfirm')))) return
     errorText.value = ''
     const { error } = await supabase.rpc(fn, {
       p_tournament_id: props.id,
@@ -660,7 +754,7 @@ async function generateGroups() {
   if (actionLoading.value) return
   actionLoading.value = true
   try {
-    if (hasGroups.value && !(await confirmDialog(t('admin.rebuildConfirm')))) return
+    if (hasGroups.value && !(await confirmDialog(rebuildConfirmText('admin.rebuildConfirm')))) return
     errorText.value = ''
     const { error } = await supabase.rpc('generate_groups', {
       p_tournament_id: props.id,
@@ -692,7 +786,7 @@ async function generateSchedule() {
   if (actionLoading.value) return
   actionLoading.value = true
   try {
-    if (hasBracket.value && !(await confirmDialog(t('admin.rebuildConfirm')))) return
+    if (hasBracket.value && !(await confirmDialog(rebuildConfirmText('admin.rebuildConfirm')))) return
     errorText.value = ''
     const { error } = await supabase.rpc('generate_round_robin', {
       p_tournament_id: props.id,
@@ -708,7 +802,7 @@ async function resetBracket() {
   if (actionLoading.value) return
   actionLoading.value = true
   try {
-    if (!(await confirmDialog(t('admin.resetBracketConfirm'), { danger: true }))) return
+    if (!(await confirmDialog(rebuildConfirmText('admin.resetBracketConfirm'), { danger: true }))) return
     errorText.value = ''
     const { error } = await supabase
       .from('matches')
@@ -832,7 +926,29 @@ async function addAdmin() {
     addAdminForm.role = 'editor'
     await loadAll()
   } catch (error) {
-    errorText.value = scoringError(error?.message, t)
+    errorText.value = accessError(error?.message, t)
+  } finally { actionLoading.value = false }
+}
+
+// The same upsert RPC changes an existing member's role; the server keeps
+// ownership changes to owners and protects the last owner.
+async function changeAdminRole(admin, role) {
+  if (actionLoading.value || !role || role === admin.role) return
+  actionLoading.value = true
+  errorText.value = ''
+  noticeText.value = ''
+  try {
+    const { error } = await supabase.rpc('add_tournament_admin_by_email', {
+      p_tournament_id: props.id,
+      p_email: admin.email,
+      p_role: role,
+    })
+    if (error) throw error
+    noticeText.value = t('access.roleChanged')
+    await loadAll()
+  } catch (error) {
+    errorText.value = accessError(error?.message, t)
+    await loadAll()
   } finally { actionLoading.value = false }
 }
 
@@ -848,9 +964,33 @@ async function removeAdmin(adminId) {
     if (error) throw error
     await loadAll()
   } catch (error) {
-    errorText.value = scoringError(error?.message, t)
+    errorText.value = accessError(error?.message, t)
   } finally { actionLoading.value = false }
 }
+const transferEmail = ref('')
+async function transferOwnership() {
+  if (actionLoading.value || currentUserRole.value !== 'owner') return
+  const email = transferEmail.value.trim()
+  if (!email) return
+  actionLoading.value = true
+  try {
+    if (!(await confirmDialog(t('access.transfer.confirm', { email }), { danger: true }))) return
+    errorText.value = ''
+    noticeText.value = ''
+    const { error } = await supabase.rpc('transfer_tournament_ownership', {
+      p_tournament_id: props.id, p_new_owner_email: email, p_expected_revision: tournament.value.settings_revision,
+    })
+    if (error) throw error
+    transferEmail.value = ''
+    noticeText.value = t('access.transfer.done')
+    await loadAll()
+  } catch (error) {
+    errorText.value = accessError(error?.message, t)
+    await loadAll()
+  } finally { actionLoading.value = false }
+}
+const adminRoleOptions = computed(() => assignableRoles(currentUserRole.value))
+const canEditAdmin = admin => canEditMembership(currentUserRole.value, admin.role) && admin.user_id !== auth.user?.id
 
 async function deleteTournament() {
   if (actionLoading.value) return
@@ -882,7 +1022,7 @@ function statusBadgeClass(status) {
   return 'badge--neutral'
 }
 
-const TABS = ['entries', 'bracket', 'scores', 'settings']
+const TABS = ['entries', 'bracket', 'schedule', 'scores', 'settings']
 
 function isTabEnabled(tab) {
   if (tab === 'bracket') return true
@@ -1050,7 +1190,7 @@ watch(
   { immediate: true },
 )
 
-const hasOtherDrafts = computed(() => Boolean(addAdminForm.email) || addAdminForm.role !== 'editor')
+const hasOtherDrafts = computed(() => Boolean(addAdminForm.email) || addAdminForm.role !== 'editor' || Boolean(transferEmail.value))
 const unregisterDrafts = useUnsavedChanges(() => hasOtherDrafts.value || bracketHasChanges.value || pairingDirty.value,
   () => actionLoading.value || settingsSaving.value)
 
@@ -1060,14 +1200,11 @@ onMounted(async () => {
   await loadAll()
   syncTabFromHash()
 
-  // Wizard redirect with ?qr=1 opens the QR modal once; strip the flag so refresh doesn't reopen it.
-  if (route.query.qr === '1') {
-    if (tournament.value?.slug) {
-      qrModalOpen.value = true
-    }
-    const { qr, ...rest } = route.query
-    router.replace(adminRouteLocation(rest))
-  }
+  // Wizard redirect flags are consumed once; strip them so refresh doesn't repeat them.
+  const { qr, regfail, ...rest } = route.query
+  if (qr === '1' && tournament.value?.slug) qrModalOpen.value = true
+  if (regfail === '1') errorText.value = t('registrationRules.wizardSaveFailed')
+  if (qr !== undefined || regfail !== undefined) router.replace(adminRouteLocation(rest))
 })
 
 onBeforeUnmount(() => {
@@ -1098,6 +1235,9 @@ onBeforeUnmount(() => {
       <div v-if="errorText" class="alert alert--error admin-page-alert" role="alert">
         {{ errorText }}
       </div>
+      <div v-if="noticeText" class="alert alert--info admin-page-alert" role="status">
+        {{ noticeText }}
+      </div>
 
       <section class="card card--elevated admin-tournament-overview stack stack--sm" aria-labelledby="adm-tournament-title">
         <div class="admin-tournament-overview__top">
@@ -1113,7 +1253,10 @@ onBeforeUnmount(() => {
               <span v-if="tournament.format" class="badge badge--neutral">{{ t(`tournamentFormat.${tournament.format}`) }}</span>
               <span v-if="sportCfg.supportsCategory" class="badge badge--neutral">{{ t(`tournament.${tournament.category}`) }}</span>
               <span v-if="sportCfg.supportsSetFormat && tournament.set_format" class="badge badge--neutral">{{ t(`format.${tournament.set_format}`) }}</span>
+              <span v-if="canManageTournament && registration?.is_full" class="badge badge--warn">{{ t('registrationRules.badgeFull') }}</span>
+              <span v-if="showDeadlineHint" class="badge badge--warn">{{ t('registrationRules.badgeDeadline') }}</span>
             </div>
+            <p v-if="registrationSummary" class="muted">{{ registrationSummary }}</p>
             <p v-if="tournament.description" class="muted">{{ tournament.description }}</p>
           </div>
           <div v-if="canManageTournament" class="admin-tournament-overview__actions">
@@ -1165,7 +1308,7 @@ onBeforeUnmount(() => {
 
       </section>
 
-      <p v-if="currentUserRole === 'counter' && isGoalsSport" class="alert alert--info" role="status">{{ t('mobile.finalScoreRole') }}</p>
+      <p v-if="showDeadlineHint" class="alert alert--info" role="status">{{ t('registrationRules.deadlineCloseHint') }}</p>
 
       <div role="tablist" class="tab-group" @keydown="onTabKeydown">
         <button
@@ -1193,6 +1336,20 @@ onBeforeUnmount(() => {
           @click="setTab('bracket')"
         >
           {{ t('admin.tabBracket') }}
+        </button>
+        <button
+          v-if="canManageTournament"
+          id="tab-schedule"
+          role="tab"
+          class="tab"
+          :class="{ 'tab--active': activeTab === 'schedule' }"
+          :aria-selected="activeTab === 'schedule'"
+          :tabindex="activeTab === 'schedule' ? 0 : -1"
+          aria-controls="panel-schedule"
+          @click="setTab('schedule')"
+        >
+          {{ t('schedule.tab') }}
+          <span v-if="scheduleDraftCount" class="tab__badge">{{ scheduleDraftCount }}</span>
         </button>
         <span class="tooltip-wrapper" :data-tooltip="!canEditScores ? t('admin.scoresLockedTooltip') : undefined">
           <button
@@ -1293,6 +1450,44 @@ onBeforeUnmount(() => {
               </div>
             </div>
             <p v-else class="muted">{{ t('admin.noPending') }}</p>
+
+            <div v-if="waitlistedEntries.length" class="waitlist-entries">
+              <h3 class="section-title" style="font-size: 1rem; margin: var(--space-3) 0">
+                {{ t('registrationRules.waitlistSection') }}
+                <span class="badge badge--neutral">{{ waitlistedEntries.length }}</span>
+              </h3>
+              <p v-if="waitlistSeatFree" class="alert alert--info" role="status">
+                {{ t('registrationRules.waitlistSeatFree', { count: waitlistedEntries.length }) }}
+              </p>
+              <div class="stack stack--sm">
+                <div v-for="(entry, index) in waitlistedEntries" :key="entry.id" class="participant-item">
+                  <span class="entry-avatar" :aria-label="String(index + 1)">{{ index + 1 }}</span>
+                  <strong class="entry-name">{{ entryLabel(entry) }}</strong>
+                  <div class="entry-actions">
+                    <button
+                      class="entry-icon-btn entry-icon-btn--approve"
+                      type="button"
+                      :disabled="actionLoading"
+                      :aria-label="t('admin.approve')"
+                      :title="t('admin.approve')"
+                      @click="updateEntryStatus(entry.id, 'approved')"
+                    >
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+                    </button>
+                    <button
+                      class="entry-icon-btn entry-icon-btn--reject"
+                      type="button"
+                      :disabled="actionLoading"
+                      :aria-label="t('admin.reject')"
+                      :title="t('admin.reject')"
+                      @click="updateEntryStatus(entry.id, 'rejected')"
+                    >
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
 
             <details v-if="rejectedEntries.length" class="rejected-entries">
               <summary>
@@ -1808,6 +2003,30 @@ onBeforeUnmount(() => {
       </div>
 
       <div
+        v-show="canManageTournament"
+        id="panel-schedule"
+        role="tabpanel"
+        aria-labelledby="tab-schedule"
+        class="tab-panel"
+        :class="{ 'tab-panel--active': activeTab === 'schedule' }"
+      >
+        <ScheduleBoard
+          v-if="activeTab === 'schedule'"
+          :tournament="tournament"
+          :matches="matches"
+          :entries-map="entriesMap"
+          :courts="courts"
+          :schedule="schedule"
+          :busy="actionLoading || settingsSaving"
+          :can-manage="canManageTournament"
+          @assign="scheduleMatch = $event"
+          @publish="publishSchedule"
+          @revert="revertSchedule"
+          @save-courts="saveCourts"
+        />
+      </div>
+
+      <div
         id="panel-scores"
         role="tabpanel"
         aria-labelledby="tab-scores"
@@ -1890,16 +2109,29 @@ onBeforeUnmount(() => {
         />
 
         <section class="card stack stack--sm" style="margin-top: var(--space-4)">
-          <h2 class="section-title">{{ t('admin.admins') }}</h2>
+          <h2 class="section-title">{{ t('access.whoManages') }}</h2>
+          <AccessMatrix />
+          <div class="divider" />
+          <h3 class="section-title" style="font-size: 1rem; margin: 0">{{ t('admin.admins') }}</h3>
           <div class="stack stack--sm">
             <div v-for="admin in admins" :key="admin.id" class="participant-item">
               <span class="entry-avatar">{{ (admin.email || '?').slice(0, 2).toUpperCase() }}</span>
               <div class="entry-name" style="display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap">
                 <span style="font-size: 0.875rem">{{ admin.email }}</span>
-                <span class="badge badge--neutral">{{ t(`admin.${admin.role}`) }}</span>
+                <select
+                  v-if="canEditAdmin(admin)"
+                  class="input input--inline"
+                  :value="admin.role"
+                  :disabled="actionLoading"
+                  :aria-label="`${t('access.changeRole')}: ${admin.email}`"
+                  @change="changeAdminRole(admin, $event.target.value)"
+                >
+                  <option v-for="role in adminRoleOptions" :key="role" :value="role">{{ t(`admin.${role}`) }}</option>
+                </select>
+                <span v-else class="badge badge--neutral">{{ t(`admin.${admin.role}`) }}</span>
               </div>
               <button
-                v-if="admin.user_id !== auth.user?.id"
+                v-if="canEditAdmin(admin)"
                 class="btn btn--ghost btn--sm"
                 type="button"
                 :disabled="actionLoading"
@@ -1918,9 +2150,7 @@ onBeforeUnmount(() => {
             <div class="form-field">
               <label for="adm-role">{{ t('admin.role') }}</label>
               <select id="adm-role" :disabled="actionLoading" v-model="addAdminForm.role" class="input">
-                <option value="editor">{{ t('admin.editor') }}</option>
-                <option value="counter">{{ t('admin.counter') }}</option>
-                <option value="owner">{{ t('admin.owner') }}</option>
+                <option v-for="role in adminRoleOptions" :key="role" :value="role">{{ t(`admin.${role}`) }}</option>
               </select>
             </div>
           </div>
@@ -1928,6 +2158,26 @@ onBeforeUnmount(() => {
             <button class="btn btn--primary btn--sm" type="button" :disabled="actionLoading || !addAdminForm.email" @click="addAdmin">
               {{ t('admin.add') }}
             </button>
+          </div>
+          <div class="divider" />
+          <h3 class="section-title" style="font-size: 1rem; margin: 0">{{ t('access.whoSees') }}</h3>
+          <p class="muted" style="margin: 0">
+            <strong>{{ t('access.visibility.current', { mode: t(`access.visibility.${visibilityOf(tournament)}`) }) }}</strong>
+            · {{ t(`access.visibility.${visibilityOf(tournament)}Hint`) }}
+          </p>
+        </section>
+
+        <section v-if="currentUserRole === 'owner'" class="card stack stack--sm" style="margin-top: var(--space-4)">
+          <h2 class="section-title" style="margin: 0">{{ t('access.transfer.title') }}</h2>
+          <p class="muted" style="margin: 0">{{ t('access.transfer.hint') }}</p>
+          <div class="grid-2">
+            <div class="form-field">
+              <label for="adm-transfer-email">{{ t('access.transfer.email') }}</label>
+              <input id="adm-transfer-email" v-model="transferEmail" class="input" type="email" autocomplete="off" :disabled="actionLoading" :placeholder="t('admin.adminEmailPlaceholder')" />
+            </div>
+          </div>
+          <div class="inline-actions">
+            <button class="btn btn--danger btn--sm" type="button" :disabled="actionLoading || !transferEmail.trim()" @click="transferOwnership">{{ t('access.transfer.button') }}</button>
           </div>
         </section>
 
@@ -1964,6 +2214,17 @@ onBeforeUnmount(() => {
         @changed="scheduleScoreReload"
       />
 
+      <MatchScheduleModal
+        v-if="scheduleMatch && tournament"
+        :match="scheduleMatch"
+        :current="scheduleIndex.draft[scheduleMatch.id] || null"
+        :courts="courts"
+        :matches="matches"
+        :entries-map="entriesMap"
+        :tournament="tournament"
+        @close="scheduleMatch = null"
+        @saved="scheduleScoreReload"
+      />
       <TournamentQrModal
         v-if="qrModalOpen && tournament.slug"
         :slug="tournament.slug"

@@ -58,15 +58,19 @@ src/
     AdminLayout.vue           # Admin wrapper with nav
     AdminTournamentListView.vue
     AdminTournamentCreateView.vue  # 3-step create wizard
-    AdminTournamentView.vue   # Main admin page (4 tabs: Entries, Bracket/Stage, Scores, Settings) - LARGEST FILE
+    AdminTournamentView.vue   # Main admin page (5 tabs: Entries, Bracket/Stage, Schedule, Scores, Settings) - LARGEST FILE
     AdminSettingsView.vue     # User settings
     PublicTournamentView.vue  # Public tournament page (registration + bracket/standings/groups)
   App.vue                     # Root component
   main.js                     # App entry point
   styles.css                  # Global styles
 supabase/
-  schema.sql                  # CANONICAL DB schema (RLS, functions, triggers). Apply this whole file.
-  migrations/, rollbacks/     # HISTORICAL (org-era). Superseded by schema.sql — do not use.
+  schema.sql                  # CANONICAL DB state (tables, RLS, functions, triggers). Reference + test oracle; NOT an install/upgrade procedure.
+  migrations/                 # ACTIVE: baseline for a new DB + forward migrations (order and SHA-256 in database-release.json)
+  database-release.json       # Release manifest: baseline, historical upgrade chain, forwardMigrations
+  upgrades/                   # Historical upgrade chain (steps 1–8), applied only in manifest order
+  archive/organizations/      # Org-era migrations — incompatible, never apply
+  checks/                     # Read-only verification SQL for a live DB
 ```
 
 ## Routes
@@ -86,9 +90,12 @@ supabase/
 
 - **players** - global person records linked to auth.users (display_name, avatar_url, contact_hash)
 - **platform_admins** - super-admin user_ids; `is_platform_admin()` checks membership
-- **tournaments** - name, slug, **sport**, **format**, category (singles/doubles), status, `set_format` (nullable; sets sports only), is_public, doubles_pairing_mode, **format_config** jsonb (e.g. `group_count`, `advance_per_group`), **scoring_config** jsonb, `created_by` (owner)
-- **tournament_admins** - roles: owner, editor, counter (`counter` can only run live scoring)
-- **entries** - registrations with approval status (pending/approved/rejected), seed_order
+- **tournaments** - name, slug, **sport**, **format**, category (singles/doubles), status, `set_format` (nullable; sets sports only), `visibility` (public/link/private/password; `is_public` is derived from it by trigger and stays the RLS gate), doubles_pairing_mode, **format_config** jsonb, **scoring_config** jsonb, `created_by` (owner), `settings_revision` (CAS for settings writes), contacts + `publish_contact`, registration rules (`registration_capacity`, `capacity_public`, `registration_deadline`, `entry_fee_mode/minor/currency/unit`, `waitlist_enabled`), `schedule_config` jsonb + `schedule_published_at`, `access_password_hash`/`access_password_version` (never granted to API roles)
+- **tournament_admins** - roles: owner, editor, counter (`counter` = "results only": live scoring plus final results/corrections/stop; no management). Writes only via RPC; ownership is granted/removed by owners only; the last owner is protected.
+- **tournament_admin_events** - journal of ownership transfers (admins read, nobody writes directly)
+- **entries** - registrations with approval status (pending/approved/rejected/waitlisted), seed_order. Capacity is enforced by triggers when an entry becomes approved (approved entries occupy seats; pick_random doubles count people).
+- **courts**, **match_schedule** - manual schedule: per-match court and/or time (`fixed` or `not_before`) or court queue; rows exist in `draft` or `published` state, the public sees published only
+- **tournament_access_grants**, **tournament_unlock_attempts** - hashed 12-hour tokens for password pages and lockout counters; no API access
 - **entry_members** - individual member names (doubles = 2), optional `player_id`
 - **groups**, **group_entries** - group-stage buckets (round_robin uses none; groups_playoff uses both)
 - **matches** - canonical aggregate `side_a_score`/`side_b_score` (+ `side_a_pens`/`side_b_pens` for football knockout); `stage` (main/group/winners/losers/grand_final/third_place); `group_id`; winner tree via `next_match_id`/`next_slot`; loser routing via `loser_next_match_id`/`loser_next_slot` (double-elim); unique on `(tournament_id, stage, round_number, match_number)`
@@ -98,7 +105,11 @@ supabase/
 
 ### Key PL/pgSQL Functions
 
-- `create_tournament()` - inserts tournament (forces padel→doubles, football→singles, nulls set_format for goals) + owner row; `register_entry()`
+- `create_tournament()` - inserts tournament (forces padel→doubles, football→singles, nulls set_format for goals) + owner row; `register_entry(..., p_access_token)` returns `{id, status}` (pending or waitlisted) and enforces deadline, capacity and waitlist
+- `tournament_registration_state()`, `approve_pending_entries()` - registration rules; `update_tournament_settings(p_patch, p_expected_revision)` - whitelisted settings write with CAS
+- Schedule: `save_courts()`, `check_match_schedule()`, `set_match_schedule()`, `clear_match_schedule()`, `schedule_draft_conflicts()`, `publish_schedule()`, `revert_schedule_draft()`
+- Access: `add_tournament_admin_by_email()`/`remove_tournament_admin()` (owner rules), `transfer_tournament_ownership()`, `set_tournament_password()`, `tournament_access_mode()`, `unlock_tournament()` (returns `{ok, ...}`), `get_tournament_sync_state_with_token()`
+- `get_tournament_sync_state()` - one RLS-respecting snapshot for public and admin pages (tournament, registration state, entries, matches, sets, live, groups, courts, schedule, standings)
 - `generate_bracket()` / `rebuild_bracket()` - single-elimination; **dispatches to `generate_double_elim()`** when format is double_elimination
 - `generate_single_elim(seeds, stage)` - seed-array tree builder (reused by group playoff)
 - `generate_round_robin()` / `generate_round_robin_matches()` - circle-method all-play-all
@@ -122,7 +133,7 @@ supabase/
 
 ### Realtime
 
-Tables `tournaments`, `entries`, `matches`, `match_sets`, `tournament_admins`, `live_scores` are in `supabase_realtime` publication.
+Tables `tournaments`, `entries`, `matches`, `match_sets`, `tournament_admins`, `live_scores`, `groups`, `group_entries`, `courts`, `match_schedule` are in the `supabase_realtime` publication. Payloads are only invalidation signals: the client re-reads the full snapshot (`src/lib/tournamentSync.js`). Password pages have no Realtime (RLS hides their rows); they poll every 30 s.
 
 ## Key Architecture Patterns
 
@@ -133,6 +144,7 @@ Tables `tournaments`, `entries`, `matches`, `match_sets`, `tournament_admins`, `
 
 ### v1 limitations (documented)
 - Double-elim requires a power-of-two participant count; single grand final (no bracket reset).
+- Schedule conflicts: without match durations a court/participant clash is detected only for identical fixed start times; minimum rest is a warning between start times. No automatic scheduling.
 - Group playoff seeding tuned for `advance_per_group = 2`.
 - Standings head-to-head handles pairwise/group ties; circular ties fall through to goal difference.
 - Football live scoring not implemented (final result entry only).
@@ -169,7 +181,7 @@ Planned/known gaps, roughly by priority. Not implemented yet.
 
 ### Platform
 - Super-admin dashboard (list all tournaments/users; `platform_admins` infra exists, no UI).
-- Data migration tooling (schema is currently apply-from-scratch; no incremental migrations).
+- Adoption of the migration baseline by the existing TENIS project (see `docs/RELEASE.md`); until then new forward migrations are applied to TENIS one by one.
 
 ## Dev Setup
 
@@ -180,7 +192,7 @@ npm run dev      # http://localhost:5173
 npm run build    # Production build to dist/
 ```
 
-DB is applied by running `supabase/schema.sql` whole (Supabase SQL Editor, or psql via session pooler). The free-tier project auto-pauses — resume it in the dashboard if connections fail.
+DB changes follow `docs/RELEASE.md`: create a migration with `npx supabase migration new <name>` (redirect stdin from `/dev/null` in scripts, the CLI reads it), append the same SQL to `supabase/schema.sql` (canonical state), register the file with its SHA-256 in `supabase/database-release.json` (`forwardMigrations`), and keep `npm run test:sql` green in the `schema`, `fresh` and `upgrade` modes (`TENIS_TEST_INSTALL_MODE`). Every forward migration must be replayable (tests re-apply the whole chain). Never re-apply `schema.sql` to a working database. The free-tier project auto-pauses — resume it in the dashboard if connections fail.
 
 ## General Rules
 
@@ -194,7 +206,7 @@ DB is applied by running `supabase/schema.sql` whole (Supabase SQL Editor, or ps
 
 ## Database
 
-- Before referencing DB columns/tables, read `supabase/schema.sql` to confirm they exist (it is canonical; ignore `migrations/`). Never assume column names.
+- Before referencing DB columns/tables, read `supabase/schema.sql` to confirm they exist (it is the canonical state). Never assume column names. New DB changes go into a new file in `supabase/migrations/` plus `schema.sql` plus the manifest — never edit the released baseline or `upgrades/`.
 - Verify RPC function signatures against the schema before calling.
 
 ## Conventions

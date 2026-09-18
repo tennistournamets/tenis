@@ -1,6 +1,6 @@
 <script setup>
 import { tennisRulesSummary } from '../lib/tennisRules'
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 
@@ -11,6 +11,8 @@ import GroupStageBoard from '../components/GroupStageBoard.vue'
 import DoubleElimBoard from '../components/DoubleElimBoard.vue'
 import LiveScoreViewerModal from '../components/LiveScoreViewerModal.vue'
 import RegistrationForm from '../components/RegistrationForm.vue'
+import RegistrationConditions from '../components/RegistrationConditions.vue'
+import TournamentUnlock from '../components/TournamentUnlock.vue'
 import TournamentMatchList from '../components/TournamentMatchList.vue'
 import { entryMemberNames } from '../lib/entryDisplay'
 import { getSportConfig } from '../lib/sportConfig'
@@ -19,8 +21,11 @@ import { useHeaderTitle } from '../lib/headerTitle'
 import { onTabKeydown } from '../lib/tabNavigation'
 import { supabase } from '../lib/supabase'
 import { createSnapshotRefresh, subscribeTournament, subscribeRefreshTriggers } from '../lib/tournamentSync'
-import { createPublicTournamentReader } from '../lib/tournamentRepository'
+import { createPublicTournamentReader, probeTournamentAccess, readProtectedTournamentSnapshot } from '../lib/tournamentRepository'
 import { indexEntries, groupSetsByMatch, indexLiveScores, buildGroupsView } from '../lib/tournamentProjections'
+import { registrationDisplayState, closedReasonKey } from '../lib/registrationRules'
+import { effectiveSchedule, timezoneOf } from '../lib/schedule'
+import { clearAccessToken, isAccessExpiredError, readAccessToken, setRobotsMeta, storeAccessToken, visibilityOf } from '../lib/access'
 
 const props = defineProps({
   slug: {
@@ -51,6 +56,20 @@ useHeaderTitle(() => tournament.value?.name)
 const entries = ref([])
 const matches = ref([])
 const standings = ref([])
+const registration = ref(null)
+const courts = ref([])
+const schedule = ref([])
+// Spectators only ever receive published rows; organizers viewing the public page get the same.
+provide('matchScheduleView', computed(() => ({
+  byMatch: effectiveSchedule(schedule.value, false),
+  courtsById: Object.fromEntries(courts.value.map(c => [c.id, c])),
+  timeZone: timezoneOf(tournament.value),
+  draftIds: new Set(),
+})))
+// Re-evaluated every 30 s so a deadline reached between snapshots closes the form locally.
+const nowTick = ref(Date.now())
+let nowTimer = null
+const regState = computed(() => registrationDisplayState(registration.value, nowTick.value, tournament.value))
 const isRoundRobin = computed(() => tournament.value?.format === 'round_robin')
 const isGroupsPlayoff = computed(() => tournament.value?.format === 'groups_playoff')
 const isDoubleElim = computed(() => tournament.value?.format === 'double_elimination')
@@ -69,6 +88,9 @@ const selectedLiveMatchId = ref(null)
 
 const loading = ref(false)
 const loadError = ref('')
+// Password pages: the grant lives in this tab; RLS still hides the rows, so there is no Realtime and the page polls.
+const accessGrant = ref(readAccessToken(props.slug))
+const accessMode = ref(null)
 const activeTab = ref('registration')
 const registrationDirty = ref(false)
 
@@ -199,9 +221,11 @@ const heroChips = computed(() => {
     chips.push({ icon: '⚙️', label: t(`format.${tournament.value.set_format}`) })
   }
   if (approvedEntries.value.length) {
+    const reg = registration.value
+    const total = reg?.capacity && reg.capacity_public !== false ? ` / ${reg.capacity}` : ''
     chips.push({
       icon: '🙌',
-      label: `${t('tournament.participants')}: ${approvedEntries.value.length}`,
+      label: `${t('tournament.participants')}: ${approvedEntries.value.length}${total}`,
     })
   }
   return chips
@@ -224,6 +248,8 @@ function resetTournamentData() {
   liveScores.value = []
   selectedLiveMatchId.value = null
   standings.value = []; groups.value = []; groupStandings.value = {}
+  registration.value = null
+  courts.value = []; schedule.value = []
 }
 
 function teardownRealtime() {
@@ -241,6 +267,9 @@ function applySnapshot(data) {
   }
   tournament.value = data.tournament
   entries.value = data.entries
+  registration.value = data.registration || null
+  courts.value = data.courts || []
+  schedule.value = data.schedule || []
   matches.value = data.matches
   matchSets.value = data.sets
   liveScores.value = data.live
@@ -259,18 +288,26 @@ async function initialLoad() {
   const request = ++loadVersion
   const slug = props.slug
   loading.value = !tournament.value
-  const read = createPublicTournamentReader(supabase, slug, {
-    onResolve: id => {
-      if (request !== loadVersion) return
-      stopRealtime?.(); stopRealtime = null
-      if (id) setupRealtime(id)
-      else applySnapshot(null)
-    },
-  })
+  const grant = accessGrant.value
+  const read = grant
+    ? () => readProtectedTournamentSnapshot(supabase, grant.tournament_id, grant.token)
+    : createPublicTournamentReader(supabase, slug, {
+      onResolve: id => {
+        if (request !== loadVersion) return
+        stopRealtime?.(); stopRealtime = null
+        if (id) setupRealtime(id)
+        else applySnapshot(null)
+      },
+    })
   refreshQueue = createSnapshotRefresh({
     read,
-    apply: data => { applySnapshot(data); loading.value = false },
-    onError: () => {
+    apply: data => {
+      applySnapshot(data)
+      loading.value = false
+      if (!data && !grant) void probeAccess(slug, request)
+    },
+    onError: error => {
+      if (grant && isAccessExpiredError(error)) { expireAccess(); return }
       syncFailed.value = true
       if (!tournament.value) loadError.value = 'failed'
       loading.value = false
@@ -279,6 +316,34 @@ async function initialLoad() {
   stopRecovery = subscribeRefreshTriggers({ refresh: () => refreshQueue?.request() })
   await refreshQueue.refresh()
   if (request === loadVersion) { loading.value = false; syncDefaultTab() }
+}
+
+async function probeAccess(slug, request) {
+  try {
+    const mode = await probeTournamentAccess(supabase, slug)
+    if (request === loadVersion) accessMode.value = mode
+  } catch { /* the not-found state stays */ }
+}
+
+function expireAccess() {
+  clearAccessToken(props.slug)
+  accessGrant.value = null
+  accessMode.value = 'password'
+  loadVersion++
+  teardownRealtime()
+  resetTournamentData()
+  loadError.value = ''
+  loading.value = false
+}
+
+function onUnlocked(grant) {
+  storeAccessToken(props.slug, grant)
+  accessGrant.value = grant
+  accessMode.value = null
+  loadVersion++
+  teardownRealtime()
+  loadError.value = ''
+  void initialLoad()
 }
 
 function setupRealtime(id) {
@@ -300,7 +365,10 @@ watch(
   { immediate: true },
 )
 
-onMounted(initialLoad)
+onMounted(() => {
+  nowTimer = setInterval(() => { nowTick.value = Date.now() }, 30_000)
+  return initialLoad()
+})
 
 watch(
   () => props.slug,
@@ -310,6 +378,8 @@ watch(
     registrationDirty.value = false
     loadError.value = ''
     pushedLiveMatchId = null
+    accessGrant.value = readAccessToken(props.slug)
+    accessMode.value = null
     resetTournamentData()
     initialLoad()
   },
@@ -322,9 +392,14 @@ watch(
   },
 )
 
+// Only explicitly public tournaments may be indexed; link-only pages ask crawlers to stay away.
+watch(() => (tournament.value ? visibilityOf(tournament.value) : null), mode => setRobotsMeta(mode === 'public'), { immediate: true })
+
 onBeforeUnmount(() => {
   loadVersion++
+  clearInterval(nowTimer); nowTimer = null
   teardownRealtime()
+  setRobotsMeta(true)
 })
 </script>
 
@@ -332,6 +407,10 @@ onBeforeUnmount(() => {
   <div class="stack">
     <section v-if="loading" class="card">
       <p class="muted">{{ t('actions.loading') }}</p>
+    </section>
+
+    <section v-else-if="accessMode === 'password' && !tournament" class="stack">
+      <TournamentUnlock :slug="slug" @unlocked="onUnlocked" />
     </section>
 
     <section v-else-if="loadError && !tournament" class="card empty-state" role="alert">
@@ -346,6 +425,7 @@ onBeforeUnmount(() => {
         {{ t('sync.unavailable') }}
         <button class="btn btn--secondary btn--sm" type="button" @click="initialLoad">{{ t('sync.retry') }}</button>
       </div>
+      <p v-if="accessGrant" class="muted" role="status" style="margin: 0">{{ t('access.unlock.polling') }}</p>
       <section class="card card--elevated pub-hero">
         <span class="pub-hero__icon">{{ heroIcon }}</span>
         <div class="pub-hero__body">
@@ -408,12 +488,20 @@ onBeforeUnmount(() => {
         <div id="pub-registration-panel" role="tabpanel" aria-labelledby="pub-tab-registration">
           <div :class="approvedEntries.length || pendingEntries.length ? 'grid-2' : 'pub-reg-solo'">
             <div class="stack stack--sm">
+              <RegistrationConditions :registration="registration" :tournament="tournament" />
               <RegistrationForm
+                v-if="regState.accepting || regState.waitlistOpen || registrationDirty"
                 :key="tournament.id"
                 :tournament="tournament"
+                :registration="registration"
+                :now="nowTick"
+                :access-token="accessGrant?.token || ''"
                 @dirty="registrationDirty = $event"
                 @submitted="initialLoad"
               />
+              <section v-else class="card">
+                <p class="alert alert--info" role="status" style="margin: 0">{{ t(closedReasonKey(regState.reason)) }}</p>
+              </section>
             </div>
 
             <div v-if="approvedEntries.length || pendingEntries.length" class="card stack stack--sm">

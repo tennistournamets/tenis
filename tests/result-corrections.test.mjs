@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { after,before,test } from 'node:test'
 import { readFile } from 'node:fs/promises'
-import { createDatabase,fixture,asActor,matches,snapshot,assertDeniedUnchanged,winningSets } from './helpers/database.mjs'
+import { createDatabase,fixture,asActor,matches,snapshot,assertDeniedUnchanged,winningSets,reapplyForwardMigrations} from './helpers/database.mjs'
 let ctx
 before(async()=>{ctx=await createDatabase()})
 after(async()=>{await ctx?.db.close()})
@@ -120,9 +120,9 @@ test('correction RPC revalidates malformed results and rolls back all proposed r
  await drop(t)
 })
 
-test('private/public previews and correction writes are restricted to owner/editor; helpers are closed',async()=>{
+test('private/public previews and correction writes are restricted to scoring roles; helpers are closed',async()=>{
  const t=await draw({isPublic:true});await finish(t);const m=(await matches(ctx,t.id))[0],p=await preview(m.id)
- for(const actor of ['anon','outsider','counter','platform_admin']) {
+ for(const actor of ['anon','outsider','platform_admin']) {
   await assertDeniedUnchanged(ctx,actor,'select get_match_correction_preview($1,$2,$3)',[m.id,JSON.stringify(p.result),p.revision])
   await assertDeniedUnchanged(ctx,actor,'select apply_match_correction($1,$2,$3,$4)',[m.id,JSON.stringify(p.result),p.revision,p.token])
  }
@@ -193,12 +193,15 @@ test('another group correction invalidates the qualification preview; active pla
  await drop(t)
 })
 
-test('migration is repeatable without changing tournament data',async()=>{
+test('historical migration is repeatable without changing tournament data; the forward chain restores current definitions',async()=>{
  const t=await draw();await finish(t);const before=await snapshot(ctx)
  const sql=await readFile(new URL('../supabase/upgrades/20260906130008_safe_result_corrections.sql',import.meta.url),'utf8')
  const defs=async()=>(await ctx.db.query("select oid::regprocedure::text signature,pg_get_functiondef(oid) body,proacl::text from pg_proc where pronamespace='public'::regnamespace order by signature")).rows
- const previous=await defs()
- for(let i=0;i<2;i++){await ctx.db.exec(sql);assert.deepEqual(await snapshot(ctx),before);assert.deepEqual(await defs(),previous)}
+ // Stage D deliberately widened get_match_correction_preview to every scoring role, so the
+ // historical patch is compared with its own second application, not with the current state.
+ const current=await defs();let replayed
+ for(let i=0;i<2;i++){await ctx.db.exec(sql);assert.deepEqual(await snapshot(ctx),before);if(i===0)replayed=await defs();else assert.deepEqual(await defs(),replayed)}
+ await reapplyForwardMigrations(ctx);assert.deepEqual(await snapshot(ctx),before);assert.deepEqual(await defs(),current)
  await drop(t)
 })
 
