@@ -14,6 +14,9 @@ import { getSportConfig, resolveCategory } from '../lib/sportConfig'
 import SportPicker from '../components/SportPicker.vue'
 import FormatPicker from '../components/FormatPicker.vue'
 import TennisRulesSettings from '../components/TennisRulesSettings.vue'
+import RegistrationRulesFields from '../components/admin/RegistrationRulesFields.vue'
+import { hasRegistrationRules, pickRegistrationDraft, registrationDraftFields, registrationPatch, validateRegistrationForm } from '../lib/registrationRules'
+import { CREATE_VISIBILITY_MODES } from '../lib/access'
 import { DEFAULT_TENNIS_RULES, tennisRulesSummary } from '../lib/tennisRules'
 
 const { t } = useI18n()
@@ -47,9 +50,13 @@ const form = reactive({
   contact_phone: '',
   contact_email: '',
   is_public: true,
+  visibility: 'link',
   generate_qr: false,
   doubles_pairing_random: false,
+  ...registrationDraftFields({}),
 })
+// is_public stays derived for the QR gate and the preview badge.
+watch(() => form.visibility, mode => { form.is_public = mode !== 'private' }, { immediate: true })
 
 const initialForm = cloneForm(form)
 const hasDraftChanges = () => step.value !== 1 || !sameForm(form, initialForm)
@@ -127,6 +134,13 @@ async function createTournament() {
     await showCreateError(slugInput)
     return
   }
+  const regForm = pickRegistrationDraft(form)
+  const regError = validateRegistrationForm(regForm)
+  if (regError) {
+    errorText.value = t(regError)
+    await showCreateError(formError)
+    return
+  }
   saving.value = true
   const slug = resolvedSlug.value
   const category = effectiveCategory.value
@@ -166,10 +180,27 @@ async function createTournament() {
     }
 
     if (!newId) throw new Error('Missing tournament ID')
+    // Conditions are a settings patch on the fresh row (revision 0); a failure
+    // is reported on the tournament page instead of blocking the created tournament.
+    let rulesFailed = false
+    const extraPatch = {
+      ...(hasRegistrationRules(regForm) ? registrationPatch(regForm, { sport: form.sport, category }) : {}),
+      ...(form.visibility === 'public' ? { visibility: 'public' } : {}),
+    }
+    if (Object.keys(extraPatch).length) {
+      const { error: rulesError } = await supabase.rpc('update_tournament_settings', {
+        p_tournament_id: newId,
+        p_patch: extraPatch,
+        p_expected_revision: 0,
+      })
+      rulesFailed = Boolean(rulesError)
+    }
     clearWizardDraft()
     unregisterDraft()
-    const query = form.is_public && form.generate_qr ? { qr: '1' } : undefined
-    await router.replace({ name: 'admin-tournament', params: { id: newId }, query })
+    const query = {}
+    if (form.is_public && form.generate_qr) query.qr = '1'
+    if (rulesFailed) query.regfail = '1'
+    await router.replace({ name: 'admin-tournament', params: { id: newId }, query: Object.keys(query).length ? query : undefined })
   } catch {
     errorText.value = t('mobile.createFailed')
     await showCreateError(formError)
@@ -215,6 +246,7 @@ onMounted(async () => {
     if (!['singles', 'doubles'].includes(form.category)) form.category = initialForm.category
     if (!['best_of_3', 'best_of_5'].includes(form.set_format)) form.set_format = initialForm.set_format
     if (!['men', 'women'].includes(form.gender)) form.gender = initialForm.gender
+    if (!CREATE_VISIBILITY_MODES.includes(form.visibility)) form.visibility = initialForm.visibility
     step.value = stored.step
     draftRestored.value = hasDraftChanges()
   }
@@ -364,13 +396,24 @@ onMounted(async () => {
         </section>
 
         <section class="wizard__group">
+          <h2 class="wizard__eyebrow">{{ t('registrationRules.wizardSection') }}</h2>
+          <p class="wizard__field-hint">{{ t('registrationRules.wizardHint') }}</p>
+          <RegistrationRulesFields
+            :form="form"
+            :tournament="{ sport: form.sport, category: effectiveCategory, doubles_pairing_mode: form.doubles_pairing_random ? 'pick_random' : 'pre_agreed' }"
+            :disabled="saving"
+            id-prefix="create-reg"
+          />
+        </section>
+
+        <section class="wizard__group">
           <h2 class="wizard__eyebrow">{{ t('admin.wizardPublish') }}</h2>
 
-          <label class="wizard__toggle">
-            <input v-model="form.is_public" type="checkbox" />
+          <label v-for="mode in CREATE_VISIBILITY_MODES" :key="mode" class="wizard__toggle">
+            <input v-model="form.visibility" type="radio" name="create-visibility" :value="mode" />
             <span class="wizard__toggle-body">
-              <span class="wizard__toggle-title">{{ t('admin.isPublic') }}</span>
-              <span class="wizard__toggle-hint">{{ t('admin.isPublicHint') }}</span>
+              <span class="wizard__toggle-title">{{ t(`access.visibility.${mode}`) }}</span>
+              <span class="wizard__toggle-hint">{{ t(`access.visibility.${mode}Hint`) }}</span>
             </span>
           </label>
 

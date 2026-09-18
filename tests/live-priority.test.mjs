@@ -40,11 +40,11 @@ test('missing/null versions fail closed for every scoring mutation',async()=>{
  await assertDeniedUnchanged(ctx,'owner','select update_match_sets($1,$2)',[t.m.id,winningSets],/conflict/)
  await drop(t)
 })
-test('only organiser/editor can stop LIVE; stop preserves points, winner and sets',async()=>{
+test('every scoring role can stop LIVE; stop preserves points, winner and sets',async()=>{
  const t=await draw();await start(t.m.id);await point(t.m.id)
  const prev=await live(t.m.id)
- await assertDeniedUnchanged(ctx,'counter','select stop_live_match($1,$2)',[t.m.id,prev.revision],/Not allowed/)
- await stop(t.m.id,prev.revision,'editor')
+ await assertDeniedUnchanged(ctx,'outsider','select stop_live_match($1,$2)',[t.m.id,prev.revision],/Not allowed/)
+ await stop(t.m.id,prev.revision,'counter')
  const stopped=await live(t.m.id);assert.equal(stopped.status,'stopped');assert.deepEqual(stopped.state,prev.state);assert.deepEqual(stopped.history,prev.history)
  assert.equal((await match(t.m.id)).winner_entry_id,null)
  await assertDeniedUnchanged(ctx,'counter','select record_point($1,$2,$3)',[t.m.id,'a',stopped.revision],/resumeRequired/)

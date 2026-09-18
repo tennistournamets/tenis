@@ -24,6 +24,20 @@ export async function readAdminTournamentSnapshot(client, id, { includeAdmins = 
   return { data, role, adminRows }
 }
 
+/** 'password' when a hidden slug can be opened with a password; null otherwise. */
+export async function probeTournamentAccess(client, slug) {
+  const { data, error } = await client.rpc('tournament_access_mode', { p_slug: slug })
+  if (error) throw error
+  return data || null
+}
+
+/** Snapshot of a password page: the server returns its public projection for a valid token. */
+export async function readProtectedTournamentSnapshot(client, id, token) {
+  const { data, error } = await client.rpc('get_tournament_sync_state_with_token', { p_tournament_id: id, p_token: token })
+  if (error) throw error
+  return data
+}
+
 async function findTournamentId(client, slug) {
   const { data, error } = await client.from('tournaments').select('id').eq('slug', slug).maybeSingle()
   if (error) throw error

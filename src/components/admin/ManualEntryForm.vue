@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { scoringFamily } from '../../lib/sportConfig'
 import { useUnsavedChanges } from '../../lib/unsavedChanges'
 import { supabase } from '../../lib/supabase'
+import { registrationError } from '../../lib/registrationRules'
 
 const props = defineProps({
   tournament: { type: Object, required: true },
@@ -109,7 +110,7 @@ async function addEntryManually() {
       const dup =
         /duplicate key|unique constraint|already exists/i.test(msg) ||
         insertError?.code === '23505'
-      addEntryError.value = dup ? t('admin.addEntryDuplicateContact') : msg || t('errors.generic')
+      addEntryError.value = dup ? t('admin.addEntryDuplicateContact') : registrationError(msg, t, 'errors.generic')
       return
     }
 
@@ -122,7 +123,7 @@ async function addEntryManually() {
 
     if (membersError) {
       await supabase.from('entries').delete().eq('id', entryRow.id)
-      addEntryError.value = membersError.message || t('errors.generic')
+      addEntryError.value = registrationError(membersError.message, t, 'errors.generic')
       return
     }
 
@@ -141,7 +142,7 @@ async function addEntryManually() {
 
     emit('saved')
   } catch (error) {
-    addEntryError.value = error.message || t('errors.generic')
+    addEntryError.value = registrationError(error.message, t, 'errors.generic')
   } finally { actionLoading.value = false }
 }
 

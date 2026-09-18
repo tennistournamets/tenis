@@ -1,9 +1,45 @@
 {
-  "release": "2026-09-08-mobile-step2",
+  "release": "2026-09-17-ownership-password",
   "forwardMigrations": [
     {
       "path": "supabase/migrations/20260908120000_mobile_tournament_details.sql",
       "sha256": "2e22f8e5537a52846ed06a9b56d67a8a2ed1df57eed2642af7a49e34411d2a3e"
+    },
+    {
+      "path": "supabase/migrations/20260917203207_registration_rules.sql",
+      "sha256": "31e34f9e6b1fb37f3b555591e4eacdfdb3fcdc9de266a040da249662358c916a",
+      "tenisAppliedVersion": null,
+      "tenisNote": "Applied 2026-09-18 via psql (session pooler) after logical backup; no migration history entry, like the mobile step."
+    },
+    {
+      "path": "supabase/migrations/20260917204636_waitlist_status.sql",
+      "sha256": "155dbbafbda52f67c26c1c192d89aef705ad69c895c5eff2dd618a4cee2749d0",
+      "tenisAppliedVersion": null,
+      "tenisNote": "Applied 2026-09-18 via psql (session pooler) after logical backup; no migration history entry, like the mobile step."
+    },
+    {
+      "path": "supabase/migrations/20260917204637_waitlist.sql",
+      "sha256": "e9e022eb8bd7d4d0e92d31dd0d85755ac657746237d64ee8f60dce767f6a6c4d",
+      "tenisAppliedVersion": null,
+      "tenisNote": "Applied 2026-09-18 via psql (session pooler) after logical backup; no migration history entry, like the mobile step."
+    },
+    {
+      "path": "supabase/migrations/20260917205649_manual_schedule.sql",
+      "sha256": "937b3d71d2e6470344589814ba6559c8cfa0312ec8738d6adb3d900e27b5c6e7",
+      "tenisAppliedVersion": null,
+      "tenisNote": "Applied 2026-09-18 via psql (session pooler) after logical backup; no migration history entry, like the mobile step."
+    },
+    {
+      "path": "supabase/migrations/20260917211146_roles_and_visibility.sql",
+      "sha256": "ef538f4a9af573c5db5ca6bac3db7049aa4162e75770ef92790d4306a66bc925",
+      "tenisAppliedVersion": null,
+      "tenisNote": "Applied 2026-09-18 via psql (session pooler) after logical backup; no migration history entry, like the mobile step."
+    },
+    {
+      "path": "supabase/migrations/20260917212258_ownership_and_password.sql",
+      "sha256": "494232ad0a1ad128d8b5abd7ec37192848ece3bbba6c294f13566ca4a002d923",
+      "tenisAppliedVersion": null,
+      "tenisNote": "Applied 2026-09-18 via psql (session pooler) after logical backup; no migration history entry, like the mobile step."
     }
   ],
   "baseline": {

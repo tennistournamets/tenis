@@ -198,14 +198,15 @@ test('manual final result requires stopping live and fences its old revisions',a
   await drop(t)
 })
 
-test('internal helpers stay closed to API roles; counter cannot replace the manual score',async()=>{
+test('internal helpers stay closed to API roles; the results role reaches result validation like managers',async()=>{
   const t=await draw()
   for(const actor of ['anon','counter','outsider']){
     for(const call of ["tennis_scoring_rules('{}')","tennis_set_rule('{}',1,2)","tennis_race_result(7,5,7,2)","tennis_set_result('{}','{}')",`tennis_live_state('${t.m.id}','{}',2)`,`tennis_apply_point('{}','a')`]){
       await assertDeniedUnchanged(ctx,actor,`select ${call}`)
     }
   }
-  await assertDeniedUnchanged(ctx,'counter','select update_match_sets($1,$2,(select score_revision from matches where id=$1))',[t.m.id,JSON.stringify(sets([[6,0]]))])
+  // An incomplete result is refused by validation, not by the role check.
+  await assertDeniedUnchanged(ctx,'counter','select update_match_sets($1,$2,(select score_revision from matches where id=$1))',[t.m.id,JSON.stringify(sets([[6,0]]))],/finalRequired/)
   await drop(t)
 })
 

@@ -99,15 +99,19 @@ test('all scoring RPCs reject null and nonexistent match UUIDs without changing 
   }
 })
 
-test('counter cannot submit either manual result RPC', async () => {
+test('the results role (counter) submits manual results like managers but cannot touch settings or entries', async () => {
   const tennis = await bracket()
   const football = await bracket({ sport: 'football' })
-  await assertDeniedUnchanged(ctx, 'counter', 'select update_match_sets($1,$2::jsonb,(select score_revision from matches where id=$1))', [tennis.first.id, winningSets])
-  await assertDeniedUnchanged(ctx, 'counter', 'select update_football_result($1,2,0,null,null,(select score_revision from matches where id=$1))', [football.first.id])
+  await asActor(ctx, 'counter', 'select update_match_sets($1,$2::jsonb,(select score_revision from matches where id=$1))', [tennis.first.id, winningSets])
+  assert.equal((await row(tennis.first.id)).status, 'finished')
+  await asActor(ctx, 'counter', 'select update_football_result($1,2,0,null,null,(select score_revision from matches where id=$1))', [football.first.id])
+  assert.equal((await row(football.first.id)).winner_entry_id, football.first.side_a_entry_id)
+  await assertDeniedUnchanged(ctx, 'counter', 'select update_tournament_settings($1,$2,$3)', [tennis.id, JSON.stringify({ name: 'X' }), 0])
+  await assertDirectWriteDenied('counter', "update entries set status='rejected' where id=$1 returning id", [tennis.entries[0]])
 })
 
-test('owner and editor retain tennis and football result submission and correction', async () => {
-  for (const actor of ['owner', 'editor']) {
+test('owner, editor and the results role retain tennis and football result submission and correction', async () => {
+  for (const actor of ['owner', 'editor', 'counter']) {
     const tennis = await bracket()
     await asActor(ctx, actor, 'select update_match_sets($1,$2::jsonb,(select score_revision from matches where id=$1))', [tennis.first.id, winningSets])
     assert.equal((await row(tennis.first.id)).winner_entry_id, tennis.first.side_a_entry_id)
@@ -124,7 +128,7 @@ test('owner and editor retain tennis and football result submission and correcti
   }
 })
 
-test('all scoring roles retain live points and undo; only managers can stop', async () => {
+test('all scoring roles retain live points, undo and stopping their live match', async () => {
   for (const actor of ['owner', 'editor', 'counter']) {
     const tournament = await bracket()
     const id = tournament.first.id
@@ -140,7 +144,7 @@ test('all scoring roles retain live points and undo; only managers can stop', as
     assert.equal((await live(id)).revision, 1)
     await asActor(ctx, actor, "select record_point($1, 'undo', 1)", [id])
     assert.equal((await live(id)).state.points.a, 0)
-    await asActor(ctx, actor === 'counter' ? 'owner' : actor, 'select stop_live_match($1,(select revision from live_scores where match_id=$1))', [id])
+    await asActor(ctx, actor, 'select stop_live_match($1,(select revision from live_scores where match_id=$1))', [id])
     assert.equal((await live(id)).status, 'stopped')
     await asActor(ctx, actor, 'select start_live_match($1,(select score_revision from matches where id=$1))', [id])
     assert.equal((await live(id)).status, 'active')

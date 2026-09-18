@@ -228,10 +228,11 @@ test('counter, outsider, and anon are refused by tournament-management RPCs with
     for (const fn of ['generate_bracket', 'rebuild_bracket', 'generate_round_robin', 'generate_groups', 'generate_group_playoff']) {
       await assert.rejects(asActor(actor, `select ${fn}($1)`, [id]), /Not allowed|permission denied/, `${actor}: ${fn}`)
     }
+  }
+  // The results role may save scores; strangers may not.
+  for (const actor of ['outsider', 'anon']) {
     await assert.rejects(saveTennis(actor, original[0].id), /Not allowed|permission denied/)
     await assert.rejects(asActor(actor, 'select update_football_result($1,1,0,null,null,(select score_revision from matches where id=$1))', [original[0].id]), /Not allowed|permission denied/)
-  }
-  for (const actor of ['outsider', 'anon']) {
     await assert.rejects(asActor(actor, 'select start_live_match($1,(select score_revision from matches where id=$1))', [original[0].id]), /Not allowed|permission denied/)
     await assert.rejects(asActor(actor, "select record_point($1,'a',(select revision from live_scores where match_id=$1))", [original[0].id]), /Not allowed|permission denied/)
   }

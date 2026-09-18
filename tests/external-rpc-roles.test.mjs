@@ -48,7 +48,7 @@ test('public registration accepts each actor and creates a pending entry with it
   for (const actor of allActors) {
     const contact = `${actor}@registration.example.test`
     const name = `Registered ${actor}`
-    const { rows } = await asActor(ctx, actor, "select register_entry($1, 'singles', $2, $3) as id", [tournament.id, contact, name])
+    const { rows } = await asActor(ctx, actor, "select (register_entry($1, 'singles', $2, $3)->>'id')::uuid as id", [tournament.id, contact, name])
     const registered = (await ctx.db.query(`select e.tournament_id, e.status, e.phone_or_email, em.member_name, em.member_order
       from entries e join entry_members em on em.entry_id=e.id where e.id=$1`, [rows[0].id])).rows
     assert.deepEqual(registered, [{ tournament_id: tournament.id, status: 'pending', phone_or_email: contact, member_name: name, member_order: 1 }])
@@ -153,13 +153,17 @@ test('manual pairing rejects pending, already-paired and wrong-category entries 
   }
 })
 
-test('owner and editor retain equivalent administrator management and email-list access', async () => {
+test('owner and editor manage administrators and read their emails; ownership is granted by owners only', async () => {
   for (const actor of managers) {
     const tournament = await fixture(ctx)
-    for (const role of ['counter', 'editor', 'owner']) {
+    const roles = actor === 'owner' ? ['counter', 'editor', 'owner'] : ['counter', 'editor']
+    for (const role of roles) {
       await asActor(ctx, actor, 'select add_tournament_admin_by_email($1, $2, $3)', [tournament.id, 'outsider@example.test', role])
       const assigned = (await ctx.db.query('select role from tournament_admins where tournament_id=$1 and user_id=$2', [tournament.id, ctx.actors.outsider])).rows
       assert.deepEqual(assigned, [{ role }])
+    }
+    if (actor === 'editor') {
+      await assertDeniedUnchanged(ctx, actor, 'select add_tournament_admin_by_email($1, $2, $3)', [tournament.id, 'outsider@example.test', 'owner'], /access\.ownerOnly/)
     }
     const listed = (await asActor(ctx, actor, 'select * from get_tournament_admins_with_email($1)', [tournament.id])).rows
     assert.equal(listed.length, 4)
@@ -168,7 +172,7 @@ test('owner and editor retain equivalent administrator management and email-list
       assert.equal(member.email, `${Object.keys(ctx.actors).find(name => ctx.actors[name] === member.user_id)}@example.test`)
     }
     const added = listed.find(member => member.user_id === ctx.actors.outsider)
-    assert.equal(added.role, 'owner')
+    assert.equal(added.role, roles.at(-1))
     await asActor(ctx, actor, 'select remove_tournament_admin($1, $2)', [tournament.id, added.id])
     assert.equal((await ctx.db.query('select id from tournament_admins where id=$1', [added.id])).rows.length, 0)
     assert.equal((await asActor(ctx, actor, 'select * from get_tournament_admins_with_email($1)', [tournament.id])).rows.length, 3)

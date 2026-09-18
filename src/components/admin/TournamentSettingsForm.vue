@@ -2,8 +2,11 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import TennisRulesSettings from '../TennisRulesSettings.vue'
+import RegistrationRulesFields from './RegistrationRulesFields.vue'
 import { getSportConfig } from '../../lib/sportConfig'
-import { scoringError } from '../../lib/tennisRules'
+import { REGISTRATION_DRAFT_KEYS, pickRegistrationDraft, registrationDraftFields, registrationPatch, validateRegistrationForm } from '../../lib/registrationRules'
+import { COMMON_TIMEZONES, browserTimezone } from '../../lib/schedule'
+import { VISIBILITY_MODES, accessError, visibilityOf } from '../../lib/access'
 import { useFormDraft, cloneForm, matchVersions } from '../../lib/formDraft'
 import { confirmDialog } from '../../lib/confirmDialog'
 import { useUnsavedChanges, confirmDiscard } from '../../lib/unsavedChanges'
@@ -21,8 +24,11 @@ const { t } = useI18n()
 function settingsFields(data) {
   return { name: data.name, slug: data.slug || '', description: data.description || '', category: data.category,
     set_format: data.set_format, scoring_config: cloneForm(data.scoring_config || {}),
-    doubles_pairing_mode: data.doubles_pairing_mode || 'pre_agreed', status: data.status, is_public: Boolean(data.is_public),
-    contact_phone: data.contact_phone || '', contact_email: data.contact_email || '', publish_contact: Boolean(data.publish_contact) }
+    doubles_pairing_mode: data.doubles_pairing_mode || 'pre_agreed', status: data.status, visibility: visibilityOf(data),
+    contact_phone: data.contact_phone || '', contact_email: data.contact_email || '', publish_contact: Boolean(data.publish_contact),
+    ...registrationDraftFields(data),
+    schedule_min_rest: data.schedule_config?.min_rest_minutes == null ? '' : String(data.schedule_config.min_rest_minutes),
+    schedule_timezone: data.schedule_config?.timezone || '' }
 }
 const settingsDraft = useFormDraft(settingsFields(props.tournament))
 const settingsForm = settingsDraft.form
@@ -30,6 +36,10 @@ const settingsSaving = settingsDraft.saving
 const settingsConflict = settingsDraft.conflict
 const hasTournamentSettingsChanges = settingsDraft.dirty
 const settingsError = ref('')
+// The password is never part of the draft or the snapshot; only whether one exists.
+const passwordDraft = ref('')
+const passwordSet = computed(() => props.tournament.access_password_set === true)
+const canSaveSettings = computed(() => hasTournamentSettingsChanges.value || Boolean(passwordDraft.value.trim()))
 const statusValue = computed({ get: () => settingsForm.status, set: value => { settingsForm.status = value } })
 const isTournamentActive = computed(() => props.tournament.status === 'in_progress')
 const isTournamentFinished = computed(() => props.tournament.status === 'completed')
@@ -53,18 +63,61 @@ async function reloadSettings() {
   finally { settingsSaving.value = false }
 }
 
+async function removePassword() {
+  if (settingsSaving.value || props.busy || !props.canManage) return
+  if (settingsForm.visibility === 'password' || props.tournament.visibility === 'password') { settingsError.value = t('access.errors.passwordRequired'); return }
+  if (!(await confirmDialog(t('access.password.removeConfirm'), { danger: true }))) return
+  settingsSaving.value = true
+  settingsError.value = ''
+  try {
+    const { data, error } = await supabase.rpc('set_tournament_password', {
+      p_tournament_id: props.tournament.id, p_password: null, p_expected_revision: settingsDraft.revision.value,
+    })
+    if (error) throw error
+    emit('saved', { ...props.tournament, settings_revision: data.settings_revision, access_password_set: false })
+    await props.refresh()
+  } catch (error) {
+    settingsError.value = accessError(error.message, t, 'drafts.unavailable')
+  } finally { settingsSaving.value = false }
+}
+
 async function saveTournamentSettings() {
-  if (settingsSaving.value || props.busy || !props.canManage || !hasTournamentSettingsChanges.value) return
+  if (settingsSaving.value || props.busy || !props.canManage || !canSaveSettings.value) return
   if (settingsConflict.value) { settingsError.value = t('drafts.conflict'); return }
   const submitted = cloneForm(settingsForm)
-  const revision = settingsDraft.revision.value
+  let revision = settingsDraft.revision.value
+  const newPassword = passwordDraft.value.trim()
+  if (submitted.visibility === 'password' && !passwordSet.value && !newPassword) { settingsError.value = t('access.errors.passwordRequired'); return }
+  if (newPassword && (newPassword.length < 4 || newPassword.length > 72)) { settingsError.value = t('access.errors.passwordTooShort'); return }
   const categoryChanged = submitted.category !== settingsDraft.baseline.value.category
   const expectedMatches = matchVersions(props.matches)
+  const regForm = pickRegistrationDraft(submitted)
+  const regError = validateRegistrationForm(regForm)
+  if (regError) { settingsError.value = t(regError); return }
+  const minRest = String(submitted.schedule_min_rest ?? '').trim()
+  if (minRest !== '' && !/^\d+$/.test(minRest)) { settingsError.value = t('schedule.errors.invalidConfig'); return }
+  const deadlineChanged = regForm.registration_deadline !== settingsDraft.baseline.value.registration_deadline
   settingsSaving.value = true
   settingsError.value = ''
   try {
     if (categoryChanged && props.matches.length && !(await confirmDialog(t('drafts.categoryReset'), { danger: true }))) return
     const { slug, ...patch } = submitted
+    if (newPassword) {
+      const { data: pw, error: pwError } = await supabase.rpc('set_tournament_password', {
+        p_tournament_id: props.tournament.id, p_password: newPassword, p_expected_revision: revision,
+      })
+      if (pwError) throw pwError
+      revision = pw.settings_revision
+      passwordDraft.value = ''
+    }
+    for (const key of REGISTRATION_DRAFT_KEYS) delete patch[key]
+    Object.assign(patch, registrationPatch(regForm, props.tournament))
+    delete patch.schedule_min_rest; delete patch.schedule_timezone
+    patch.schedule_config = {}
+    if (minRest !== '') patch.schedule_config.min_rest_minutes = Number(minRest)
+    if (submitted.schedule_timezone.trim()) patch.schedule_config.timezone = submitted.schedule_timezone.trim()
+    if (deadlineChanged && patch.registration_deadline && new Date(patch.registration_deadline).getTime() <= Date.now()
+      && !(await confirmDialog(t('registrationRules.deadlinePastConfirm')))) return
     patch.description = patch.description || null
     patch.contact_phone = patch.contact_phone?.trim() || null
     patch.contact_email = patch.contact_email?.trim() || null
@@ -76,10 +129,10 @@ async function saveTournamentSettings() {
     })
     if (error) throw error
     settingsDraft.accepted(settingsFields(data), data.settings_revision, submitted)
-    emit('saved', data)
+    emit('saved', { ...data, access_password_set: newPassword ? true : props.tournament.access_password_set })
     if (categoryChanged) await props.refresh()
   } catch (error) {
-    settingsError.value = scoringError(error.message, t)
+    settingsError.value = accessError(error.message, t, 'drafts.unavailable')
     try { await props.refresh() } catch { /* Keep the draft and original error. */ }
   } finally { settingsSaving.value = false }
 }
@@ -140,6 +193,27 @@ async function saveTournamentSettings() {
       </label>
     </fieldset>
 
+    <RegistrationRulesFields :form="settingsForm" :tournament="tournament" :disabled="formDisabled" id-prefix="adm-reg" />
+
+    <fieldset class="contact-settings" :disabled="formDisabled">
+      <legend>{{ t('schedule.settingsTitle') }}</legend>
+      <div class="grid-2">
+        <div class="form-field">
+          <label for="adm-min-rest">{{ t('schedule.minRest') }}</label>
+          <input id="adm-min-rest" v-model="settingsForm.schedule_min_rest" class="input" type="number" min="0" step="1" inputmode="numeric" aria-describedby="adm-min-rest-hint" />
+          <p id="adm-min-rest-hint" class="muted settings-hint">{{ t('schedule.minRestHint') }}</p>
+        </div>
+        <div class="form-field">
+          <label for="adm-timezone">{{ t('schedule.timezone') }}</label>
+          <input id="adm-timezone" v-model="settingsForm.schedule_timezone" class="input" type="text" list="adm-timezone-list" autocomplete="off" :placeholder="browserTimezone()" aria-describedby="adm-timezone-hint" />
+          <datalist id="adm-timezone-list">
+            <option v-for="zone in COMMON_TIMEZONES" :key="zone" :value="zone" />
+          </datalist>
+          <p id="adm-timezone-hint" class="muted settings-hint">{{ t('schedule.timezoneHint') }}</p>
+        </div>
+      </div>
+    </fieldset>
+
     <p class="muted" style="font-size: var(--font-sm)">
       {{ t('sport.' + (tournament.sport || 'tennis')) }} · {{ t('tournamentFormat.' + (tournament.format || 'single_elimination')) }}
     </p>
@@ -187,17 +261,32 @@ async function saveTournamentSettings() {
         </select>
       </div>
 
-      <label class="checkbox-row admin-settings-fields__public" for="adm-public">
-        <input id="adm-public" v-model="settingsForm.is_public" type="checkbox" :disabled="formDisabled" />
-        {{ t('admin.isPublic') }}
-      </label>
+      <fieldset class="visibility-modes admin-settings-fields__public" :disabled="formDisabled">
+        <legend>{{ t('access.whoSees') }}</legend>
+        <label v-for="mode in VISIBILITY_MODES" :key="mode" class="visibility-modes__option" :for="`adm-visibility-${mode}`">
+          <input :id="`adm-visibility-${mode}`" v-model="settingsForm.visibility" type="radio" name="adm-visibility" :value="mode" />
+          <span>
+            <strong>{{ t(`access.visibility.${mode}`) }}</strong>
+            <span class="muted visibility-modes__hint">{{ t(`access.visibility.${mode}Hint`) }}</span>
+          </span>
+        </label>
+        <div v-if="settingsForm.visibility === 'password' || passwordSet" class="visibility-modes__password">
+          <p class="muted" style="margin: 0">{{ t(passwordSet ? 'access.password.set' : 'access.password.notSet') }}</p>
+          <div class="form-field">
+            <label for="adm-page-password">{{ t('access.password.newLabel') }}</label>
+            <input id="adm-page-password" v-model="passwordDraft" class="input" type="password" autocomplete="new-password" minlength="4" maxlength="72" aria-describedby="adm-page-password-hint" />
+            <p id="adm-page-password-hint" class="muted settings-hint">{{ t('access.password.hint') }}</p>
+          </div>
+          <button v-if="passwordSet && settingsForm.visibility !== 'password'" class="btn btn--ghost btn--sm" type="button" :disabled="formDisabled" @click="removePassword">{{ t('access.password.remove') }}</button>
+        </div>
+      </fieldset>
     </div>
 
     <footer class="admin-settings-card__footer">
       <button
         class="btn btn--primary"
         type="button"
-        :disabled="busy || settingsSaving || !canManage || settingsConflict || !hasTournamentSettingsChanges"
+        :disabled="busy || settingsSaving || !canManage || settingsConflict || !canSaveSettings"
         @click="saveTournamentSettings"
       >
         {{ t('admin.saveStatus') }}
@@ -210,4 +299,11 @@ async function saveTournamentSettings() {
 <style scoped>
 .contact-settings { margin: 0; padding: 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); }
 .contact-settings legend { padding: 0 6px; font-weight: 750; }
+.settings-hint { margin: 4px 0 0; font-size: 0.82rem; line-height: 1.4; }
+.visibility-modes { margin: 0; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); display: grid; gap: 10px; }
+.visibility-modes legend { padding: 0 6px; font-weight: 750; }
+.visibility-modes__option { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: start; cursor: pointer; }
+.visibility-modes__option input { margin-top: 3px; }
+.visibility-modes__hint { display: block; font-size: 0.82rem; line-height: 1.4; }
+.visibility-modes__password { display: grid; gap: 8px; padding-top: 6px; border-top: 1px solid var(--border); }
 </style>

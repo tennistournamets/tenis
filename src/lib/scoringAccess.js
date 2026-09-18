@@ -1,12 +1,14 @@
 import { sportConfig } from './sportConfig.js'
 
-// Mirrors the existing RPC permissions: counters operate live scoring;
-// only tournament managers can submit/correct a final result.
+// Mirrors the RPC permissions: every scoring role (owner, editor, results-only
+// `counter`) runs live scoring and saves or corrects final results; only
+// managers (owner, editor) touch settings, entries, brackets and access.
 export function scoringAccess(tournament, role) {
   const manager = role === 'owner' || role === 'editor'
+  const scorer = manager || role === 'counter'
   const active = tournament?.status === 'in_progress'
-  const live = Boolean(active && (manager || role === 'counter') && sportConfig[tournament?.sport]?.supportsLiveScoring)
-  const final = Boolean(active && manager && sportConfig[tournament?.sport])
+  const live = Boolean(active && scorer && sportConfig[tournament?.sport]?.supportsLiveScoring)
+  const final = Boolean(active && scorer && sportConfig[tournament?.sport])
   return { manager, live, final, scores: live || final }
 }
 

@@ -1,6 +1,7 @@
 <script setup>
-import { computed, ref, useId, watch } from 'vue'
+import { computed, inject, ref, useId, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { compareBySchedule, scheduleSummary } from '../lib/schedule'
 
 import { entryMemberNames } from '../lib/entryDisplay'
 import { formatSetScore } from '../lib/tennisRules'
@@ -16,11 +17,23 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['edit-result', 'view-live'])
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const titleId = useId()
 const search = ref('')
 const statusFilter = ref('current')
 const stageFilter = ref('all')
+const sortByTime = ref(false)
+
+// Schedule rows arrive from the tournament view (published for spectators, draft for organizers).
+const scheduleView = inject('matchScheduleView', null)
+const scheduleRow = match => scheduleView?.value?.byMatch?.[match.id] || null
+const hasSchedule = computed(() => Object.keys(scheduleView?.value?.byMatch || {}).length > 0)
+function scheduleLine(match) {
+  const view = scheduleView?.value
+  const row = scheduleRow(match)
+  return row ? scheduleSummary(row, { courtsById: view.courtsById, t, locale: locale.value, timeZone: view.timeZone }) : ''
+}
+const scheduleIsDraft = match => Boolean(scheduleView?.value?.draftIds?.has(match.id))
 
 const stageOrder = { group: 0, winners: 1, main: 1, losers: 2, grand_final: 3, third_place: 4 }
 
@@ -89,6 +102,10 @@ const visibleMatches = computed(() => {
       return `${teamLabel(match.side_a_entry_id)} ${teamLabel(match.side_b_entry_id)}`.toLocaleLowerCase().includes(needle)
     })
     .sort((a, b) => {
+      if (sortByTime.value) {
+        const byTime = compareBySchedule(scheduleRow(a), scheduleRow(b))
+        if (byTime) return byTime
+      }
       const stateOrder = { live: 0, ready: 1, waiting: 2, finished: 3 }
       return stateOrder[matchState(a)] - stateOrder[matchState(b)]
         || (stageOrder[a.stage] ?? 8) - (stageOrder[b.stage] ?? 8)
@@ -127,6 +144,16 @@ const visibleMatches = computed(() => {
         >
           {{ t(`mobile.matchFilter.${value}`) }}
         </button>
+        <button
+          v-if="hasSchedule"
+          type="button"
+          class="match-filter"
+          :class="{ 'match-filter--active': sortByTime }"
+          :aria-pressed="sortByTime"
+          @click="sortByTime = !sortByTime"
+        >
+          🕒 {{ t('schedule.sortByTime') }}
+        </button>
       </div>
 
       <label v-if="stages.length > 1" class="match-center__stage">
@@ -152,6 +179,10 @@ const visibleMatches = computed(() => {
           </span>
           <span class="mobile-match__status"><i aria-hidden="true"></i>{{ stateLabel(match) }}</span>
         </header>
+        <p v-if="scheduleLine(match)" class="mobile-match__schedule">
+          <span aria-hidden="true">🕒</span> {{ scheduleLine(match) }}
+          <span v-if="scheduleIsDraft(match)" class="badge badge--warn">{{ t('schedule.draft') }}</span>
+        </p>
 
         <div class="mobile-match__teams">
           <strong :class="{ 'mobile-match__winner': match.winner_entry_id === match.side_a_entry_id }">{{ teamLabel(match.side_a_entry_id) }}</strong>
@@ -227,6 +258,7 @@ const visibleMatches = computed(() => {
 .mobile-match--live .mobile-match__status { color: #dc2626; }
 .mobile-match--live .mobile-match__status i { background: #ef4444; box-shadow: 0 0 0 4px rgb(239 68 68 / 12%); }
 .mobile-match--ready .mobile-match__status i { background: var(--primary); }
+.mobile-match__schedule { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 10px 0 0; color: var(--text); font-size: .86rem; font-weight: 600; }
 .mobile-match__teams { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 9px; margin-top: 13px; }
 .mobile-match__teams strong { min-width: 0; overflow-wrap: anywhere; font-size: .98rem; line-height: 1.32; }
 .mobile-match__teams strong:last-child { text-align: right; }
