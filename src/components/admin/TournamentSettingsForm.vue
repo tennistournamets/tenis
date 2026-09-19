@@ -36,9 +36,40 @@ const settingsSaving = settingsDraft.saving
 const settingsConflict = settingsDraft.conflict
 const hasTournamentSettingsChanges = settingsDraft.dirty
 const settingsError = ref('')
-// The password is never part of the draft or the snapshot; only whether one exists.
+// The password is never part of the draft or the snapshot; only whether one
+// exists. The code itself is read on demand through an organizer-only RPC.
 const passwordDraft = ref('')
 const passwordSet = computed(() => props.tournament.access_password_set === true)
+const currentPassword = ref('')
+const passwordShown = ref(false)
+const passwordCopied = ref(false)
+const passwordCopyFailed = ref(false)
+// Codes set before the page could show them were only ever stored as a hash.
+const passwordUnreadable = computed(() => passwordSet.value && !currentPassword.value)
+const maskedPassword = computed(() => '•'.repeat(Math.min(currentPassword.value.length, 24)))
+
+async function loadCurrentPassword() {
+  passwordShown.value = false
+  if (!passwordSet.value) { currentPassword.value = ''; return }
+  const { data, error } = await supabase.rpc('tournament_password', { p_tournament_id: props.tournament.id })
+  currentPassword.value = error ? '' : (data || '')
+}
+watch(passwordSet, loadCurrentPassword, { immediate: true })
+
+async function copyPassword() {
+  passwordCopied.value = false
+  passwordCopyFailed.value = false
+  try {
+    if (typeof navigator === 'undefined' || typeof navigator.clipboard?.writeText !== 'function') throw new Error('unavailable')
+    await navigator.clipboard.writeText(currentPassword.value)
+    passwordCopied.value = true
+    setTimeout(() => { passwordCopied.value = false }, 2000)
+  } catch {
+    // Without the clipboard the organizer can still reveal and select the code.
+    passwordCopyFailed.value = true
+    passwordShown.value = true
+  }
+}
 const canSaveSettings = computed(() => hasTournamentSettingsChanges.value || Boolean(passwordDraft.value.trim()))
 const statusValue = computed({ get: () => settingsForm.status, set: value => { settingsForm.status = value } })
 const isTournamentActive = computed(() => props.tournament.status === 'in_progress')
@@ -74,6 +105,8 @@ async function removePassword() {
       p_tournament_id: props.tournament.id, p_password: null, p_expected_revision: settingsDraft.revision.value,
     })
     if (error) throw error
+    currentPassword.value = ''
+    passwordShown.value = false
     emit('saved', { ...props.tournament, settings_revision: data.settings_revision, access_password_set: false })
     await props.refresh()
   } catch (error) {
@@ -109,6 +142,8 @@ async function saveTournamentSettings() {
       if (pwError) throw pwError
       revision = pw.settings_revision
       passwordDraft.value = ''
+      currentPassword.value = newPassword
+      passwordShown.value = false
     }
     for (const key of REGISTRATION_DRAFT_KEYS) delete patch[key]
     Object.assign(patch, registrationPatch(regForm, props.tournament))
@@ -271,13 +306,50 @@ async function saveTournamentSettings() {
           </span>
         </label>
         <div v-if="settingsForm.visibility === 'password' || passwordSet" class="visibility-modes__password">
-          <p class="muted" style="margin: 0">{{ t(passwordSet ? 'access.password.set' : 'access.password.notSet') }}</p>
+          <p v-if="!passwordSet" class="muted" style="margin: 0">{{ t('access.password.notSet') }}</p>
+          <div v-else class="page-password">
+            <span id="adm-page-password-current" class="page-password__label">{{ t('access.password.current') }}</span>
+            <output v-if="!passwordUnreadable" class="page-password__value" :class="{ 'page-password__value--hidden': !passwordShown }" aria-labelledby="adm-page-password-current">
+              {{ passwordShown ? currentPassword : maskedPassword }}
+            </output>
+            <span v-else class="page-password__legacy muted">{{ t('access.password.unreadable') }}</span>
+            <div v-if="!passwordUnreadable" class="page-password__actions">
+              <button
+                class="page-password__btn" type="button"
+                :aria-label="t(passwordShown ? 'access.password.hide' : 'access.password.show')"
+                :title="t(passwordShown ? 'access.password.hide' : 'access.password.show')"
+                :aria-pressed="passwordShown"
+                @click="passwordShown = !passwordShown"
+              >
+                <svg v-if="passwordShown" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.9 4.24A9.1 9.1 0 0 1 12 4c7 0 10 8 10 8a18.5 18.5 0 0 1-2.16 3.19M6.61 6.61A18.5 18.5 0 0 0 2 12s3 8 10 8a9.1 9.1 0 0 0 5.39-1.61"/><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/><path d="m2 2 20 20"/></svg>
+                <svg v-else width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3-8 10-8 10 8 10 8-3 8-10 8-10-8-10-8Z"/><circle cx="12" cy="12" r="3"/></svg>
+              </button>
+              <button
+                class="page-password__btn" type="button"
+                :aria-label="t('access.password.copy')" :title="t('access.password.copy')"
+                @click="copyPassword"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
+              </button>
+              <span class="tooltip-wrapper" :data-tooltip="settingsForm.visibility === 'password' ? t('access.password.removeBlocked') : undefined">
+                <button
+                  class="page-password__btn page-password__btn--danger" type="button"
+                  :aria-label="t('access.password.remove')" :title="t('access.password.remove')"
+                  :disabled="formDisabled || settingsForm.visibility === 'password'"
+                  @click="removePassword"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M10 11v6M14 11v6"/></svg>
+                </button>
+              </span>
+            </div>
+            <p v-if="passwordCopied" class="page-password__note success-text" role="status">{{ t('access.password.copied') }}</p>
+            <p v-else-if="passwordCopyFailed" class="page-password__note error-text" role="status">{{ t('access.password.copyFailed') }}</p>
+          </div>
           <div class="form-field">
-            <label for="adm-page-password">{{ t('access.password.newLabel') }}</label>
+            <label for="adm-page-password">{{ t(passwordSet ? 'access.password.changeLabel' : 'access.password.newLabel') }}</label>
             <input id="adm-page-password" v-model="passwordDraft" class="input" type="password" autocomplete="new-password" minlength="4" maxlength="72" aria-describedby="adm-page-password-hint" />
             <p id="adm-page-password-hint" class="muted settings-hint">{{ t('access.password.hint') }}</p>
           </div>
-          <button v-if="passwordSet && settingsForm.visibility !== 'password'" class="btn btn--ghost btn--sm" type="button" :disabled="formDisabled" @click="removePassword">{{ t('access.password.remove') }}</button>
         </div>
       </fieldset>
     </div>
@@ -306,4 +378,18 @@ async function saveTournamentSettings() {
 .visibility-modes__option input { margin-top: 3px; }
 .visibility-modes__hint { display: block; font-size: 0.82rem; line-height: 1.4; }
 .visibility-modes__password { display: grid; gap: 8px; padding-top: 6px; border-top: 1px solid var(--border); }
+.page-password { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.page-password__label { font-size: 0.84rem; color: var(--text-muted); }
+.page-password__value { font-family: var(--font-mono); font-size: 0.95rem; letter-spacing: 0.04em; overflow-wrap: anywhere; }
+.page-password__value--hidden { letter-spacing: 0.18em; }
+.page-password__legacy { font-size: 0.84rem; flex: 1 1 100%; }
+.page-password__actions { display: flex; align-items: center; gap: 2px; }
+.page-password__btn {
+  display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px;
+  border: 0; border-radius: 999px; background: transparent; color: var(--text-muted); cursor: pointer;
+}
+.page-password__btn:hover:not(:disabled) { background: var(--surface-hover); color: var(--text); }
+.page-password__btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.page-password__btn--danger:hover:not(:disabled) { background: var(--danger-bg); color: var(--danger); }
+.page-password__note { flex: 1 1 100%; margin: 0; font-size: 0.82rem; }
 </style>

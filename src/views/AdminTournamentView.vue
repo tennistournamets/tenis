@@ -376,7 +376,11 @@ function setupRealtime() {
     client: supabase, id: props.id, name: 'admin',
     getState: () => ({ entries: entries.value, matches: matches.value, sets: matchSets.value, live: liveScores.value, groups: groups.value }),
     refresh: payload => {
-      if (!payload || payload.table === 'tournament_admins') adminListStale = true
+      // The 30 s recovery poll fires with no payload. On a healthy channel it
+      // cannot have missed a membership change, so re-reading the co-organizer
+      // list every half minute is pure traffic; after a drop or a rejoin the
+      // channel may well have missed one, and syncFailed marks exactly that.
+      if (payload?.table === 'tournament_admins' || syncFailed.value) adminListStale = true
       snapshotRefresh.request()
     },
     onStatus: status => { if (status !== 'SUBSCRIBED') syncFailed.value = true },
@@ -433,6 +437,43 @@ async function saveCourts(list) {
     await loadAll()
   } catch (error) {
     errorText.value = scheduleError(error?.message, t)
+    await loadAll()
+  } finally { actionLoading.value = false }
+}
+
+// One drop is one RPC. Warnings are applied and then reported by the draft
+// conflicts panel, so the gesture is never interrupted by a dialog; hard
+// conflicts are still the server's to refuse.
+async function moveScheduleItem(action) {
+  if (!action || actionLoading.value) return
+  actionLoading.value = true
+  errorText.value = ''
+  noticeText.value = ''
+  try {
+    const call = action.kind === 'clear'
+      ? supabase.rpc('clear_match_schedule', { p_match_id: action.matchId })
+      : action.kind === 'assign'
+        ? supabase.rpc('set_match_schedule', {
+          p_match_id: action.matchId,
+          p_court_id: action.courtId,
+          p_scheduled_at: action.scheduledAt,
+          p_time_kind: action.timeKind,
+          p_queue_order: null,
+          p_ignore_warnings: true,
+        })
+        : supabase.rpc('place_match_in_court_queue', {
+          p_match_id: action.matchId,
+          p_court_id: action.courtId,
+          p_order: action.order,
+          p_ignore_warnings: true,
+        })
+    const { error } = await call
+    if (error) throw error
+    noticeText.value = t('schedule.movedOk')
+    await loadAll()
+  } catch (error) {
+    errorText.value = scheduleError(error?.message, t)
+    // A refused move must leave the board showing the server's truth.
     await loadAll()
   } finally { actionLoading.value = false }
 }
@@ -2017,12 +2058,14 @@ onBeforeUnmount(() => {
           :entries-map="entriesMap"
           :courts="courts"
           :schedule="schedule"
+          :live-scores-by-match="liveScoresByMatch"
           :busy="actionLoading || settingsSaving"
           :can-manage="canManageTournament"
           @assign="scheduleMatch = $event"
           @publish="publishSchedule"
           @revert="revertSchedule"
           @save-courts="saveCourts"
+          @move="moveScheduleItem"
         />
       </div>
 

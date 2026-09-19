@@ -129,6 +129,76 @@ export function conflictText(conflict, t, matchLabel = () => '') {
 
 export const hasHardConflict = conflicts => (conflicts || []).some(c => c.severity === 'hard')
 
+// publish_schedule deliberately publishes a draft despite these two: they mark
+// matches that can no longer move, not a clash the organizer could resolve.
+// Without the same exemption here, the first finished match would block every
+// later publication.
+const PUBLISHABLE_DESPITE = new Set(['match_finished', 'match_live'])
+
+export const blocksPublish = conflict => conflict.severity === 'hard' && !PUBLISHABLE_DESPITE.has(conflict.kind)
+
+/** Matches the server refuses to reschedule: both are hard conflicts. */
+export const scheduleLocked = (match, liveRow) => match?.status === 'finished' || liveRow?.status === 'active'
+
+/**
+ * A court column split at the queue boundary. The head holds matches with a
+ * time (or a bare court), which sort ahead of the queue because their
+ * queue_order is null; the queue holds the numbered ones in their order.
+ */
+export function splitCourtColumn(columnIds = [], draftByMatch = {}) {
+  const head = []
+  const queue = []
+  for (const id of columnIds) (draftByMatch[id]?.queue_order ? queue : head).push(id)
+  queue.sort((a, b) => draftByMatch[a].queue_order - draftByMatch[b].queue_order)
+  return { head, queue }
+}
+
+/** The queue after moving `matchId` in front of `beforeMatchId` (null appends). */
+export function reorderQueue(queue = [], matchId, beforeMatchId = null) {
+  const rest = queue.filter(id => id !== matchId)
+  const at = beforeMatchId === null ? -1 : rest.indexOf(beforeMatchId)
+  if (at < 0) return [...rest, matchId]
+  return [...rest.slice(0, at), matchId, ...rest.slice(at)]
+}
+
+const sameOrder = (a, b) => a.length === b.length && a.every((id, i) => id === b[i])
+
+/**
+ * The single write one drop produces, or null when the drop changes nothing.
+ * A timed match keeps its time and never takes a queue number: the board sorts
+ * on `queue_order || 0` first, so a number would drag it behind the queue.
+ *
+ * @returns {null
+ *  | { kind: 'clear', matchId }
+ *  | { kind: 'assign', matchId, courtId, scheduledAt, timeKind }
+ *  | { kind: 'queue', matchId, courtId, order }}
+ */
+export function scheduleDropAction({
+  matchId, draftRow = null, locked = false,
+  targetKey, beforeMatchId = null, columnIds = [], draftByMatch = {},
+} = {}) {
+  if (!matchId || locked || !targetKey) return null
+
+  if (targetKey === 'unassigned') return draftRow ? { kind: 'clear', matchId } : null
+
+  // "Без корта" only means "keep the time, drop the court"; a row with neither
+  // court nor time is rejected by the table check and by set_match_schedule.
+  if (targetKey === 'none') {
+    if (!draftRow?.scheduled_at || !draftRow.court_id) return null
+    return { kind: 'assign', matchId, courtId: null, scheduledAt: draftRow.scheduled_at, timeKind: draftRow.time_kind }
+  }
+
+  if (draftRow?.scheduled_at) {
+    if (draftRow.court_id === targetKey && draftRow.queue_order == null) return null
+    return { kind: 'assign', matchId, courtId: targetKey, scheduledAt: draftRow.scheduled_at, timeKind: draftRow.time_kind }
+  }
+
+  const { queue } = splitCourtColumn(columnIds, draftByMatch)
+  const order = reorderQueue(queue, matchId, beforeMatchId)
+  if (draftRow?.court_id === targetKey && sameOrder(order, queue)) return null
+  return { kind: 'queue', matchId, courtId: targetKey, order }
+}
+
 /** Sort key for "by time": fixed/not-before instants first, then court queues, then unscheduled. */
 export function scheduleSortKey(row) {
   if (!row) return [2, 0, 0]

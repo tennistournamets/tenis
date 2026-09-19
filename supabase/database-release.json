@@ -40,6 +40,18 @@
       "sha256": "494232ad0a1ad128d8b5abd7ec37192848ece3bbba6c294f13566ca4a002d923",
       "tenisAppliedVersion": null,
       "tenisNote": "Applied 2026-09-18 via psql (session pooler) after logical backup; no migration history entry, like the mobile step."
+    },
+    {
+      "path": "supabase/migrations/20260918130934_schedule_queue_drag.sql",
+      "sha256": "9263b09090f43e604a9a0ff3450d90f81c18f504518f1acc0fb69a03ff9f2f0c",
+      "tenisAppliedVersion": null,
+      "tenisNote": "Applied 2026-09-18 via psql (session pooler); no migration history entry, like the schedule step."
+    },
+    {
+      "path": "supabase/migrations/20260919194603_page_password_readable.sql",
+      "sha256": "a0bb6aab721cbfaa0b9e6b9e31db92e07a539476110ae9f06eb757416174c53f",
+      "tenisAppliedVersion": null,
+      "tenisNote": "Applied 2026-09-19 via psql (session pooler); no migration history entry, like the schedule step."
     }
   ],
   "baseline": {

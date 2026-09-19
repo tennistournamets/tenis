@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
-  compareBySchedule, conflictText, draftDiff, effectiveSchedule, formatScheduleTime, hasHardConflict, indexSchedule,
-  isoToZonedLocal, scheduleError, scheduleSummary, zonedLocalToIso, zoneOffsetMs,
+  blocksPublish, compareBySchedule, conflictText, draftDiff, effectiveSchedule, formatScheduleTime, hasHardConflict,
+  indexSchedule, isoToZonedLocal, reorderQueue, scheduleDropAction, scheduleError, scheduleLocked, scheduleSummary,
+  splitCourtColumn, zonedLocalToIso, zoneOffsetMs,
 } from '../src/lib/schedule.js'
 import { isTournamentEvent } from '../src/lib/tournamentSync.js'
 import { scheduleMessages } from '../src/i18n/schedule.js'
@@ -69,6 +70,90 @@ test('a match card line composes court, time mode and queue place', () => {
   assert.equal(conflictText({ kind: 'match_live', severity: 'hard' }, t, label), 'schedule.kinds.match_live:{"match":"","minutes":""}')
   assert.equal(hasHardConflict([{ severity: 'soft' }]), false)
   assert.equal(hasHardConflict([{ severity: 'soft' }, { severity: 'hard' }]), true)
+})
+
+test('a finished or live match keeps its schedule without blocking publication', () => {
+  // publish_schedule ignores exactly these two kinds; assigning still refuses
+  // them, which is why hasHardConflict and blocksPublish stay separate.
+  assert.equal(blocksPublish({ kind: 'match_finished', severity: 'hard' }), false)
+  assert.equal(blocksPublish({ kind: 'match_live', severity: 'hard' }), false)
+  assert.equal(blocksPublish({ kind: 'court_busy', severity: 'hard' }), true)
+  assert.equal(blocksPublish({ kind: 'participant_busy', severity: 'hard' }), true)
+  assert.equal(blocksPublish({ kind: 'queue_taken', severity: 'hard' }), true)
+  assert.equal(blocksPublish({ kind: 'rest_short', severity: 'soft' }), false)
+  assert.equal(blocksPublish({ kind: 'order_violation', severity: 'soft' }), false)
+  // A draft whose only hard conflicts are finished matches still publishes.
+  const draft = [{ match_id: 'm1', conflicts: [{ kind: 'match_finished', severity: 'hard' }] },
+    { match_id: 'm2', conflicts: [{ kind: 'rest_short', severity: 'soft' }] }]
+  assert.equal(draft.some(c => c.conflicts.some(blocksPublish)), false)
+  assert.equal(hasHardConflict(draft[0].conflicts), true)
+})
+
+test('a court column splits into the timed head and the numbered queue', () => {
+  const draft = {
+    timed: { queue_order: null, scheduled_at: '2026-10-01T10:00:00Z', time_kind: 'fixed' },
+    bare: { queue_order: null, court_id: 'c1' },
+    q2: { queue_order: 2 },
+    q1: { queue_order: 1 },
+  }
+  const columnIds = ['timed', 'bare', 'q2', 'q1']
+  assert.deepEqual(splitCourtColumn(columnIds, draft), { head: ['timed', 'bare'], queue: ['q1', 'q2'] })
+  assert.deepEqual(columnIds, ['timed', 'bare', 'q2', 'q1'], 'input is not mutated')
+  assert.deepEqual(splitCourtColumn([], {}), { head: [], queue: [] })
+})
+
+test('reordering a queue moves one id and never duplicates or drops the rest', () => {
+  const queue = ['a', 'b', 'c']
+  assert.deepEqual(reorderQueue(queue, 'c', 'a'), ['c', 'a', 'b'])
+  assert.deepEqual(reorderQueue(queue, 'a', 'c'), ['b', 'a', 'c'])
+  assert.deepEqual(reorderQueue(queue, 'a', null), ['b', 'c', 'a'])
+  assert.deepEqual(reorderQueue(queue, 'd', 'b'), ['a', 'd', 'b', 'c'])
+  assert.deepEqual(reorderQueue(queue, 'd', null), ['a', 'b', 'c', 'd'])
+  assert.deepEqual(reorderQueue(queue, 'd', 'missing'), ['a', 'b', 'c', 'd'])
+  assert.deepEqual(reorderQueue(queue, 'b', 'c'), ['a', 'b', 'c'], 'dropping before the next card changes nothing')
+  assert.deepEqual(queue, ['a', 'b', 'c'], 'input is not mutated')
+})
+
+test('one drop yields at most one write, and a timed match keeps its time without a queue number', () => {
+  const draftByMatch = { q1: { court_id: 'c1', queue_order: 1 }, q2: { court_id: 'c1', queue_order: 2 } }
+  const columnIds = ['q1', 'q2']
+  const onCourt = extra => ({ targetKey: 'c1', columnIds, draftByMatch, ...extra })
+
+  // Unassigned match joins the end of the queue.
+  assert.deepEqual(scheduleDropAction(onCourt({ matchId: 'new' })),
+    { kind: 'queue', matchId: 'new', courtId: 'c1', order: ['q1', 'q2', 'new'] })
+  // Dropped in front of a card.
+  assert.deepEqual(scheduleDropAction(onCourt({ matchId: 'new', beforeMatchId: 'q1' })),
+    { kind: 'queue', matchId: 'new', courtId: 'c1', order: ['new', 'q1', 'q2'] })
+  // Reorder inside the same court.
+  assert.deepEqual(scheduleDropAction(onCourt({ matchId: 'q2', draftRow: draftByMatch.q2, beforeMatchId: 'q1' })),
+    { kind: 'queue', matchId: 'q2', courtId: 'c1', order: ['q2', 'q1'] })
+  // Same court, same place: no write at all.
+  assert.equal(scheduleDropAction(onCourt({ matchId: 'q2', draftRow: draftByMatch.q2, beforeMatchId: null })), null)
+
+  // A timed match keeps scheduled_at and time_kind and takes no queue number,
+  // so it stays ahead of the queue; the drop index is ignored.
+  const timed = { court_id: 'c2', scheduled_at: '2026-10-01T10:00:00Z', time_kind: 'fixed' }
+  assert.deepEqual(scheduleDropAction(onCourt({ matchId: 'timed', draftRow: timed, beforeMatchId: 'q1' })),
+    { kind: 'assign', matchId: 'timed', courtId: 'c1', scheduledAt: '2026-10-01T10:00:00Z', timeKind: 'fixed' })
+  assert.equal(scheduleDropAction(onCourt({ matchId: 'timed', draftRow: { ...timed, court_id: 'c1' } })), null)
+
+  // Unassigning.
+  assert.deepEqual(scheduleDropAction({ matchId: 'q1', draftRow: draftByMatch.q1, targetKey: 'unassigned' }),
+    { kind: 'clear', matchId: 'q1' })
+  assert.equal(scheduleDropAction({ matchId: 'new', draftRow: null, targetKey: 'unassigned' }), null)
+
+  // "Без корта" keeps the time and clears the court; an untimed row cannot live there.
+  assert.deepEqual(scheduleDropAction({ matchId: 'timed', draftRow: { ...timed, court_id: 'c1' }, targetKey: 'none' }),
+    { kind: 'assign', matchId: 'timed', courtId: null, scheduledAt: '2026-10-01T10:00:00Z', timeKind: 'fixed' })
+  assert.equal(scheduleDropAction({ matchId: 'q1', draftRow: draftByMatch.q1, targetKey: 'none' }), null)
+
+  // Finished and live matches are refused before the server sees them.
+  assert.equal(scheduleDropAction(onCourt({ matchId: 'new', locked: true })), null)
+  assert.equal(scheduleLocked({ status: 'finished' }, null), true)
+  assert.equal(scheduleLocked({ status: 'in_progress' }, { status: 'active' }), true)
+  assert.equal(scheduleLocked({ status: 'in_progress' }, { status: 'stopped' }), false)
+  assert.equal(scheduleLocked({ status: 'in_progress' }, null), false)
 })
 
 test('sorting by time puts timed matches first, then court queues, then unscheduled ones', () => {

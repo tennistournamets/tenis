@@ -6,7 +6,7 @@ const tick=()=>new Promise(r=>setImmediate(r))
 const state={entries:[{id:'e'}],matches:[{id:'m'}],sets:[{id:'s'}],live:[{id:'l'}],groups:[{id:'g'}]}
 
 test('page recovery works without a tournament channel and is removed on departure', t => {
- t.mock.timers.enable({ apis: ['setInterval'] })
+ t.mock.timers.enable({ apis: ['setInterval', 'setTimeout'] })
  const win = new EventTarget(), doc = new EventTarget(); doc.visibilityState = 'visible'
  let requests = 0
  const stop = subscribeRefreshTriggers({ refresh: () => requests++, windowTarget: win, documentTarget: doc, pollMs: 100 })
@@ -59,20 +59,29 @@ test('late success/error after leaving a page cannot alter its state or start a 
  }
 })
 test('subscription catches initial/rejoin gaps, online, focus, visibility, silent loss, and cleans up',t=>{
- t.mock.timers.enable({apis:['setInterval']})
+ t.mock.timers.enable({apis:['setInterval','setTimeout']})
  const win=new EventTarget(),doc=new EventTarget();doc.visibilityState='visible'
  const bindings=[];let subscription,requests=0,removed=0
  const channel={on(type,filter,callback){bindings.push({type,filter,callback});return this},subscribe(cb){subscription=cb;return this}}
- const stop=subscribeTournament({client:{channel:()=>channel,removeChannel:()=>removed++},id:'t',name:'test',getState:()=>state,refresh:()=>requests++,windowTarget:win,documentTarget:doc,pollMs:100})
+ const stop=subscribeTournament({client:{channel:()=>channel,removeChannel:()=>removed++},id:'t',name:'test',getState:()=>state,refresh:()=>requests++,windowTarget:win,documentTarget:doc,pollMs:100,healthyPollMs:1000,readyDelay:50})
+ // A join announces itself twice, as SUBSCRIBED and then as a postgres_changes
+ // "ok" system event. One read after the last signal closes the same gap, so a
+ // burst of them costs one snapshot instead of one each.
  for(const s of ['SUBSCRIBED','CHANNEL_ERROR','SUBSCRIBED'])subscription(s)
- assert.equal(requests,2)
- bindings.find(b=>b.type==='system').callback({extension:'postgres_changes',status:'ok'});assert.equal(requests,3)
- win.dispatchEvent(new Event('online'));win.dispatchEvent(new Event('focus'));doc.dispatchEvent(new Event('visibilitychange'));assert.equal(requests,6)
- t.mock.timers.tick(100);assert.equal(requests,7)
- doc.visibilityState='hidden';t.mock.timers.tick(100);assert.equal(requests,7)
+ bindings.find(b=>b.type==='system').callback({extension:'postgres_changes',status:'ok'})
+ assert.equal(requests,0)
+ t.mock.timers.tick(50);assert.equal(requests,1)
+ win.dispatchEvent(new Event('online'));win.dispatchEvent(new Event('focus'));doc.dispatchEvent(new Event('visibilitychange'));assert.equal(requests,4)
+ // A healthy channel is polled on the long interval; losing it re-arms the short one.
+ t.mock.timers.tick(100);assert.equal(requests,4)
+ t.mock.timers.tick(900);assert.equal(requests,5)
+ subscription('CHANNEL_ERROR');t.mock.timers.tick(100);assert.equal(requests,6)
+ subscription('SUBSCRIBED');t.mock.timers.tick(50);assert.equal(requests,7)
+ doc.visibilityState='hidden';t.mock.timers.tick(1000);assert.equal(requests,7)
+ doc.visibilityState='visible'
  const deletion=bindings.find(b=>b.filter.table==='matches'&&b.filter.event==='DELETE')
  assert.equal(deletion.filter.filter,undefined)
  deletion.callback({table:'matches',eventType:'DELETE',old:{id:'m'}});assert.equal(requests,8)
- stop();subscription('SUBSCRIBED');win.dispatchEvent(new Event('online'));t.mock.timers.tick(1000)
+ stop();subscription('SUBSCRIBED');win.dispatchEvent(new Event('online'));t.mock.timers.tick(5000)
  deletion.callback({table:'matches',eventType:'DELETE',old:{id:'m'}});assert.equal(requests,8);assert.equal(removed,1)
 })
