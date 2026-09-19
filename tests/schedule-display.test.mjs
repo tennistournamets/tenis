@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
-  blocksPublish, compareBySchedule, conflictText, draftDiff, effectiveSchedule, formatScheduleTime, hasHardConflict,
-  indexSchedule, isoToZonedLocal, reorderQueue, scheduleDropAction, scheduleError, scheduleLocked, scheduleSummary,
-  splitCourtColumn, zonedLocalToIso, zoneOffsetMs,
+  applyScheduleAction, blocksPublish, compareBySchedule, conflictText, draftDiff, effectiveSchedule, formatScheduleTime,
+  hasHardConflict, indexSchedule, isoToZonedLocal, reorderQueue, scheduleDropAction, scheduleError, scheduleLocked,
+  scheduleSummary, splitCourtColumn, zonedLocalToIso, zoneOffsetMs,
 } from '../src/lib/schedule.js'
 import { isTournamentEvent } from '../src/lib/tournamentSync.js'
 import { scheduleMessages } from '../src/i18n/schedule.js'
@@ -154,6 +154,52 @@ test('one drop yields at most one write, and a timed match keeps its time withou
   assert.equal(scheduleLocked({ status: 'in_progress' }, { status: 'active' }), true)
   assert.equal(scheduleLocked({ status: 'in_progress' }, { status: 'stopped' }), false)
   assert.equal(scheduleLocked({ status: 'in_progress' }, null), false)
+})
+
+test('a dropped card lands before the server answers, and the answer moves nothing', () => {
+  const draft = (match_id, patch) => ({ id: `${match_id}-d`, match_id, state: 'draft',
+    court_id: null, scheduled_at: null, time_kind: null, queue_order: null, ...patch })
+  const queue = (rows, court) => rows.filter(r => r.state === 'draft' && r.court_id === court && r.queue_order)
+    .sort((a, b) => a.queue_order - b.queue_order).map(r => [r.match_id, r.queue_order])
+  const base = [
+    draft('m1', { court_id: 'c1', queue_order: 1 }),
+    draft('m2', { court_id: 'c1', queue_order: 2 }),
+    draft('m3', { court_id: 'c1', queue_order: 3 }),
+    row('m1', 'published', { court_id: 'c1', queue_order: 1 }),
+  ]
+
+  // Appending an unscheduled match numbers the column 1..N.
+  const appended = applyScheduleAction(base, { kind: 'queue', matchId: 'm9', courtId: 'c1', order: ['m1', 'm2', 'm3', 'm9'] })
+  assert.deepEqual(queue(appended, 'c1'), [['m1', 1], ['m2', 2], ['m3', 3], ['m9', 4]])
+  assert.equal(appended.filter(r => r.state === 'published').length, 1, 'published rows are untouched')
+  assert.deepEqual(queue(base, 'c1'), [['m1', 1], ['m2', 2], ['m3', 3]], 'the input is not mutated')
+
+  // Reordering renumbers densely.
+  assert.deepEqual(queue(applyScheduleAction(base, { kind: 'queue', matchId: 'm3', courtId: 'c1', order: ['m3', 'm1', 'm2'] }), 'c1'),
+    [['m3', 1], ['m1', 2], ['m2', 3]])
+
+  // Leaving a court closes the gap behind, exactly as the RPC does.
+  const moved = applyScheduleAction(base, { kind: 'queue', matchId: 'm1', courtId: 'c2', order: ['m1'] })
+  assert.deepEqual(queue(moved, 'c1'), [['m2', 1], ['m3', 2]])
+  assert.deepEqual(queue(moved, 'c2'), [['m1', 1]])
+
+  // A stale order keeps the rows it forgot, after the listed ones.
+  assert.deepEqual(queue(applyScheduleAction(base, { kind: 'queue', matchId: 'm3', courtId: 'c1', order: ['m3'] }), 'c1'),
+    [['m3', 1], ['m1', 2], ['m2', 3]])
+
+  // A timed match keeps its time, takes no queue number, and frees its old court.
+  const timed = applyScheduleAction(base, { kind: 'assign', matchId: 'm1', courtId: 'c2', scheduledAt: '2026-10-01T10:00:00Z', timeKind: 'fixed' })
+  const row1 = timed.find(r => r.state === 'draft' && r.match_id === 'm1')
+  assert.deepEqual([row1.court_id, row1.queue_order, row1.scheduled_at, row1.time_kind],
+    ['c2', null, '2026-10-01T10:00:00Z', 'fixed'])
+  assert.deepEqual(queue(timed, 'c1'), [['m2', 1], ['m3', 2]])
+
+  // Clearing drops the draft row and compacts the court it left.
+  const cleared = applyScheduleAction(base, { kind: 'clear', matchId: 'm2' })
+  assert.equal(cleared.some(r => r.state === 'draft' && r.match_id === 'm2'), false)
+  assert.deepEqual(queue(cleared, 'c1'), [['m1', 1], ['m3', 2]])
+
+  assert.equal(applyScheduleAction(base, null), base)
 })
 
 test('sorting by time puts timed matches first, then court queues, then unscheduled ones', () => {

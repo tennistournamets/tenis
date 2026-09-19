@@ -199,6 +199,52 @@ export function scheduleDropAction({
   return { kind: 'queue', matchId, courtId: targetKey, order }
 }
 
+/**
+ * The draft rows as they will look once the server has accepted `action`.
+ * The board applies this immediately so a dropped card lands where it was
+ * dropped, and the snapshot that follows confirms it without moving anything.
+ * It mirrors place_match_in_court_queue: the listed queue becomes 1..N, rows
+ * on that court the caller did not list keep a place after them, and the court
+ * the match came from is compacted.
+ */
+export function applyScheduleAction(rows = [], action) {
+  if (!action) return rows
+  const kept = rows.filter(row => row.state !== 'draft')
+  const draft = new Map(rows.filter(row => row.state === 'draft').map(row => [row.match_id, { ...row }]))
+  const blank = matchId => ({ id: `optimistic-${matchId}`, match_id: matchId, state: 'draft',
+    court_id: null, scheduled_at: null, time_kind: null, queue_order: null })
+  const from = draft.get(action.matchId)?.court_id ?? null
+
+  if (action.kind === 'clear') {
+    draft.delete(action.matchId)
+  } else if (action.kind === 'assign') {
+    const row = draft.get(action.matchId) || blank(action.matchId)
+    Object.assign(row, { court_id: action.courtId, scheduled_at: action.scheduledAt ?? null,
+      time_kind: action.timeKind ?? null, queue_order: null })
+    draft.set(action.matchId, row)
+  } else if (action.kind === 'queue') {
+    const listed = new Set(action.order)
+    const trailing = [...draft.values()]
+      .filter(row => row.court_id === action.courtId && row.queue_order && !listed.has(row.match_id))
+      .sort((a, b) => a.queue_order - b.queue_order)
+      .map(row => row.match_id)
+    ;[...action.order, ...trailing].forEach((matchId, index) => {
+      const row = draft.get(matchId) || blank(matchId)
+      Object.assign(row, { court_id: action.courtId, queue_order: index + 1 })
+      draft.set(matchId, row)
+    })
+  }
+
+  const to = action.kind === 'clear' ? null : action.courtId
+  if (from && from !== to) {
+    [...draft.values()]
+      .filter(row => row.court_id === from && row.queue_order)
+      .sort((a, b) => a.queue_order - b.queue_order)
+      .forEach((row, index) => { row.queue_order = index + 1 })
+  }
+  return [...kept, ...draft.values()]
+}
+
 /** Sort key for "by time": fixed/not-before instants first, then court queues, then unscheduled. */
 export function scheduleSortKey(row) {
   if (!row) return [2, 0, 0]

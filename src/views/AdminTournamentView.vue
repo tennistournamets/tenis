@@ -22,7 +22,7 @@ import ScheduleBoard from '../components/admin/ScheduleBoard.vue'
 import MatchScheduleModal from '../components/admin/MatchScheduleModal.vue'
 import AccessMatrix from '../components/admin/AccessMatrix.vue'
 import { accessError, assignableRoles, canEditMembership, visibilityOf } from '../lib/access'
-import { draftDiff, effectiveSchedule, indexSchedule, scheduleError, timezoneOf } from '../lib/schedule'
+import { applyScheduleAction, draftDiff, effectiveSchedule, indexSchedule, scheduleError, timezoneOf } from '../lib/schedule'
 import TournamentMatchList from '../components/TournamentMatchList.vue'
 import { scoringError } from '../lib/tennisRules'
 import { registrationDisplayState, registrationError } from '../lib/registrationRules'
@@ -317,6 +317,10 @@ async function stopTournament() {
 }
 
 const entryEditState = ref(null)
+// A dropped card must land where it was dropped, not after a round trip. The
+// move is applied locally and replayed over every snapshot until its own write
+// has been confirmed, so a poll arriving mid-flight cannot pull the card back.
+const pendingScheduleMoves = ref([])
 let adminListStale = true
 const snapshotRefresh = createSnapshotRefresh({
   read: () => readAdminTournamentSnapshot(supabase, props.id, { includeAdmins: adminListStale }),
@@ -338,7 +342,7 @@ const snapshotRefresh = createSnapshotRefresh({
     if (selectedLiveMatch.value && !data.matches.some(m => m.id === selectedLiveMatch.value.id)) selectedLiveMatch.value = null
     groups.value = data.groups
     courts.value = data.courts || []
-    schedule.value = data.schedule || []
+    schedule.value = pendingScheduleMoves.value.reduce(applyScheduleAction, data.schedule || [])
     if (scheduleMatch.value && !data.matches.some(m => m.id === scheduleMatch.value.id)) scheduleMatch.value = null
     standings.value = data.standings
     groupStandings.value = data.group_standings
@@ -441,14 +445,17 @@ async function saveCourts(list) {
   } finally { actionLoading.value = false }
 }
 
-// One drop is one RPC. Warnings are applied and then reported by the draft
-// conflicts panel, so the gesture is never interrupted by a dialog; hard
-// conflicts are still the server's to refuse.
+// One drop is one RPC, and the card moves before it is sent. The board is not
+// disabled while the write is in flight: the server serialises schedule writes
+// per tournament, so a burst of drops is safe and the organizer keeps dragging.
 async function moveScheduleItem(action) {
-  if (!action || actionLoading.value) return
-  actionLoading.value = true
+  if (!action) return
+  const previous = schedule.value
+  pendingScheduleMoves.value = [...pendingScheduleMoves.value, action]
+  schedule.value = applyScheduleAction(previous, action)
   errorText.value = ''
   noticeText.value = ''
+  const settle = () => { pendingScheduleMoves.value = pendingScheduleMoves.value.filter(item => item !== action) }
   try {
     const call = action.kind === 'clear'
       ? supabase.rpc('clear_match_schedule', { p_match_id: action.matchId })
@@ -469,13 +476,16 @@ async function moveScheduleItem(action) {
         })
     const { error } = await call
     if (error) throw error
-    noticeText.value = t('schedule.movedOk')
-    await loadAll()
+    // The snapshot still replays this move, so confirming it moves nothing.
+    await refreshScoreData()
+    settle()
   } catch (error) {
+    // Drop this move and let the snapshot rebuild: restoring the array captured
+    // before it would also throw away any later drop still in flight.
+    settle()
     errorText.value = scheduleError(error?.message, t)
-    // A refused move must leave the board showing the server's truth.
-    await loadAll()
-  } finally { actionLoading.value = false }
+    await refreshScoreData()
+  }
 }
 
 async function publishSchedule() {
