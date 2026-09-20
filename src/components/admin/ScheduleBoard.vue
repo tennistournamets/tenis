@@ -1,7 +1,6 @@
 <script setup>
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import CourtsEditor from './CourtsEditor.vue'
 import { entryMemberNames } from '../../lib/entryDisplay'
 import { supabase } from '../../lib/supabase'
 import {
@@ -19,7 +18,7 @@ const props = defineProps({
   busy: Boolean,
   canManage: Boolean,
 })
-const emit = defineEmits(['assign', 'publish', 'revert', 'save-courts', 'move'])
+const emit = defineEmits(['assign', 'publish', 'revert', 'move', 'open-courts'])
 const { t, locale } = useI18n()
 
 const view = ref('round')
@@ -262,7 +261,11 @@ onBeforeUnmount(() => { clearTimeout(conflictsTimer); conflictsVersion += 1 })
       </div>
     </header>
 
-    <CourtsEditor :courts="courts" :disabled="disabled" @save="emit('save-courts', $event)" />
+    <!-- Корты редактируются на своей вкладке; без них назначать матчи некуда -->
+    <div v-if="!courts.length" class="alert alert--info row row--between" role="status">
+      <span>{{ t('schedule.noCourts') }}</span>
+      <button class="btn btn--outline btn--sm" type="button" :disabled="disabled" @click="emit('open-courts')">{{ t('schedule.goToCourts') }}</button>
+    </div>
 
     <div class="divider" />
 

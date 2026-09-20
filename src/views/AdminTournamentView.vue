@@ -19,6 +19,7 @@ import ScoreEditor from '../components/ScoreEditor.vue'
 import ManualEntryForm from '../components/admin/ManualEntryForm.vue'
 import TournamentSettingsForm from '../components/admin/TournamentSettingsForm.vue'
 import ScheduleBoard from '../components/admin/ScheduleBoard.vue'
+import CourtsEditor from '../components/admin/CourtsEditor.vue'
 import MatchScheduleModal from '../components/admin/MatchScheduleModal.vue'
 import AccessMatrix from '../components/admin/AccessMatrix.vue'
 import { accessError, assignableRoles, canEditMembership, visibilityOf } from '../lib/access'
@@ -1073,10 +1074,17 @@ function statusBadgeClass(status) {
   return 'badge--neutral'
 }
 
-const TABS = ['entries', 'bracket', 'schedule', 'scores', 'settings']
+const TABS = ['entries', 'bracket', 'courts', 'schedule', 'scores', 'settings']
+
+// Организатору сетка нужна только с двумя одобренными участниками; до этого вкладка
+// заблокирована с подсказкой, как «Счёт» до старта. Роль «только результаты» не
+// управляет заявками, и для неё сетка остаётся единственным экраном — не блокируем.
+// Пока данные грузятся, вкладка считается открытой, чтобы не сбросить deep-link #bracket.
+const bracketTabEnabled = computed(() =>
+  loading.value || !canManageTournament.value || matches.value.length > 0 || approvedEntries.value.length >= 2)
 
 function isTabEnabled(tab) {
-  if (tab === 'bracket') return true
+  if (tab === 'bracket') return bracketTabEnabled.value
   if (tab === 'scores') return canEditScores.value
   return canManageTournament.value
 }
@@ -1140,6 +1148,12 @@ function onTabKeydown(event) {
 }
 
 watch(canEditScores, () => {
+  if (!isTabEnabled(activeTab.value)) {
+    setTab(defaultTab())
+  }
+})
+
+watch(bracketTabEnabled, () => {
   if (!isTabEnabled(activeTab.value)) {
     setTab(defaultTab())
   }
@@ -1294,16 +1308,16 @@ onBeforeUnmount(() => {
         <div class="admin-tournament-overview__top">
           <div class="admin-tournament-overview__title-block stack stack--sm">
             <div class="admin-tournament-overview__title-row">
-              <h1 id="adm-tournament-title" class="page-title" style="margin: 0">{{ tournament.name }}</h1>
+              <h1 id="adm-tournament-title" class="page-title">{{ tournament.name }}</h1>
               <span class="badge" :class="statusBadgeClass(tournament.status)">
                 {{ t(`tournament.${tournament.status}`) }}
               </span>
             </div>
             <div class="badge-row">
-              <span v-if="tournament.sport" class="badge badge--neutral">{{ t(`sport.${tournament.sport}`) }}</span>
-              <span v-if="tournament.format" class="badge badge--neutral">{{ t(`tournamentFormat.${tournament.format}`) }}</span>
-              <span v-if="sportCfg.supportsCategory" class="badge badge--neutral">{{ t(`tournament.${tournament.category}`) }}</span>
-              <span v-if="sportCfg.supportsSetFormat && tournament.set_format" class="badge badge--neutral">{{ t(`format.${tournament.set_format}`) }}</span>
+              <span v-if="tournament.sport" class="badge badge--meta">{{ t(`sport.${tournament.sport}`) }}</span>
+              <span v-if="tournament.format" class="badge badge--meta">{{ t(`tournamentFormat.${tournament.format}`) }}</span>
+              <span v-if="sportCfg.supportsCategory" class="badge badge--meta">{{ t(`tournament.${tournament.category}`) }}</span>
+              <span v-if="sportCfg.supportsSetFormat && tournament.set_format" class="badge badge--meta">{{ t(`format.${tournament.set_format}`) }}</span>
               <span v-if="canManageTournament && registration?.is_full" class="badge badge--warn">{{ t('registrationRules.badgeFull') }}</span>
               <span v-if="showDeadlineHint" class="badge badge--warn">{{ t('registrationRules.badgeDeadline') }}</span>
             </div>
@@ -1341,10 +1355,6 @@ onBeforeUnmount(() => {
               </button>
             </span>
 
-            <p v-if="showStartButton && startBlockReason" class="admin-start-reason" role="status">
-              {{ startBlockReason }}
-            </p>
-
             <button
               v-if="isTournamentActive"
               class="btn btn--ghost btn--sm"
@@ -1376,17 +1386,34 @@ onBeforeUnmount(() => {
           {{ isTournamentActive ? t('admin.tabParticipants') : t('admin.tabEntries') }}
           <span v-if="pendingEntries.length" class="tab__badge">{{ pendingEntries.length }}</span>
         </button>
+        <span class="tooltip-wrapper" :data-tooltip="!bracketTabEnabled ? t('admin.bracketLockedTooltip') : undefined">
+          <button
+            id="tab-bracket"
+            role="tab"
+            class="tab"
+            :class="{ 'tab--active': activeTab === 'bracket' }"
+            :aria-selected="activeTab === 'bracket'"
+            :aria-disabled="!bracketTabEnabled"
+            :tabindex="activeTab === 'bracket' ? 0 : -1"
+            :disabled="!bracketTabEnabled"
+            aria-controls="panel-bracket"
+            @click="setTab('bracket')"
+          >
+            {{ t('admin.tabBracket') }}
+          </button>
+        </span>
         <button
-          id="tab-bracket"
+          v-if="canManageTournament"
+          id="tab-courts"
           role="tab"
           class="tab"
-          :class="{ 'tab--active': activeTab === 'bracket' }"
-          :aria-selected="activeTab === 'bracket'"
-          :tabindex="activeTab === 'bracket' ? 0 : -1"
-          aria-controls="panel-bracket"
-          @click="setTab('bracket')"
+          :class="{ 'tab--active': activeTab === 'courts' }"
+          :aria-selected="activeTab === 'courts'"
+          :tabindex="activeTab === 'courts' ? 0 : -1"
+          aria-controls="panel-courts"
+          @click="setTab('courts')"
         >
-          {{ t('admin.tabBracket') }}
+          {{ t('schedule.courts') }}
         </button>
         <button
           v-if="canManageTournament"
@@ -1457,8 +1484,8 @@ onBeforeUnmount(() => {
           <div v-if="!isTournamentActive" class="divider" />
 
           <div v-if="!isTournamentActive">
-            <div class="admin-list-header" style="margin-bottom: var(--space-3)">
-              <h3 class="section-title" style="font-size: 1rem; margin: 0">
+            <div class="admin-list-header mb-3">
+              <h3 class="section-title section-title--sm">
                 {{ t('admin.pendingEntries') }}
                 <span v-if="pendingEntries.length" class="badge badge--warn">{{ pendingEntries.length }}</span>
               </h3>
@@ -1472,7 +1499,7 @@ onBeforeUnmount(() => {
                 {{ t('admin.approveAll') }}
               </button>
             </div>
-            <div v-if="pendingEntries.length" class="stack stack--sm">
+            <div v-if="pendingEntries.length" class="entry-list">
               <div v-for="entry in pendingEntries" :key="entry.id" class="participant-item">
                 <span class="entry-avatar">{{ entryInitials(entry) }}</span>
                 <strong class="entry-name">{{ entryLabel(entry) }}</strong>
@@ -1503,14 +1530,14 @@ onBeforeUnmount(() => {
             <p v-else class="muted">{{ t('admin.noPending') }}</p>
 
             <div v-if="waitlistedEntries.length" class="waitlist-entries">
-              <h3 class="section-title" style="font-size: 1rem; margin: var(--space-3) 0">
+              <h3 class="section-title section-title--sm my-3">
                 {{ t('registrationRules.waitlistSection') }}
                 <span class="badge badge--neutral">{{ waitlistedEntries.length }}</span>
               </h3>
               <p v-if="waitlistSeatFree" class="alert alert--info" role="status">
                 {{ t('registrationRules.waitlistSeatFree', { count: waitlistedEntries.length }) }}
               </p>
-              <div class="stack stack--sm">
+              <div class="entry-list">
                 <div v-for="(entry, index) in waitlistedEntries" :key="entry.id" class="participant-item">
                   <span class="entry-avatar" :aria-label="String(index + 1)">{{ index + 1 }}</span>
                   <strong class="entry-name">{{ entryLabel(entry) }}</strong>
@@ -1545,7 +1572,7 @@ onBeforeUnmount(() => {
                 {{ t('mobile.rejectedEntries') }}
                 <span class="badge badge--neutral">{{ rejectedEntries.length }}</span>
               </summary>
-              <div class="stack stack--sm rejected-entries__list">
+              <div class="entry-list rejected-entries__list">
                 <div v-for="entry in rejectedEntries" :key="entry.id" class="participant-item">
                   <span class="entry-avatar">{{ entryInitials(entry) }}</span>
                   <strong class="entry-name">{{ entryLabel(entry) }}</strong>
@@ -1560,8 +1587,8 @@ onBeforeUnmount(() => {
           <div v-if="!isTournamentActive" class="divider" />
 
           <div>
-            <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.75rem">
-              <h3 class="section-title" style="font-size: 1rem; margin: 0">
+            <div class="row row--between mb-3">
+              <h3 class="section-title section-title--sm">
                 {{ t('admin.approvedList') }}
                 <span v-if="approvedEntries.length" class="badge badge--success">{{ approvedEntries.length }}</span>
               </h3>
@@ -1576,7 +1603,7 @@ onBeforeUnmount(() => {
                 {{ t('admin.editPairs') }}
               </button>
             </div>
-            <div v-if="approvedEntries.length" class="stack stack--sm">
+            <div v-if="approvedEntries.length" class="entry-list">
               <div v-for="entry in approvedEntries" :key="entry.id" class="participant-item">
                 <span class="entry-avatar entry-avatar--ok">{{ entryInitials(entry) }}</span>
                 <strong class="entry-name">{{ entryLabel(entry) }}</strong>
@@ -1655,7 +1682,7 @@ onBeforeUnmount(() => {
                     {{ entryLabel(entry) }}
                   </button>
                 </div>
-                <p v-else class="muted" style="font-size: 0.875rem">{{ t('admin.allPlayersAssigned') }}</p>
+                <p v-else class="muted text-sm">{{ t('admin.allPlayersAssigned') }}</p>
               </div>
 
               <div class="manual-pairing-grid">
@@ -1772,7 +1799,7 @@ onBeforeUnmount(() => {
                     {{ entryLabel(entry) }}
                   </button>
                 </div>
-                <p v-else class="muted" style="font-size: 0.875rem">{{ t('admin.allPlayersAssigned') }}</p>
+                <p v-else class="muted text-sm">{{ t('admin.allPlayersAssigned') }}</p>
               </div>
 
               <div class="manual-pairing-grid">
@@ -1878,7 +1905,7 @@ onBeforeUnmount(() => {
           </div>
         </template>
         <div id="admin-mobile-panel" :role="isNarrowLayout && isTournamentActive && matches.length ? 'tabpanel' : undefined" :aria-labelledby="isNarrowLayout && isTournamentActive && matches.length ? `admin-surface-${adminMobileBracketSurface}` : undefined">
-          <section v-if="isNarrowLayout && isTournamentActive && matches.length && adminMobileBracketSurface === 'matches'" class="card mobile-score-center" style="margin-top: var(--space-3)">
+          <section v-if="isNarrowLayout && isTournamentActive && matches.length && adminMobileBracketSurface === 'matches'" class="card mobile-score-center mt-3">
             <TournamentMatchList :matches="matches" :entries-map="entriesMap" :sets-by-match="setsByMatch" :live-scores-by-match="liveScoresByMatch" :can-edit-final="canEditFinalScores" :can-live-score="canUseLiveScoring" @edit-result="openRrMatch" @view-live="openLiveScoring" />
           </section>
         <!-- Round-robin: schedule + standings + fixtures -->
@@ -1897,7 +1924,7 @@ onBeforeUnmount(() => {
             </div>
           </section>
 
-          <section v-if="standings.length && showAdminBracketOverview" class="card stack stack--sm" style="margin-top: var(--space-4)">
+          <section v-if="standings.length && showAdminBracketOverview" class="card stack stack--sm mt-4">
             <h2 class="section-title">{{ t('standings.title') }}</h2>
             <RoundRobinStandings
               :rows="standings"
@@ -1914,7 +1941,7 @@ onBeforeUnmount(() => {
         <template v-else-if="isGroupsPlayoff">
           <section v-if="canManageTournament && !isTournamentActive" class="card stack stack--sm">
             <h2 class="section-title">{{ t('admin.groupStage') }}</h2>
-            <div v-if="!hasGroups" class="form-field" style="max-width: 200px">
+            <div v-if="!hasGroups" class="form-field form-field--xs">
               <label for="grp-count">{{ t('admin.groupCount') }}</label>
               <input id="grp-count" v-model.number="groupCount" class="input" type="number" min="2" />
             </div>
@@ -1939,12 +1966,12 @@ onBeforeUnmount(() => {
             </div>
           </section>
 
-          <section v-if="hasGroups && showAdminBracketOverview" class="card stack stack--sm" style="margin-top: var(--space-4)">
+          <section v-if="hasGroups && showAdminBracketOverview" class="card stack stack--sm mt-4">
             <h2 class="section-title">{{ t('admin.groupStage') }}</h2>
             <GroupStageBoard :groups="groupsView" :entries-map="entriesMap" :family="tournamentScoringFamily" />
           </section>
 
-          <section v-if="hasPlayoff && showAdminBracketOverview" class="card stack stack--sm" style="margin-top: var(--space-4)">
+          <section v-if="hasPlayoff && showAdminBracketOverview" class="card stack stack--sm mt-4">
             <h2 class="section-title">{{ t('admin.playoff') }}</h2>
             <BracketBoard
               :matches="playoffMatches"
@@ -1960,7 +1987,7 @@ onBeforeUnmount(() => {
         <section v-if="!isRoundRobin && !isGroupsPlayoff && canManageTournament && !isTournamentActive" class="card stack stack--sm">
           <h2 class="section-title">{{ t('tournament.bracket') }} — {{ t('admin.drawSection') }}</h2>
 
-          <div class="form-field" style="max-width: 280px">
+          <div class="form-field form-field--narrow">
             <label for="adm-draw">{{ t('admin.drawMode') }}</label>
             <select id="adm-draw" v-model="drawMode" class="input">
               <option value="auto-random">{{ t('admin.drawRandom') }}</option>
@@ -2005,7 +2032,7 @@ onBeforeUnmount(() => {
           </template>
         </section>
 
-        <section v-if="!isRoundRobin && !isGroupsPlayoff && showAdminBracketOverview" class="card stack stack--sm" style="margin-top: var(--space-4)">
+        <section v-if="!isRoundRobin && !isGroupsPlayoff && showAdminBracketOverview" class="card stack stack--sm mt-4">
           <DoubleElimBoard
             v-if="isDoubleElim"
             :matches="displayMatches"
@@ -2030,7 +2057,7 @@ onBeforeUnmount(() => {
             {{ t('drafts.structureConflict') }}
             <button class="btn btn--ghost btn--sm" type="button" :disabled="actionLoading" @click="reloadBracketDraft">{{ t('drafts.reload') }}</button>
           </div>
-          <div v-if="bracketEditing" class="inline-actions" style="margin-top: var(--space-2)">
+          <div v-if="bracketEditing" class="inline-actions mt-2">
             <button
               class="btn btn--primary btn--sm"
               type="button"
@@ -2055,6 +2082,20 @@ onBeforeUnmount(() => {
 
       <div
         v-show="canManageTournament"
+        id="panel-courts"
+        role="tabpanel"
+        aria-labelledby="tab-courts"
+        class="tab-panel"
+        :class="{ 'tab-panel--active': activeTab === 'courts' }"
+      >
+        <!-- Без v-if: черновик кортов не должен пропадать при переключении вкладок -->
+        <section class="card stack stack--sm">
+          <CourtsEditor :courts="courts" :disabled="actionLoading || settingsSaving || !canManageTournament" @save="saveCourts" />
+        </section>
+      </div>
+
+      <div
+        v-show="canManageTournament"
         id="panel-schedule"
         role="tabpanel"
         aria-labelledby="tab-schedule"
@@ -2074,8 +2115,8 @@ onBeforeUnmount(() => {
           @assign="scheduleMatch = $event"
           @publish="publishSchedule"
           @revert="revertSchedule"
-          @save-courts="saveCourts"
           @move="moveScheduleItem"
+          @open-courts="setTab('courts')"
         />
       </div>
 
@@ -2115,7 +2156,7 @@ onBeforeUnmount(() => {
             />
           </section>
 
-          <section v-if="standings.length" class="card stack stack--sm" style="margin-top: var(--space-4)">
+          <section v-if="standings.length" class="card stack stack--sm mt-4">
             <h2 class="section-title">{{ t('standings.title') }}</h2>
             <StandingsTable :rows="standings" :family="tournamentScoringFamily" />
           </section>
@@ -2161,16 +2202,16 @@ onBeforeUnmount(() => {
           @saved="acceptTournament"
         />
 
-        <section class="card stack stack--sm" style="margin-top: var(--space-4)">
+        <section class="card stack stack--sm mt-4">
           <h2 class="section-title">{{ t('access.whoManages') }}</h2>
           <AccessMatrix />
           <div class="divider" />
-          <h3 class="section-title" style="font-size: 1rem; margin: 0">{{ t('admin.admins') }}</h3>
-          <div class="stack stack--sm">
+          <h3 class="section-title section-title--sm">{{ t('admin.admins') }}</h3>
+          <div class="entry-list">
             <div v-for="admin in admins" :key="admin.id" class="participant-item">
               <span class="entry-avatar">{{ (admin.email || '?').slice(0, 2).toUpperCase() }}</span>
-              <div class="entry-name" style="display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap">
-                <span style="font-size: 0.875rem">{{ admin.email }}</span>
+              <div class="entry-name row">
+                <span class="text-sm">{{ admin.email }}</span>
                 <select
                   v-if="canEditAdmin(admin)"
                   class="input input--inline"
@@ -2195,7 +2236,7 @@ onBeforeUnmount(() => {
             </div>
           </div>
 
-          <div class="grid-2" style="margin-top: var(--space-3)">
+          <div class="grid-2 mt-3">
             <div class="form-field">
               <label for="adm-email">{{ t('admin.adminEmail') }}</label>
               <input id="adm-email" :disabled="actionLoading" v-model="addAdminForm.email" class="input" type="email" :placeholder="t('admin.adminEmailPlaceholder')" />
@@ -2213,16 +2254,16 @@ onBeforeUnmount(() => {
             </button>
           </div>
           <div class="divider" />
-          <h3 class="section-title" style="font-size: 1rem; margin: 0">{{ t('access.whoSees') }}</h3>
-          <p class="muted" style="margin: 0">
+          <h3 class="section-title section-title--sm">{{ t('access.whoSees') }}</h3>
+          <p class="muted">
             <strong>{{ t('access.visibility.current', { mode: t(`access.visibility.${visibilityOf(tournament)}`) }) }}</strong>
             · {{ t(`access.visibility.${visibilityOf(tournament)}Hint`) }}
           </p>
         </section>
 
-        <section v-if="currentUserRole === 'owner'" class="card stack stack--sm" style="margin-top: var(--space-4)">
-          <h2 class="section-title" style="margin: 0">{{ t('access.transfer.title') }}</h2>
-          <p class="muted" style="margin: 0">{{ t('access.transfer.hint') }}</p>
+        <section v-if="currentUserRole === 'owner'" class="card stack stack--sm mt-4">
+          <h2 class="section-title">{{ t('access.transfer.title') }}</h2>
+          <p class="muted">{{ t('access.transfer.hint') }}</p>
           <div class="grid-2">
             <div class="form-field">
               <label for="adm-transfer-email">{{ t('access.transfer.email') }}</label>

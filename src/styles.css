@@ -1699,6 +1699,16 @@ summary:focus-visible,
   color: var(--muted);
 }
 
+.badge--meta {
+  color: var(--muted);
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.badge--meta::before {
+  display: none;
+}
+
 .badge-row {
   display: flex;
   flex-wrap: wrap;
@@ -1992,6 +2002,8 @@ textarea.input:focus {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
+    padding-right: var(--space-5);
+    scroll-padding-inline: var(--space-4);
   }
 
   .tab-group::-webkit-scrollbar {
@@ -2085,7 +2097,7 @@ textarea.input:focus {
   font-size: 1.875rem;
   font-family: var(--font-display);
   font-weight: 700;
-  letter-spacing: 0.02em;
+  letter-spacing: -0.02em;
   margin-bottom: var(--space-2);
 }
 
@@ -2094,69 +2106,46 @@ textarea.input:focus {
   margin-bottom: var(--space-3);
 }
 
-.divider {
-  height: 1px;
-  background: var(--border);
-  margin: var(--space-4) 0;
+/* Подуровень секции: список заявок, админы, «кто видит» */
+.section-title--sm {
+  font-size: 1rem;
+  margin-bottom: 0;
 }
 
-/* Tournament list items */
-.tournament-row {
+/* Внутри стеков и шапок расстояние задаёт контейнер, а не заголовок */
+.stack > .page-title,
+.stack > .section-title,
+.admin-list-header > .page-title,
+.admin-list-header > .section-title,
+.admin-tournament-overview__title-row > .page-title {
+  margin-bottom: 0;
+}
+
+/* Layout-примитивы и утилиты — вместо инлайновых style="" */
+.row {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  padding: var(--space-4);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface-row);
-}
-
-@media (min-width: 640px) {
-  .tournament-row {
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
-  }
-}
-
-.tournament-row__actions {
-  display: flex;
+  align-items: center;
   flex-wrap: wrap;
   gap: var(--space-2);
 }
 
-.tournament-row--clickable {
-  cursor: pointer;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+.row--between {
+  justify-content: space-between;
 }
 
-.tournament-row--clickable:hover {
-  border-color: var(--primary);
-  box-shadow: var(--shadow-sm), 0 0 0 1px var(--primary-muted);
-  background: var(--surface-hover);
-}
+.text-sm { font-size: 0.875rem; }
+.mt-2 { margin-top: var(--space-2); }
+.mt-3 { margin-top: var(--space-3); }
+.mt-4 { margin-top: var(--space-4); }
+.mb-3 { margin-bottom: var(--space-3); }
+.my-3 { margin-top: var(--space-3); margin-bottom: var(--space-3); }
+.form-field--xs { max-width: 200px; }
+.form-field--narrow { max-width: 280px; }
 
-.tournament-row--clickable:focus-visible {
-  outline: 2px solid var(--primary);
-  outline-offset: 2px;
-}
-
-.tournament-row__title {
-  margin: 0;
-  font-size: 1.125rem;
-  font-family: var(--font-display);
-  font-weight: 700;
-}
-
-.tournament-row__title a {
-  color: inherit;
-  text-decoration: none;
-  border-radius: 4px;
-  transition: color 0.2s ease;
-}
-
-.tournament-row__title a:hover {
-  color: var(--primary);
+.divider {
+  height: 1px;
+  background: var(--border);
+  margin: var(--space-4) 0;
 }
 
 .admin-list-header {
@@ -2176,6 +2165,7 @@ textarea.input:focus {
 
 .filter-segment {
   display: inline-flex;
+  align-self: flex-start;
   flex-wrap: wrap;
   padding: var(--space-1);
   gap: var(--space-1);
@@ -2339,14 +2329,6 @@ textarea.input:focus {
   align-items: center;
   min-width: 0;
   max-width: 100%;
-}
-
-.admin-start-reason {
-  flex-basis: 100%;
-  margin: 0;
-  color: var(--text-muted);
-  font-size: .8rem;
-  line-height: 1.35;
 }
 
 .admin-mobile-surface {
@@ -3307,10 +3289,35 @@ textarea.input:focus {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-3);
+  padding: var(--space-2) var(--space-3);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--surface-row);
+}
+
+/* Плотный список: одна рамка на весь список, строки разделены линиями */
+.entry-list {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.entry-list > .participant-item {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  transition: background 0.15s ease;
+}
+
+.entry-list > .participant-item + .participant-item {
+  border-top: 1px solid var(--border);
+}
+
+.entry-list > .participant-item:hover {
+  background: var(--surface-hover);
 }
 
 .participant-item strong {

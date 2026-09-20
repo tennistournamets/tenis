@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 
 import { supabase } from '../lib/supabase'
 import CopyTournamentLink from '../components/CopyTournamentLink.vue'
+import AppIcon from '../components/AppIcon.vue'
 import { getSportConfig } from '../lib/sportConfig'
 import { useAuthStore } from '../stores/auth'
 
@@ -145,8 +146,6 @@ function statusBadgeClass(status) {
   return 'badge--neutral'
 }
 
-const SPORT_ICONS = { tennis: '🎾', padel: '🏸', football: '⚽' }
-
 function itemSubtitle(item) {
   const parts = [t(`tournamentFormat.${item.format}`)]
   if (getSportConfig(item.sport).supportsCategory) {
@@ -190,7 +189,7 @@ onMounted(async () => {
 <template>
   <div class="stack">
     <div class="admin-list-header">
-      <h1 class="page-title" style="margin: 0">{{ pageTitle }}</h1>
+      <h1 class="page-title">{{ pageTitle }}</h1>
       <div class="admin-list-header__actions">
         <!-- <button class="btn btn--ghost btn--sm" type="button" @click="loadTournaments">
           {{ t('actions.refresh') }}
@@ -243,7 +242,7 @@ onMounted(async () => {
         @keydown.enter="router.push(tournamentTarget(item))"
       >
         <div class="t-card__main">
-          <span class="t-card__icon">{{ SPORT_ICONS[item.sport] || '🏆' }}</span>
+          <span class="t-card__icon"><AppIcon :name="item.sport" :size="22" /></span>
           <div class="t-card__info">
             <div class="t-card__title-row">
               <h2 class="t-card__title">{{ item.name }}</h2>
@@ -317,7 +316,7 @@ onMounted(async () => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.4rem;
+  color: var(--primary);
   border-radius: 12px;
   background: var(--primary-muted);
 }

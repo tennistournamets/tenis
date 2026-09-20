@@ -52,6 +52,12 @@
       "sha256": "a0bb6aab721cbfaa0b9e6b9e31db92e07a539476110ae9f06eb757416174c53f",
       "tenisAppliedVersion": null,
       "tenisNote": "Applied 2026-09-19 via psql (session pooler); no migration history entry, like the schedule step."
+    },
+    {
+      "path": "supabase/migrations/20260920171949_owner_only_tournament_delete.sql",
+      "sha256": "4262ecd9e97a8f53935ecc392c7944e577a0ed68e4224dbf701c8c3ba110a211",
+      "tenisAppliedVersion": null,
+      "tenisNote": "Not applied to TENIS yet; apply via psql (session pooler) like the previous forward steps."
     }
   ],
   "baseline": {
