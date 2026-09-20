@@ -66,28 +66,54 @@ export function isTournamentEvent(payload, tournamentId, state) {
 // Page recovery outlives any particular channel/ID. Public routes also need it
 // while the slug is temporarily absent or access has been revoked.
 export function subscribeRefreshTriggers({ refresh, windowTarget = globalThis.window,
-  documentTarget = globalThis.document, pollMs = 30000 }) {
+  documentTarget = globalThis.document, pollMs = 30000, healthyPollMs = pollMs, healthy = () => false }) {
   let disposed = false
+  let timer = null
   const request = payload => { if (!disposed) refresh(payload) }
   const visible = () => { if (!documentTarget || documentTarget.visibilityState === 'visible') request() }
+  // The blind poll exists because a live channel can stop delivering without
+  // saying so. While the channel still reports itself healthy that is a rare
+  // fault, so the page asks far less often; a returning user is covered by
+  // focus and visibility, which refresh immediately.
+  const arm = () => {
+    if (disposed) return
+    clearTimeout(timer)
+    timer = setTimeout(() => { visible(); arm() }, healthy() ? healthyPollMs : pollMs)
+  }
   windowTarget?.addEventListener('online', request)
   windowTarget?.addEventListener('focus', visible)
   documentTarget?.addEventListener('visibilitychange', visible)
-  const poll = setInterval(visible, pollMs)
-  return () => {
+  arm()
+  const stop = () => {
     disposed = true
-    clearInterval(poll)
+    clearTimeout(timer)
     windowTarget?.removeEventListener('online', request)
     windowTarget?.removeEventListener('focus', visible)
     documentTarget?.removeEventListener('visibilitychange', visible)
   }
+  // Losing the channel must shorten the next wait immediately, not after the
+  // long interval that was armed while everything still looked fine.
+  stop.retime = arm
+  return stop
 }
 
 export function subscribeTournament({ client, id, name, getState, refresh, onStatus,
   windowTarget = globalThis.window, documentTarget = globalThis.document, pollMs = 30000,
-  recover = true }) {
+  healthyPollMs = 120000, readyDelay = 700, recover = true }) {
   let disposed = false
+  let subscribed = false
+  let readyTimer = null
   const request = payload => { if (!disposed) refresh(payload) }
+  // A join reports readiness twice: the channel says SUBSCRIBED, and postgres
+  // says its listener is live a moment later — measured at 300 ms and 561 ms
+  // against the live project. Both mean "events may start now", and a read must
+  // follow, but one read after the last of them closes the same gap; reading on
+  // each made every page load fetch the whole snapshot twice over.
+  const requestReady = () => {
+    if (disposed) return
+    clearTimeout(readyTimer)
+    readyTimer = setTimeout(() => { readyTimer = null; request() }, readyDelay)
+  }
   const channel = client.channel(`${name}-${id}`)
   for (const table of ['tournaments', 'entries', 'matches', 'live_scores', 'groups', 'tournament_admins', 'courts', 'match_schedule']) {
     const filter = `${table === 'tournaments' ? 'id' : 'tournament_id'}=eq.${id}`
@@ -102,16 +128,22 @@ export function subscribeTournament({ client, id, name, getState, refresh, onSta
   }
   // Postgres' listener can become ready after the channel joins. Close both gaps.
   channel.on('system', {}, payload => {
-    if (payload.extension === 'postgres_changes' && payload.status === 'ok') request()
+    if (payload.extension === 'postgres_changes' && payload.status === 'ok') requestReady()
   })
+  const stopRecovery = recover
+    ? subscribeRefreshTriggers({ refresh: request, windowTarget, documentTarget, pollMs, healthyPollMs, healthy: () => subscribed })
+    : null
   channel.subscribe(status => {
     if (disposed) return
+    const wasSubscribed = subscribed
+    subscribed = status === 'SUBSCRIBED'
     onStatus?.(status)
-    if (status === 'SUBSCRIBED') request()
+    if (subscribed) requestReady()
+    if (subscribed !== wasSubscribed) stopRecovery?.retime?.()
   })
-  const stopRecovery = recover ? subscribeRefreshTriggers({ refresh: request, windowTarget, documentTarget, pollMs }) : null
   return () => {
     disposed = true
+    clearTimeout(readyTimer)
     stopRecovery?.()
     void client.removeChannel(channel)
   }

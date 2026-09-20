@@ -12,6 +12,11 @@ const saveCourts = async (t, courts, actor = 'owner', rev = null) =>
   (await asActor(ctx, actor, 'select save_courts($1,$2,$3) c', [t.id, JSON.stringify(courts), rev ?? await revision(t.id)])).rows[0].c
 const setSchedule = async (m, { court = null, at = null, kind = null, queue = null, ignore = false } = {}, actor = 'owner') =>
   (await asActor(ctx, actor, 'select set_match_schedule($1,$2,$3,$4,$5,$6) r', [m.id, court, at, kind, queue, ignore])).rows[0].r
+const place = async (m, court, order, { ignore = true } = {}, actor = 'owner') =>
+  (await asActor(ctx, actor, 'select place_match_in_court_queue($1,$2,$3,$4) r', [m.id, court, order, ignore])).rows[0].r
+const queueOf = async (t, court) => (await ctx.db.query(
+  'select match_id, queue_order from match_schedule where tournament_id=$1 and state=$2 and court_id=$3 and queue_order is not null order by queue_order',
+  [t.id, 'draft', court])).rows.map(r => [r.match_id, r.queue_order])
 const check = async (m, { court = null, at = null, kind = null, queue = null } = {}, actor = 'owner') =>
   (await asActor(ctx, actor, 'select check_match_schedule($1,$2,$3,$4,$5) r', [m.id, court, at, kind, queue])).rows[0].r
 const rows = async (t, state = null) => (await ctx.db.query('select * from match_schedule where tournament_id=$1 and ($2::text is null or state=$2) order by state,match_id', [t.id, state])).rows
@@ -28,6 +33,13 @@ async function bracket() {
 }
 async function roundRobin() {
   const t = await fixture(ctx, { status: 'registration_closed', isPublic: true, format: 'round_robin', count: 3 })
+  await asActor(ctx, 'owner', 'select generate_round_robin($1)', [t.id])
+  const courts = await saveCourts(t, [{ name: 'A' }, { name: 'B' }])
+  return { t, ms: await matches(ctx, t.id), courts }
+}
+/** Four entries give six matches, enough to fill a queue and still keep spares. */
+async function courtQueue() {
+  const t = await fixture(ctx, { status: 'registration_closed', isPublic: true, format: 'round_robin', count: 4 })
   await asActor(ctx, 'owner', 'select generate_round_robin($1)', [t.id])
   const courts = await saveCourts(t, [{ name: 'A' }, { name: 'B' }])
   return { t, ms: await matches(ctx, t.id), courts }
@@ -165,6 +177,103 @@ test('drafts stay private; publishing copies them for everyone and reverting dis
   // Removing a court leaves its matches without a court but keeps the time.
   await saveCourts(t, [{ id: courts[1].id, name: 'Court 2' }])
   assert.deepEqual((await rows(t)).filter(r => r.match_id === semis[0].id).map(r => r.court_id), [null, null])
+})
+
+test('a court queue is renumbered 1..N in one call, and leaving a court closes the gap', async () => {
+  const { t, ms, courts } = await courtQueue()
+  const [a, b] = courts.map(c => c.id)
+  // Append three matches; each call sends the queue it can see plus the newcomer.
+  for (const m of ms.slice(0, 3)) await place(m, a, [...(await queueOf(t, a)).map(([id]) => id), m.id])
+  assert.deepEqual(await queueOf(t, a), [[ms[0].id, 1], [ms[1].id, 2], [ms[2].id, 3]])
+
+  // Move the last one to the front: dense 1..N, no duplicates, one round trip.
+  await place(ms[2], a, [ms[2].id, ms[0].id, ms[1].id])
+  assert.deepEqual(await queueOf(t, a), [[ms[2].id, 1], [ms[0].id, 2], [ms[1].id, 3]])
+
+  // Moving to another court compacts the one left behind.
+  await place(ms[0], b, [ms[0].id])
+  assert.deepEqual(await queueOf(t, a), [[ms[2].id, 1], [ms[1].id, 2]])
+  assert.deepEqual(await queueOf(t, b), [[ms[0].id, 1]])
+
+  // A timed match on the same court keeps its time and stays out of the queue.
+  await setSchedule(ms[3], { court: a, at: T1, kind: 'fixed', ignore: true })
+  await place(ms[1], a, [ms[1].id, ms[2].id])
+  assert.deepEqual(await queueOf(t, a), [[ms[1].id, 1], [ms[2].id, 2]])
+  const timed = (await rows(t, 'draft')).find(r => r.match_id === ms[3].id)
+  assert.equal(timed.queue_order, null)
+  assert.equal(new Date(timed.scheduled_at).getTime(), new Date(T1).getTime())
+
+  // A stale array keeps the rows it forgot, appended after the listed ones.
+  await place(ms[2], a, [ms[2].id])
+  assert.deepEqual(await queueOf(t, a), [[ms[2].id, 1], [ms[1].id, 2]])
+
+  // Queue places are always unique per court.
+  assert.equal((await ctx.db.query(`select count(*)::int c from (select court_id,queue_order from match_schedule
+    where state='draft' and queue_order is not null group by 1,2 having count(*)>1) x`)).rows[0].c, 0)
+})
+
+test('placing in a queue refuses what the server cannot move and never half-applies', async () => {
+  const { t, ms, courts } = await courtQueue()
+  const a = courts[0].id
+  for (const m of ms.slice(0, 3)) await place(m, a, [...(await queueOf(t, a)).map(([id]) => id), m.id])
+
+  for (const [label, args] of [
+    ['no order', [ms[0], a, null]],
+    ['empty order', [ms[0], a, []]],
+    ['order without the moved match', [ms[0], a, [ms[1].id]]],
+    ['duplicate ids', [ms[0], a, [ms[0].id, ms[0].id]]],
+  ]) {
+    const before = await snapshot(ctx)
+    await assert.rejects(place(...args), /schedule\.invalidAssignment/, label)
+    assert.deepEqual(await snapshot(ctx), before, label)
+  }
+  const other = await courtQueue()
+  await assert.rejects(place(ms[0], null, [ms[0].id]), /schedule\.invalidCourt/)
+  await assert.rejects(place(ms[0], other.courts[0].id, [ms[0].id]), /schedule\.invalidCourt/)
+  await assert.rejects(place(ms[0], a, [ms[0].id, other.ms[0].id]), /schedule\.invalidAssignment/)
+
+  for (const actor of ['anon', 'outsider', 'counter', 'platform_admin']) {
+    await assertDeniedUnchanged(ctx, actor, 'select place_match_in_court_queue($1,$2,$3,$4)', [ms[0].id, a, [ms[0].id], true])
+  }
+
+  // A live match keeps its place: reordering around it is refused as a whole.
+  await asActor(ctx, 'owner', "update tournaments set status='in_progress' where id=$1", [t.id])
+  await asActor(ctx, 'counter', 'select start_live_match($1,$2)', [ms[0].id, ms[0].score_revision])
+  let before = await snapshot(ctx)
+  await assert.rejects(place(ms[2], a, [ms[2].id, ms[0].id, ms[1].id]), /schedule\.queueLocked/)
+  assert.deepEqual(await snapshot(ctx), before, 'the column is not left half-renumbered')
+  await assert.rejects(place(ms[0], a, [ms[1].id, ms[0].id, ms[2].id]), /schedule\.conflict/)
+  // A reorder that leaves the live match where it is stays allowed.
+  await place(ms[1], a, [ms[0].id, ms[1].id, ms[2].id])
+  assert.deepEqual(await queueOf(t, a), [[ms[0].id, 1], [ms[1].id, 2], [ms[2].id, 3]])
+
+  // Soft conflicts still need the flag.
+  const fresh = await courtQueue()
+  await settings(fresh.t, { schedule_config: { min_rest_minutes: 60 } })
+  const shared = fresh.ms[0].side_a_entry_id
+  const neighbour = fresh.ms.find(m => m.id !== fresh.ms[0].id && (m.side_a_entry_id === shared || m.side_b_entry_id === shared))
+  await setSchedule(fresh.ms[0], { court: fresh.courts[0].id, at: T1, kind: 'fixed' })
+  await setSchedule(neighbour, { at: T2, kind: 'fixed', ignore: true })
+  before = await snapshot(ctx)
+  await assert.rejects(place(neighbour, fresh.courts[0].id, [neighbour.id], { ignore: false }), /schedule\.warnings/)
+  assert.deepEqual(await snapshot(ctx), before)
+  assert.ok((await place(neighbour, fresh.courts[0].id, [neighbour.id])).conflicts.some(c => c.kind === 'rest_short'))
+})
+
+test('removing a court no longer breaks on a match that only holds a queue place', async () => {
+  const { t, ms, courts } = await courtQueue()
+  const [a, b] = courts.map(c => c.id)
+  await setSchedule(ms[0], { court: a, queue: 1 })
+  await setSchedule(ms[1], { court: a, at: T1, kind: 'fixed', queue: 2, ignore: true })
+  await setSchedule(ms[2], { court: b, at: T2, kind: 'fixed' })
+  await saveCourts(t, [{ id: b, name: 'B' }])
+  const left = await rows(t, 'draft')
+  // The queue-only row cannot exist without a court, so it goes; the timed one
+  // keeps its time and loses the court and the queue place; court B is untouched.
+  assert.equal(left.find(r => r.match_id === ms[0].id), undefined)
+  const timed = left.find(r => r.match_id === ms[1].id)
+  assert.deepEqual([timed.court_id, timed.queue_order, new Date(timed.scheduled_at).getTime()], [null, null, new Date(T1).getTime()])
+  assert.equal(left.find(r => r.match_id === ms[2].id).court_id, b)
 })
 
 test('schedule settings are validated and the forward chain replays without data changes', async () => {

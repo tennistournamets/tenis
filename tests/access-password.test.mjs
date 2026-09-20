@@ -50,6 +50,39 @@ test('password mode needs a stored bcrypt hash; the hash and the flag never reac
   assert.equal((await row(t.id)).access_password_hash, null)
 })
 
+test('organizers read back the page code they set; nobody else can, through any path', async () => {
+  const t = await fixture(ctx, { isPublic: true })
+  const read = (actor = 'owner') => asActor(ctx, actor, 'select tournament_password($1) v', [t.id])
+    .then(r => r.rows[0].v)
+  assert.equal(await read(), null)
+  await setPassword(t, 'court-2026')
+  // The organizer sees the code; the hash still cannot be read by anyone.
+  assert.equal(await read('owner'), 'court-2026')
+  assert.equal(await read('editor'), 'court-2026')
+  // A counter runs results only, and outsiders are outsiders; an anonymous
+  // visitor cannot even reach the function that carries the secret.
+  for (const actor of ['counter', 'outsider', 'platform_admin']) assert.equal(await read(actor), null)
+  await assert.rejects(read('anon'), /permission denied/)
+  for (const actor of ['anon', 'owner']) {
+    await assert.rejects(asActor(ctx, actor, 'select access_password_plain from tournaments where id=$1', [t.id]),
+      /permission denied/)
+  }
+  // The code never rides along in a snapshot, for an organizer or for a visitor.
+  await settings(t, { visibility: 'password' })
+  for (const actor of ['owner', 'anon']) {
+    const snapshot = (await asActor(ctx, actor, 'select get_tournament_sync_state($1) s', [t.id])).rows[0].s
+    assert.equal(JSON.stringify(snapshot ?? {}).includes('court-2026'), false, actor)
+  }
+  // Changing it keeps hash and code in step; removing it clears both.
+  await setPassword(t, 'court-2027')
+  assert.equal(await read(), 'court-2027')
+  await unlock(t, 'court-2027')
+  await settings(t, { visibility: 'link' })
+  await setPassword(t, '')
+  assert.equal(await read(), null)
+  assert.equal((await row(t.id)).access_password_hash, null)
+})
+
 test('anonymous visitors learn only that a slug is password-protected and unlock it with the right password', async () => {
   const t = await protectedTournament()
   const plain = await fixture(ctx, { isPublic: false })

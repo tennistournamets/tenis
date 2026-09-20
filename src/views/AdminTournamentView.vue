@@ -22,7 +22,7 @@ import ScheduleBoard from '../components/admin/ScheduleBoard.vue'
 import MatchScheduleModal from '../components/admin/MatchScheduleModal.vue'
 import AccessMatrix from '../components/admin/AccessMatrix.vue'
 import { accessError, assignableRoles, canEditMembership, visibilityOf } from '../lib/access'
-import { draftDiff, effectiveSchedule, indexSchedule, scheduleError, timezoneOf } from '../lib/schedule'
+import { applyScheduleAction, draftDiff, effectiveSchedule, indexSchedule, scheduleError, timezoneOf } from '../lib/schedule'
 import TournamentMatchList from '../components/TournamentMatchList.vue'
 import { scoringError } from '../lib/tennisRules'
 import { registrationDisplayState, registrationError } from '../lib/registrationRules'
@@ -317,6 +317,10 @@ async function stopTournament() {
 }
 
 const entryEditState = ref(null)
+// A dropped card must land where it was dropped, not after a round trip. The
+// move is applied locally and replayed over every snapshot until its own write
+// has been confirmed, so a poll arriving mid-flight cannot pull the card back.
+const pendingScheduleMoves = ref([])
 let adminListStale = true
 const snapshotRefresh = createSnapshotRefresh({
   read: () => readAdminTournamentSnapshot(supabase, props.id, { includeAdmins: adminListStale }),
@@ -338,7 +342,7 @@ const snapshotRefresh = createSnapshotRefresh({
     if (selectedLiveMatch.value && !data.matches.some(m => m.id === selectedLiveMatch.value.id)) selectedLiveMatch.value = null
     groups.value = data.groups
     courts.value = data.courts || []
-    schedule.value = data.schedule || []
+    schedule.value = pendingScheduleMoves.value.reduce(applyScheduleAction, data.schedule || [])
     if (scheduleMatch.value && !data.matches.some(m => m.id === scheduleMatch.value.id)) scheduleMatch.value = null
     standings.value = data.standings
     groupStandings.value = data.group_standings
@@ -376,7 +380,11 @@ function setupRealtime() {
     client: supabase, id: props.id, name: 'admin',
     getState: () => ({ entries: entries.value, matches: matches.value, sets: matchSets.value, live: liveScores.value, groups: groups.value }),
     refresh: payload => {
-      if (!payload || payload.table === 'tournament_admins') adminListStale = true
+      // The 30 s recovery poll fires with no payload. On a healthy channel it
+      // cannot have missed a membership change, so re-reading the co-organizer
+      // list every half minute is pure traffic; after a drop or a rejoin the
+      // channel may well have missed one, and syncFailed marks exactly that.
+      if (payload?.table === 'tournament_admins' || syncFailed.value) adminListStale = true
       snapshotRefresh.request()
     },
     onStatus: status => { if (status !== 'SUBSCRIBED') syncFailed.value = true },
@@ -435,6 +443,49 @@ async function saveCourts(list) {
     errorText.value = scheduleError(error?.message, t)
     await loadAll()
   } finally { actionLoading.value = false }
+}
+
+// One drop is one RPC, and the card moves before it is sent. The board is not
+// disabled while the write is in flight: the server serialises schedule writes
+// per tournament, so a burst of drops is safe and the organizer keeps dragging.
+async function moveScheduleItem(action) {
+  if (!action) return
+  const previous = schedule.value
+  pendingScheduleMoves.value = [...pendingScheduleMoves.value, action]
+  schedule.value = applyScheduleAction(previous, action)
+  errorText.value = ''
+  noticeText.value = ''
+  const settle = () => { pendingScheduleMoves.value = pendingScheduleMoves.value.filter(item => item !== action) }
+  try {
+    const call = action.kind === 'clear'
+      ? supabase.rpc('clear_match_schedule', { p_match_id: action.matchId })
+      : action.kind === 'assign'
+        ? supabase.rpc('set_match_schedule', {
+          p_match_id: action.matchId,
+          p_court_id: action.courtId,
+          p_scheduled_at: action.scheduledAt,
+          p_time_kind: action.timeKind,
+          p_queue_order: null,
+          p_ignore_warnings: true,
+        })
+        : supabase.rpc('place_match_in_court_queue', {
+          p_match_id: action.matchId,
+          p_court_id: action.courtId,
+          p_order: action.order,
+          p_ignore_warnings: true,
+        })
+    const { error } = await call
+    if (error) throw error
+    // The snapshot still replays this move, so confirming it moves nothing.
+    await refreshScoreData()
+    settle()
+  } catch (error) {
+    // Drop this move and let the snapshot rebuild: restoring the array captured
+    // before it would also throw away any later drop still in flight.
+    settle()
+    errorText.value = scheduleError(error?.message, t)
+    await refreshScoreData()
+  }
 }
 
 async function publishSchedule() {
@@ -2017,12 +2068,14 @@ onBeforeUnmount(() => {
           :entries-map="entriesMap"
           :courts="courts"
           :schedule="schedule"
+          :live-scores-by-match="liveScoresByMatch"
           :busy="actionLoading || settingsSaving"
           :can-manage="canManageTournament"
           @assign="scheduleMatch = $event"
           @publish="publishSchedule"
           @revert="revertSchedule"
           @save-courts="saveCourts"
+          @move="moveScheduleItem"
         />
       </div>
 

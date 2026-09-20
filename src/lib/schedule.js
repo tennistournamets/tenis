@@ -129,6 +129,122 @@ export function conflictText(conflict, t, matchLabel = () => '') {
 
 export const hasHardConflict = conflicts => (conflicts || []).some(c => c.severity === 'hard')
 
+// publish_schedule deliberately publishes a draft despite these two: they mark
+// matches that can no longer move, not a clash the organizer could resolve.
+// Without the same exemption here, the first finished match would block every
+// later publication.
+const PUBLISHABLE_DESPITE = new Set(['match_finished', 'match_live'])
+
+export const blocksPublish = conflict => conflict.severity === 'hard' && !PUBLISHABLE_DESPITE.has(conflict.kind)
+
+/** Matches the server refuses to reschedule: both are hard conflicts. */
+export const scheduleLocked = (match, liveRow) => match?.status === 'finished' || liveRow?.status === 'active'
+
+/**
+ * A court column split at the queue boundary. The head holds matches with a
+ * time (or a bare court), which sort ahead of the queue because their
+ * queue_order is null; the queue holds the numbered ones in their order.
+ */
+export function splitCourtColumn(columnIds = [], draftByMatch = {}) {
+  const head = []
+  const queue = []
+  for (const id of columnIds) (draftByMatch[id]?.queue_order ? queue : head).push(id)
+  queue.sort((a, b) => draftByMatch[a].queue_order - draftByMatch[b].queue_order)
+  return { head, queue }
+}
+
+/** The queue after moving `matchId` in front of `beforeMatchId` (null appends). */
+export function reorderQueue(queue = [], matchId, beforeMatchId = null) {
+  const rest = queue.filter(id => id !== matchId)
+  const at = beforeMatchId === null ? -1 : rest.indexOf(beforeMatchId)
+  if (at < 0) return [...rest, matchId]
+  return [...rest.slice(0, at), matchId, ...rest.slice(at)]
+}
+
+const sameOrder = (a, b) => a.length === b.length && a.every((id, i) => id === b[i])
+
+/**
+ * The single write one drop produces, or null when the drop changes nothing.
+ * A timed match keeps its time and never takes a queue number: the board sorts
+ * on `queue_order || 0` first, so a number would drag it behind the queue.
+ *
+ * @returns {null
+ *  | { kind: 'clear', matchId }
+ *  | { kind: 'assign', matchId, courtId, scheduledAt, timeKind }
+ *  | { kind: 'queue', matchId, courtId, order }}
+ */
+export function scheduleDropAction({
+  matchId, draftRow = null, locked = false,
+  targetKey, beforeMatchId = null, columnIds = [], draftByMatch = {},
+} = {}) {
+  if (!matchId || locked || !targetKey) return null
+
+  if (targetKey === 'unassigned') return draftRow ? { kind: 'clear', matchId } : null
+
+  // "Без корта" only means "keep the time, drop the court"; a row with neither
+  // court nor time is rejected by the table check and by set_match_schedule.
+  if (targetKey === 'none') {
+    if (!draftRow?.scheduled_at || !draftRow.court_id) return null
+    return { kind: 'assign', matchId, courtId: null, scheduledAt: draftRow.scheduled_at, timeKind: draftRow.time_kind }
+  }
+
+  if (draftRow?.scheduled_at) {
+    if (draftRow.court_id === targetKey && draftRow.queue_order == null) return null
+    return { kind: 'assign', matchId, courtId: targetKey, scheduledAt: draftRow.scheduled_at, timeKind: draftRow.time_kind }
+  }
+
+  const { queue } = splitCourtColumn(columnIds, draftByMatch)
+  const order = reorderQueue(queue, matchId, beforeMatchId)
+  if (draftRow?.court_id === targetKey && sameOrder(order, queue)) return null
+  return { kind: 'queue', matchId, courtId: targetKey, order }
+}
+
+/**
+ * The draft rows as they will look once the server has accepted `action`.
+ * The board applies this immediately so a dropped card lands where it was
+ * dropped, and the snapshot that follows confirms it without moving anything.
+ * It mirrors place_match_in_court_queue: the listed queue becomes 1..N, rows
+ * on that court the caller did not list keep a place after them, and the court
+ * the match came from is compacted.
+ */
+export function applyScheduleAction(rows = [], action) {
+  if (!action) return rows
+  const kept = rows.filter(row => row.state !== 'draft')
+  const draft = new Map(rows.filter(row => row.state === 'draft').map(row => [row.match_id, { ...row }]))
+  const blank = matchId => ({ id: `optimistic-${matchId}`, match_id: matchId, state: 'draft',
+    court_id: null, scheduled_at: null, time_kind: null, queue_order: null })
+  const from = draft.get(action.matchId)?.court_id ?? null
+
+  if (action.kind === 'clear') {
+    draft.delete(action.matchId)
+  } else if (action.kind === 'assign') {
+    const row = draft.get(action.matchId) || blank(action.matchId)
+    Object.assign(row, { court_id: action.courtId, scheduled_at: action.scheduledAt ?? null,
+      time_kind: action.timeKind ?? null, queue_order: null })
+    draft.set(action.matchId, row)
+  } else if (action.kind === 'queue') {
+    const listed = new Set(action.order)
+    const trailing = [...draft.values()]
+      .filter(row => row.court_id === action.courtId && row.queue_order && !listed.has(row.match_id))
+      .sort((a, b) => a.queue_order - b.queue_order)
+      .map(row => row.match_id)
+    ;[...action.order, ...trailing].forEach((matchId, index) => {
+      const row = draft.get(matchId) || blank(matchId)
+      Object.assign(row, { court_id: action.courtId, queue_order: index + 1 })
+      draft.set(matchId, row)
+    })
+  }
+
+  const to = action.kind === 'clear' ? null : action.courtId
+  if (from && from !== to) {
+    [...draft.values()]
+      .filter(row => row.court_id === from && row.queue_order)
+      .sort((a, b) => a.queue_order - b.queue_order)
+      .forEach((row, index) => { row.queue_order = index + 1 })
+  }
+  return [...kept, ...draft.values()]
+}
+
 /** Sort key for "by time": fixed/not-before instants first, then court queues, then unscheduled. */
 export function scheduleSortKey(row) {
   if (!row) return [2, 0, 0]
