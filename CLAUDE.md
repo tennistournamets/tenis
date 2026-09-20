@@ -53,6 +53,7 @@ src/
     index.js                  # Route definitions + auth guard
   stores/
     auth.js                   # Pinia auth store (user, session, currentPlayer, platformRole, tournamentRoles)
+    featureFlags.js           # Pinia feature-flags store (flags map, enabledSports, setFlag via RPC, realtime)
   views/
     HomeView.vue              # Landing / Google sign-in
     AdminLayout.vue           # Admin wrapper with nav
@@ -60,6 +61,7 @@ src/
     AdminTournamentCreateView.vue  # 3-step create wizard
     AdminTournamentView.vue   # Main admin page (5 tabs: Entries, Bracket/Stage, Schedule, Scores, Settings) - LARGEST FILE
     AdminSettingsView.vue     # User settings
+    AdminPlatformView.vue     # Super-admin only: feature flags (sport toggles)
     PublicTournamentView.vue  # Public tournament page (registration + bracket/standings/groups)
   App.vue                     # Root component
   main.js                     # App entry point
@@ -83,6 +85,7 @@ supabase/
 | `/admin/tournaments/new` | AdminTournamentCreateView | Yes |
 | `/admin/tournaments/:id` | AdminTournamentView | Yes |
 | `/admin/settings` | AdminSettingsView | Yes |
+| `/admin/platform` | AdminPlatformView | Yes + `platform_admins` row (else redirect to list) |
 
 ## Database (Supabase PostgreSQL)
 
@@ -90,6 +93,7 @@ supabase/
 
 - **players** - global person records linked to auth.users (display_name, avatar_url, contact_hash)
 - **platform_admins** - super-admin user_ids; `is_platform_admin()` checks membership
+- **feature_flags** - platform-wide toggles (`key` PK, `enabled`, `description`, `updated_at/by`). Sports are gated by `sport.<enum>` keys; missing key = disabled. Seeded: tennis/padel on, football off (`on conflict do nothing`). Public read; write only super-admin.
 - **tournaments** - name, slug, **sport**, **format**, category (singles/doubles), status, `set_format` (nullable; sets sports only), `visibility` (public/link/private/password; `is_public` is derived from it by trigger and stays the RLS gate), doubles_pairing_mode, **format_config** jsonb, **scoring_config** jsonb, `created_by` (owner), `settings_revision` (CAS for settings writes), contacts + `publish_contact`, registration rules (`registration_capacity`, `capacity_public`, `registration_deadline`, `entry_fee_mode/minor/currency/unit`, `waitlist_enabled`), `schedule_config` jsonb + `schedule_published_at`, `access_password_hash`/`access_password_version` (never granted to API roles)
 - **tournament_admins** - roles: owner, editor, counter (`counter` = "results only": live scoring plus final results/corrections/stop; no management). Writes only via RPC; ownership is granted/removed by owners only; the last owner is protected.
 - **tournament_admin_events** - journal of ownership transfers (admins read, nobody writes directly)
@@ -125,6 +129,7 @@ supabase/
 - `start_live_match()`, `record_point()`, `stop_live_match()` - live scoring lifecycle
 - `add_tournament_admin_by_email()`, `remove_tournament_admin()` - co-organizer management
 - `is_tournament_admin()`, `can_live_score()`, `is_platform_admin()` - access checks
+- `is_feature_enabled(key)` / `set_feature_flag(key, enabled, description)` - feature flags; `create_tournament()` rejects a sport whose `sport.<x>` flag is off
 
 ### Security
 
@@ -133,12 +138,13 @@ supabase/
 
 ### Realtime
 
-Tables `tournaments`, `entries`, `matches`, `match_sets`, `tournament_admins`, `live_scores`, `groups`, `group_entries`, `courts`, `match_schedule` are in the `supabase_realtime` publication. Payloads are only invalidation signals: the client re-reads the full snapshot (`src/lib/tournamentSync.js`). Password pages have no Realtime (RLS hides their rows); they poll every 30 s.
+Tables `tournaments`, `entries`, `matches`, `match_sets`, `tournament_admins`, `live_scores`, `groups`, `group_entries`, `courts`, `match_schedule`, `feature_flags` are in the `supabase_realtime` publication. Payloads are only invalidation signals: the client re-reads the full snapshot (`src/lib/tournamentSync.js`). Password pages have no Realtime (RLS hides their rows); they poll every 30 s.
 
 ## Key Architecture Patterns
 
 - **Canonical aggregate:** every sport in every format writes `matches.side_a_score`/`side_b_score` + `winner_entry_id`. Standings/propagation/badges read only this. Sport specifics (tennis sets, football penalties) live in satellites the aggregate consumers ignore.
 - **Sport/format registries drive the UI:** `lib/sportConfig.js` (`getSportConfig`, `scoringFamily`) gates form fields and chooses which board/editor renders; `lib/scoringEngines.js` maps family → state/format helpers.
+- **Feature flags gate sports:** `SPORTS` in `sportConfig.js` is the full registry; `SportPicker` renders only `featureFlags.enabledSports`. Adding a sport = enum + `sportConfig` + i18n + flip its `sport.<x>` flag in `/admin/platform` (or seed row in schema.sql).
 - **Bracket vs standings:** single/double-elim & group playoff render bracket boards (tree via `next_match_id`); round_robin & group stage render `StandingsTable` + fixtures.
 - **Tournaments accessed by slug** (public sharing).
 
@@ -180,7 +186,7 @@ Planned/known gaps, roughly by priority. Not implemented yet.
 - i18n completeness pass for `lt` (some strings still English).
 
 ### Platform
-- Super-admin dashboard (list all tournaments/users; `platform_admins` infra exists, no UI).
+- Super-admin dashboard (list all tournaments/users). Feature-flag toggles exist at `/admin/platform`; tournament/user listing does not.
 - Adoption of the migration baseline by the existing TENIS project (see `docs/RELEASE.md`); until then new forward migrations are applied to TENIS one by one.
 
 ## Dev Setup
@@ -212,7 +218,7 @@ DB changes follow `docs/RELEASE.md`: create a migration with `npx supabase migra
 ## Conventions
 
 - All components use Vue 3 `<script setup>` syntax
-- State via Pinia (single `auth` store)
+- State via Pinia (`auth` + `featureFlags` stores)
 - DB logic in PL/pgSQL functions, called from frontend via `supabase.rpc()`
 - i18n keys structured as `section.subsection.key` (e.g., `sport.football`, `tournamentFormat.round_robin`, `standings.points`)
 - No CSS framework - styles in `styles.css` (global) + scoped `<style>` in newer components

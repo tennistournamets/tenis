@@ -42,6 +42,11 @@ export const sportConfig = {
   },
 }
 
+// Feature-flag key gating a sport in the create wizard (see `feature_flags` table).
+export function sportFlagKey(sport) {
+  return `sport.${sport}`
+}
+
 export function getSportConfig(sport) {
   return sportConfig[sport] ?? sportConfig.tennis
 }

@@ -10,7 +10,8 @@ import { confirmDiscard, useUnsavedChanges, withApprovedDeparture } from '../lib
 import { cloneForm, sameForm } from '../lib/formDraft'
 import { clearSessionDraft, readSessionDraft, userDraftKey, writeSessionDraft } from '../lib/sessionDraft'
 import { useAuthStore } from '../stores/auth'
-import { getSportConfig, resolveCategory } from '../lib/sportConfig'
+import { SPORTS, getSportConfig, resolveCategory } from '../lib/sportConfig'
+import { useFeatureFlagsStore } from '../stores/featureFlags'
 import SportPicker from '../components/SportPicker.vue'
 import AppIcon from '../components/AppIcon.vue'
 import FormatPicker from '../components/FormatPicker.vue'
@@ -23,6 +24,7 @@ import { DEFAULT_TENNIS_RULES, tennisRulesSummary } from '../lib/tennisRules'
 const { t } = useI18n()
 const router = useRouter()
 const auth = useAuthStore()
+const flags = useFeatureFlagsStore()
 
 const saving = ref(false)
 const errorText = ref('')
@@ -93,6 +95,12 @@ const previewMeta = computed(() => {
   return parts.join(' · ')
 })
 
+// A sport switched off by the super-admin must not stay selected.
+watch(() => flags.enabledSports, (enabled) => {
+  if (!flags.loaded || enabled.length === 0) return
+  if (!enabled.includes(form.sport)) form.sport = enabled[0]
+})
+
 // Keep format valid for the chosen sport; apply forced category.
 watch(() => form.sport, (sport) => {
   const c = getSportConfig(sport)
@@ -121,7 +129,7 @@ watch(step, async () => {
 async function nextStep() {
   errorText.value = ''
   slugError.value = ''
-  if (step.value === 4) {
+  if (step.value === 3) {
     if (!form.name.trim()) {
       errorText.value = t('admin.wizardNameRequired')
       await showCreateError(formError)
@@ -168,15 +176,15 @@ async function createTournament() {
 
   errorText.value = ''
   slugError.value = ''
-  // Поле названия живёт на шаге 4 — на финальном шаге браузерный required его не видит.
+  // Поле названия живёт на шаге 3 — на финальном шаге браузерный required его не видит.
   if (!form.name.trim()) {
-    step.value = 4
+    step.value = 3
     errorText.value = t('admin.wizardNameRequired')
     await showCreateError(formError)
     return
   }
   if (form.slug.trim() && !normalizeTournamentSlug(form.slug)) {
-    step.value = 4
+    step.value = 3
     slugError.value = t('mobile.invalidSlug')
     await showCreateError(slugInput)
     return
@@ -274,7 +282,11 @@ function discardStoredDraft() {
 }
 
 onMounted(async () => {
-  await auth.init()
+  await Promise.all([auth.init(), flags.load().catch(() => {})])
+  if (flags.loaded && flags.enabledSports.length && !flags.enabledSports.includes(form.sport)) {
+    form.sport = flags.enabledSports[0]
+    initialForm.sport = form.sport
+  }
   draftKey.value = userDraftKey('create-tournament', auth.user?.id)
   const stored = readSessionDraft(draftKey.value)
   if (stored?.form && Number.isInteger(stored.step) && stored.step >= 1 && stored.step <= TOTAL_STEPS) {
@@ -289,7 +301,8 @@ onMounted(async () => {
       }
     }
     Object.assign(form, restored)
-    if (!['tennis', 'padel', 'football'].includes(form.sport)) form.sport = initialForm.sport
+    if (!SPORTS.includes(form.sport)) form.sport = initialForm.sport
+    if (flags.loaded && flags.enabledSports.length && !flags.enabledSports.includes(form.sport)) form.sport = initialForm.sport
     if (!getSportConfig(form.sport).allowedFormats.includes(form.format)) form.format = initialForm.format
     if (!['singles', 'doubles'].includes(form.category)) form.category = initialForm.category
     if (!['best_of_3', 'best_of_5'].includes(form.set_format)) form.set_format = initialForm.set_format
@@ -348,18 +361,69 @@ onMounted(async () => {
     </div>
 
     <!-- Steps 3–6: настройки как продолжение степпера + живое превью -->
-    <form v-else id="wizard-form" class="wizard__body wizard__body--split" @submit.prevent="onSubmit">
+    <form v-else id="wizard-form" class="wizard__body wizard__body--form" @submit.prevent="onSubmit">
       <fieldset :disabled="saving" style="display: contents">
       <div class="wizard__form">
-        <!-- Step 3: правила игры -->
+        <!-- Step 3: о чемпионате — название, ссылка, контакты -->
         <template v-if="step === 3">
         <div class="wizard__lead">
-          <h1 ref="stepHeading" class="wizard__heading" tabindex="-1">{{ t('admin.wizardRules') }}</h1>
-          <p class="muted">{{ t('admin.wizardRulesHint') }}</p>
+          <h1 ref="stepHeading" class="wizard__heading" tabindex="-1">{{ t('admin.stepDetails') }}</h1>
         </div>
         <section class="wizard__group wizard__group--plain">
+          <h2 class="wizard__eyebrow">{{ t('admin.wizardBasics') }}</h2>
+
+          <div class="form-field">
+            <label for="create-name">{{ t('admin.name') }}</label>
+            <input id="create-name" v-model="form.name" class="input input--lg" type="text" required autocomplete="off" />
+          </div>
+
+          <div class="form-field">
+            <label for="create-desc">{{ t('admin.description') }}</label>
+            <textarea id="create-desc" v-model="form.description" class="input" rows="3" />
+          </div>
+        </section>
+
+        <section class="wizard__group">
+          <h2 class="wizard__eyebrow">{{ t('admin.wizardLink') }}</h2>
+
+          <div class="form-field">
+            <label for="create-slug">{{ t('admin.slug') }}</label>
+            <input id="create-slug" ref="slugInput" v-model="form.slug" class="input" type="text" maxlength="80"
+              autocapitalize="none" spellcheck="false" placeholder="summer-cup-2026"
+              :aria-invalid="Boolean(slugError)" aria-describedby="create-slug-preview create-slug-error" />
+            <p id="create-slug-preview" class="wizard__link-preview">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>
+              <span class="sr-only">{{ t('mobile.linkPreview') }}</span>{{ publicLink }}
+            </p>
+            <p v-if="slugError" id="create-slug-error" class="error-text" role="alert">{{ slugError }}</p>
+          </div>
+        </section>
+
+        <section class="wizard__group">
+          <h2 class="wizard__eyebrow">{{ t('admin.wizardContacts') }}</h2>
 
           <div class="wizard__grid2">
+            <div class="form-field">
+              <label for="create-phone">{{ t('admin.contactPhone') }}</label>
+              <input id="create-phone" v-model="form.contact_phone" class="input" type="tel" placeholder="+370 600 00000" autocomplete="tel" />
+            </div>
+
+            <div class="form-field">
+              <label for="create-email">{{ t('admin.contactEmail') }}</label>
+              <input id="create-email" v-model="form.contact_email" class="input" type="email" placeholder="info@example.com" autocomplete="email" />
+            </div>
+          </div>
+        </section>
+        </template>
+
+        <!-- Step 4: правила игры -->
+        <template v-else-if="step === 4">
+        <div class="wizard__lead">
+          <h1 ref="stepHeading" class="wizard__heading" tabindex="-1">{{ t('admin.wizardRules') }}</h1>
+        </div>
+        <section class="wizard__group wizard__group--plain">
+          <p class="wizard__eyebrow">{{ t('admin.wizardBasics') }}</p>
+          <div class="wizard__grid3">
             <div v-if="cfg.supportsCategory" class="form-field">
               <label for="create-cat">{{ t('admin.category') }}</label>
               <select id="create-cat" v-model="form.category" class="input">
@@ -393,60 +457,20 @@ onMounted(async () => {
             </div>
           </div>
 
-          <TennisRulesSettings v-if="form.sport === 'tennis'" v-model="form.scoring_config" id-prefix="create-tennis" :disabled="saving" />
+        </section>
 
-          <label v-if="effectiveCategory === 'doubles' && cfg.supportsDoublesPairing" class="wizard__toggle">
+        <section v-if="form.sport === 'tennis'" class="wizard__group">
+          <p class="wizard__eyebrow">{{ t('tennisRules.title') }}</p>
+          <TennisRulesSettings v-model="form.scoring_config" id-prefix="create-tennis" :disabled="saving" variant="plain" />
+        </section>
+
+        <section v-if="effectiveCategory === 'doubles' && cfg.supportsDoublesPairing" class="wizard__group">
+          <label class="wizard__toggle">
             <input v-model="form.doubles_pairing_random" type="checkbox" />
             <span class="wizard__toggle-body">
               <span class="wizard__toggle-title">{{ t('admin.pickRandomPairs') }}</span>
             </span>
           </label>
-        </section>
-        </template>
-
-        <!-- Step 4: о чемпионате — основное и контакты -->
-        <template v-else-if="step === 4">
-        <div class="wizard__lead">
-          <h1 ref="stepHeading" class="wizard__heading" tabindex="-1">{{ t('admin.stepDetails') }}</h1>
-          <p class="muted">{{ t('admin.wizardPreviewHint') }}</p>
-        </div>
-        <section class="wizard__group wizard__group--plain">
-          <h2 class="wizard__eyebrow">{{ t('admin.wizardBasics') }}</h2>
-
-          <div class="form-field">
-            <label for="create-name">{{ t('admin.name') }}</label>
-            <input id="create-name" v-model="form.name" class="input" type="text" required />
-          </div>
-
-          <div class="form-field">
-            <label for="create-desc">{{ t('admin.description') }}</label>
-            <textarea id="create-desc" v-model="form.description" class="input" rows="2" />
-          </div>
-
-          <div class="form-field">
-            <label for="create-slug">{{ t('admin.slug') }}</label>
-            <input id="create-slug" ref="slugInput" v-model="form.slug" class="input" type="text" maxlength="80"
-              autocapitalize="none" spellcheck="false" placeholder="summer-cup-2026"
-              :aria-invalid="Boolean(slugError)" aria-describedby="create-slug-preview create-slug-error" />
-            <p class="wizard__field-hint">{{ t('admin.slugHint') }}</p>
-            <p id="create-slug-preview" class="wizard__link-preview"><span>{{ t('mobile.linkPreview') }}</span><br />{{ publicLink }}</p>
-            <p v-if="slugError" id="create-slug-error" class="error-text" role="alert">{{ slugError }}</p>
-          </div>
-        </section>
-        <section class="wizard__group">
-          <h2 class="wizard__eyebrow">{{ t('admin.wizardContacts') }}</h2>
-
-          <div class="wizard__grid2">
-            <div class="form-field">
-              <label for="create-phone">{{ t('admin.contactPhone') }}</label>
-              <input id="create-phone" v-model="form.contact_phone" class="input" type="tel" placeholder="+370 600 00000" />
-            </div>
-
-            <div class="form-field">
-              <label for="create-email">{{ t('admin.contactEmail') }}</label>
-              <input id="create-email" v-model="form.contact_email" class="input" type="email" placeholder="info@example.com" />
-            </div>
-          </div>
         </section>
         </template>
 
@@ -472,6 +496,14 @@ onMounted(async () => {
           <h1 ref="stepHeading" class="wizard__heading" tabindex="-1">{{ t('admin.wizardPublish') }}</h1>
           <p class="muted">{{ t('admin.wizardPublishHint') }}</p>
         </div>
+        <div class="wizard__recap" aria-live="polite">
+          <span class="wizard__recap-icon"><AppIcon :name="form.sport" :size="20" /></span>
+          <div class="wizard__recap-body">
+            <span class="wizard__recap-name">{{ form.name || t('admin.wizardUntitled') }}</span>
+            <span class="wizard__recap-meta">{{ previewMeta }}</span>
+            <span v-if="form.sport === 'tennis'" class="wizard__recap-rules">{{ tennisRulesSummary(form.scoring_config, t) }}</span>
+          </div>
+        </div>
         <section class="wizard__group wizard__group--plain">
 
           <label v-for="mode in CREATE_VISIBILITY_MODES" :key="mode" class="wizard__toggle">
@@ -494,19 +526,6 @@ onMounted(async () => {
 
         <p v-if="errorText" ref="formError" class="error-text" role="alert" tabindex="-1">{{ errorText }}</p>
       </div>
-
-      <aside class="wizard__preview" aria-hidden="true">
-        <div class="wizard__preview-card">
-          <div class="wizard__preview-top">
-            <span class="wizard__preview-icon"><AppIcon :name="form.sport" :size="20" /></span>
-            <span v-if="form.is_public" class="wizard__preview-badge">{{ t('admin.wizardRegOpen') }}</span>
-          </div>
-          <h2 class="wizard__preview-name">{{ form.name || t('admin.wizardUntitled') }}</h2>
-          <p class="wizard__preview-meta">{{ previewMeta }}</p>
-          <p v-if="form.description" class="wizard__preview-desc">{{ form.description }}</p>
-          <p v-if="form.sport === 'tennis'" class="wizard__preview-desc">{{ tennisRulesSummary(form.scoring_config, t) }}</p>
-        </div>
-      </aside>
       </fieldset>
     </form>
 
@@ -543,7 +562,7 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
-  max-width: 1060px;
+  max-width: 880px;
   margin: 0 auto;
   padding: var(--space-5) var(--space-6) var(--space-6);
   background: var(--surface);
@@ -645,24 +664,18 @@ onMounted(async () => {
   margin: 0;
 }
 
-.wizard__body--split {
-  display: grid;
-  grid-template-columns: minmax(0, 460px) minmax(0, 1fr);
-  gap: var(--space-6);
-  align-items: start;
-}
-
 .wizard__form {
   display: flex;
   flex-direction: column;
-  gap: var(--space-5);
+  gap: var(--space-6);
+  width: 100%;
 }
 
 .wizard__group {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
-  padding-top: var(--space-4);
+  gap: var(--space-4);
+  padding-top: var(--space-5);
   border-top: 1px solid var(--border);
 }
 
@@ -749,69 +762,68 @@ onMounted(async () => {
   .wizard__grid2 { grid-template-columns: 1fr; }
 }
 
-.wizard__preview {
-  position: sticky;
-  top: var(--space-5);
+.wizard__grid3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-4);
 }
 
-.wizard__preview-card {
-  padding: var(--space-5);
-  border-radius: var(--radius);
-  background: var(--surface-raised);
-  color: var(--text);
-  border: 1px solid var(--border-strong);
-  box-shadow: var(--shadow-lg);
+@media (max-width: 1000px) {
+  .wizard__grid3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
-.wizard__preview-top {
+@media (max-width: 560px) {
+  .wizard__grid3 { grid-template-columns: 1fr; }
+}
+
+/* Recap on the publish step: what will be created */
+.wizard__recap {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: var(--space-4);
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-row);
 }
 
-.wizard__preview-icon {
+.wizard__recap-icon {
   width: 40px;
   height: 40px;
+  flex: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   color: var(--primary);
   border-radius: 10px;
-  background: var(--surface-row);
+  background: var(--surface);
   border: 1px solid var(--border);
 }
 
-.wizard__preview-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 10px;
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: var(--success-text);
-  background: var(--success-bg);
-  border-radius: 999px;
+.wizard__recap-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
 }
 
-.wizard__preview-name {
+.wizard__recap-name {
   font-family: var(--font-display);
-  font-weight: 800;
-  font-size: 1.6rem;
-  letter-spacing: -0.02em;
-  margin: 0 0 8px;
+  font-weight: 700;
+  font-size: 1.05rem;
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
 }
 
-.wizard__preview-meta {
+.wizard__recap-meta {
   font-size: 0.9rem;
+  color: var(--text);
+}
+
+.wizard__recap-rules {
+  font-size: 0.8125rem;
+  line-height: 1.5;
   color: var(--muted);
-  margin: 0;
-}
-
-.wizard__preview-desc {
-  margin: var(--space-3) 0 0;
-  font-size: 0.9rem;
-  line-height: 1.6;
-  color: var(--text-muted);
 }
 
 .wizard__foot {
@@ -825,8 +837,6 @@ onMounted(async () => {
 .wizard__foot-spacer { flex: 1; }
 
 @media (max-width: 760px) {
-  .wizard__body--split { grid-template-columns: 1fr; }
-  .wizard__preview { position: static; }
   .wizard { padding: 16px; }
   .wizard__head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; }
   .wizard__brand { min-width: 0; flex-wrap: wrap; gap: 8px; }
@@ -835,7 +845,12 @@ onMounted(async () => {
   .wizard__sport-pill { min-height: 44px; }
   .wizard__step-count { white-space: nowrap; }
 }
-.wizard__link-preview { font-size: .8125rem; line-height: 1.6; overflow-wrap: anywhere; color: var(--muted); }
-.wizard__link-preview span { font-weight: 600; }
+.wizard__link-preview {
+  display: flex; align-items: center; gap: 6px; margin: 0;
+  font-family: var(--font-mono); font-size: .78rem; line-height: 1.5; overflow-wrap: anywhere; min-width: 0;
+  color: var(--muted);
+}
+.wizard__link-preview svg { flex: none; color: var(--primary); }
+.wizard__form .input--lg { font-size: 1.05rem; font-weight: 600; min-height: 52px; }
 #create-slug { scroll-margin-top: 96px; }
 </style>

@@ -5,6 +5,7 @@ import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppModal from './AppModal.vue'
 import CopyTournamentLink from './CopyTournamentLink.vue'
+import AppIcon from './AppIcon.vue'
 import QRCode from 'qrcode'
 
 import { tournamentShareUrl } from '../lib/shareLink'
@@ -19,7 +20,6 @@ const emit = defineEmits(['close'])
 const { t } = useI18n()
 
 const canvasEl = ref(null)
-const canShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function'
 
 const url = tournamentShareUrl(props.slug)
 
@@ -41,14 +41,6 @@ async function downloadPng() {
   a.download = `qr-${props.slug}.png`
   a.click()
 }
-
-async function shareLink() {
-  try {
-    await navigator.share({ title: props.name || undefined, url })
-  } catch {
-    /* user cancelled */
-  }
-}
 </script>
 
 <template>
@@ -68,16 +60,13 @@ async function shareLink() {
 
       <p class="qr-modal__hint muted">{{ t('share.qrHint') }}</p>
 
-      <p class="qr-modal__url">{{ url }}</p>
-
       <div class="qr-modal__actions">
-        <CopyTournamentLink :slug="slug" />
-        <button class="btn btn--outline btn--sm" type="button" @click="downloadPng">
-          {{ t('share.qrDownload') }}
-        </button>
-        <button v-if="canShare" class="btn btn--primary btn--sm" type="button" @click="shareLink">
-          {{ t('share.qrShare') }}
-        </button>
+        <CopyTournamentLink :slug="slug" :name="name" compact />
+        <span class="tooltip-wrapper" :data-tooltip="t('share.qrDownload')">
+          <button class="btn btn--outline btn--sm btn--icon" type="button" :aria-label="t('share.qrDownload')" @click="downloadPng">
+            <AppIcon name="download" :size="18" />
+          </button>
+        </span>
       </div>
     </div>
   </AppModal>
@@ -86,9 +75,12 @@ async function shareLink() {
 <style scoped>
 .qr-modal {
   max-width: 380px;
-  text-align: center;
+  text-align: left;
 }
 
+.qr-modal .modal-dialog__head {
+  text-align: left;
+}
 .qr-modal__code {
   display: flex;
   justify-content: center;
@@ -116,7 +108,8 @@ async function shareLink() {
 
 .qr-modal__actions {
   display: flex;
-  justify-content: center;
+  justify-content: flex-end;
+  align-items: center;
   flex-wrap: wrap;
   gap: var(--space-2);
 }

@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
+import DateTimeField from '../DateTimeField.vue'
 import { useI18n } from 'vue-i18n'
 import AppModal from '../AppModal.vue'
 import { entryMemberNames } from '../../lib/entryDisplay'
@@ -143,7 +144,7 @@ async function clear() {
 
       <div v-if="form.mode !== 'queue'" class="form-field">
         <label for="sched-time">{{ t('schedule.time') }}</label>
-        <input id="sched-time" v-model="form.time" class="input" type="datetime-local" :disabled="saving" required />
+        <DateTimeField id="sched-time" v-model="form.time" :disabled="saving" required teleport-to-dialog />
         <p v-if="timeZone" class="muted schedule-modal__hint">{{ t('schedule.timezoneNote', { zone: timeZone }) }}</p>
       </div>
 
