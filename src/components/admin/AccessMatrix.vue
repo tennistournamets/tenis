@@ -2,13 +2,14 @@
 import { useI18n } from 'vue-i18n'
 import { ROLE_MATRIX, ROLES } from '../../lib/access'
 
+defineProps({ compact: Boolean }) // compact: без вводного абзаца и сноски (текст уходит в подсказку заголовка)
 const { t } = useI18n()
 const roleLabel = role => t(role === 'owner' ? 'access.roleOwner' : role === 'editor' ? 'access.roleEditor' : 'access.roleCounter')
 </script>
 
 <template>
   <div class="access-matrix">
-    <p class="muted access-matrix__intro">{{ t('access.matrixIntro') }}</p>
+    <p v-if="!compact" class="muted access-matrix__intro">{{ t('access.matrixIntro') }}</p>
     <div class="access-matrix__scroll">
       <table class="access-matrix__table">
         <thead>
@@ -28,7 +29,7 @@ const roleLabel = role => t(role === 'owner' ? 'access.roleOwner' : role === 'ed
         </tbody>
       </table>
     </div>
-    <p class="muted access-matrix__hint">{{ t('access.ownerOnlyHint') }}</p>
+    <p v-if="!compact" class="muted access-matrix__hint">{{ t('access.ownerOnlyHint') }}</p>
   </div>
 </template>
 
