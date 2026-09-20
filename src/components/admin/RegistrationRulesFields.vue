@@ -13,6 +13,8 @@ const props = defineProps({
   disabled: Boolean,
   idPrefix: { type: String, default: 'reg' },
   teleportToDialog: Boolean,
+  // 'card' — два fieldset с рамкой и legend (мастер); 'plain' — без рамок, с eyebrow-заголовками (настройки)
+  variant: { type: String, default: 'card' },
 })
 
 const { t } = useI18n()
@@ -27,9 +29,9 @@ const unitLabel = unit => t(unit === 'pair' ? 'registrationRules.feeUnitPair' : 
 </script>
 
 <template>
-  <div class="reg-rules-group">
+  <div class="reg-rules-group" :class="{ 'reg-rules-group--plain': variant === 'plain' }">
   <fieldset class="reg-rules" :disabled="disabled">
-    <legend>{{ t('registrationRules.settingsTitle') }}</legend>
+    <legend :class="{ 'sr-only': variant === 'plain' }">{{ t('registrationRules.settingsTitle') }}</legend>
 
     <div class="grid-2">
       <div class="form-field">
@@ -80,7 +82,7 @@ const unitLabel = unit => t(unit === 'pair' ? 'registrationRules.feeUnitPair' : 
   </fieldset>
 
   <fieldset class="reg-rules" :disabled="disabled">
-    <legend>{{ t('registrationRules.feeSection') }}</legend>
+    <legend :class="{ eyebrow: variant === 'plain' }">{{ t('registrationRules.feeSection') }}</legend>
     <div class="grid-2">
       <div class="form-field">
         <label :for="`${idPrefix}-fee-mode`">{{ t('registrationRules.feeMode') }}</label>
@@ -125,6 +127,9 @@ const unitLabel = unit => t(unit === 'pair' ? 'registrationRules.feeUnitPair' : 
 .reg-rules-group { display: grid; gap: 16px; }
 .reg-rules { margin: 0; padding: 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); display: grid; gap: 12px; }
 .reg-rules legend { padding: 0 6px; font-weight: 750; }
+.reg-rules-group--plain { gap: var(--space-5); }
+.reg-rules-group--plain .reg-rules { padding: 0; border: 0; border-radius: 0; gap: var(--space-4); }
+.reg-rules-group--plain .reg-rules legend { padding: 0; margin-bottom: var(--space-2); }
 .reg-rules__label { display: flex; align-items: center; gap: 6px; }
 .reg-rules__label > label { margin: 0; }
 .reg-rules__amount { display: grid; grid-template-columns: minmax(0, 1fr) 96px; gap: 8px; }

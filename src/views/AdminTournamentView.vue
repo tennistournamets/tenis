@@ -22,7 +22,9 @@ import ScheduleBoard from '../components/admin/ScheduleBoard.vue'
 import CourtsEditor from '../components/admin/CourtsEditor.vue'
 import MatchScheduleModal from '../components/admin/MatchScheduleModal.vue'
 import AccessMatrix from '../components/admin/AccessMatrix.vue'
-import { accessError, assignableRoles, canEditMembership, visibilityOf } from '../lib/access'
+import InfoTip from '../components/InfoTip.vue'
+import AppModal from '../components/AppModal.vue'
+import { accessError, assignableRoles, canEditMembership } from '../lib/access'
 import { applyScheduleAction, draftDiff, effectiveSchedule, indexSchedule, scheduleError, timezoneOf } from '../lib/schedule'
 import TournamentMatchList from '../components/TournamentMatchList.vue'
 import { scoringError } from '../lib/tennisRules'
@@ -111,6 +113,13 @@ const bracketEditing = ref(false)
 const localMatches = ref([])
 const selectedLiveMatch = ref(null)
 
+const addAdminOpen = ref(false)
+// «Владелец» в модалке = со-владелец. Передача владения (вы становитесь редактором, событие в журнале)
+// включается отдельным переключателем и идёт через transfer_tournament_ownership.
+const transferMode = ref(false)
+function openAddAdmin() { errorText.value = ''; transferMode.value = false; addAdminOpen.value = true }
+function closeAddAdmin() { addAdminOpen.value = false; transferMode.value = false; addAdminForm.email = ''; addAdminForm.role = 'editor' }
+function submitAddAdmin() { return transferMode.value && addAdminForm.role === 'owner' ? transferOwnership() : addAdmin() }
 const addAdminForm = reactive({
   email: '',
   role: 'editor',
@@ -967,6 +976,7 @@ async function addAdmin() {
     if (error) throw error
     addAdminForm.email = ''
     addAdminForm.role = 'editor'
+    addAdminOpen.value = false
     await loadAll()
   } catch (error) {
     errorText.value = accessError(error?.message, t)
@@ -1010,10 +1020,9 @@ async function removeAdmin(adminId) {
     errorText.value = accessError(error?.message, t)
   } finally { actionLoading.value = false }
 }
-const transferEmail = ref('')
 async function transferOwnership() {
   if (actionLoading.value || currentUserRole.value !== 'owner') return
-  const email = transferEmail.value.trim()
+  const email = addAdminForm.email.trim()
   if (!email) return
   actionLoading.value = true
   try {
@@ -1024,7 +1033,7 @@ async function transferOwnership() {
       p_tournament_id: props.id, p_new_owner_email: email, p_expected_revision: tournament.value.settings_revision,
     })
     if (error) throw error
-    transferEmail.value = ''
+    closeAddAdmin()
     noticeText.value = t('access.transfer.done')
     await loadAll()
   } catch (error) {
@@ -1246,7 +1255,7 @@ watch(
   { immediate: true },
 )
 
-const hasOtherDrafts = computed(() => Boolean(addAdminForm.email) || addAdminForm.role !== 'editor' || Boolean(transferEmail.value))
+const hasOtherDrafts = computed(() => Boolean(addAdminForm.email) || addAdminForm.role !== 'editor')
 const unregisterDrafts = useUnsavedChanges(() => hasOtherDrafts.value || bracketHasChanges.value || pairingDirty.value,
   () => actionLoading.value || settingsSaving.value)
 
@@ -2190,11 +2199,20 @@ onBeforeUnmount(() => {
           @saved="acceptTournament"
         />
 
-        <section class="card stack stack--sm mt-4">
-          <h2 class="section-title">{{ t('access.whoManages') }}</h2>
-          <AccessMatrix />
+        <section class="card stack stack--sm mt-4 admin-settings-card">
+          <div class="settings-section__head">
+            <h2 class="section-title" style="margin: 0">{{ t('access.whoManages') }}</h2>
+            <InfoTip :text="`${t('access.matrixIntro')} ${t('access.ownerOnlyHint')}`" />
+          </div>
+          <AccessMatrix compact />
           <div class="divider" />
-          <h3 class="section-title section-title--sm">{{ t('admin.admins') }}</h3>
+          <div class="settings-section__head">
+            <h3 class="section-title section-title--sm">{{ t('admin.admins') }}</h3>
+            <button v-if="canManageTournament" class="btn btn--outline btn--sm admin-add-btn" type="button" :disabled="actionLoading" @click="openAddAdmin">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+              {{ t('admin.addAssistant') }}
+            </button>
+          </div>
           <div class="entry-list">
             <div v-for="admin in admins" :key="admin.id" class="participant-item">
               <span class="entry-avatar">{{ (admin.email || '?').slice(0, 2).toUpperCase() }}</span>
@@ -2224,44 +2242,43 @@ onBeforeUnmount(() => {
             </div>
           </div>
 
-          <div class="grid-2 mt-3">
+        </section>
+
+        <AppModal v-if="addAdminOpen" :label="t('admin.addAssistant')" @close="closeAddAdmin">
+          <form class="modal-dialog add-admin-modal" @submit.prevent="submitAddAdmin">
+            <header class="modal-dialog__head">
+              <div>
+                <h2 class="section-title" style="margin: 0">{{ t('admin.addAssistant') }}</h2>
+                <p class="muted" style="margin: 4px 0 0">{{ t('admin.addAssistantHint') }}</p>
+              </div>
+              <button class="modal-close" type="button" :aria-label="t('actions.close')" @click="closeAddAdmin">×</button>
+            </header>
             <div class="form-field">
               <label for="adm-email">{{ t('admin.adminEmail') }}</label>
-              <input id="adm-email" :disabled="actionLoading" v-model="addAdminForm.email" class="input" type="email" :placeholder="t('admin.adminEmailPlaceholder')" />
+              <input id="adm-email" v-model="addAdminForm.email" class="input" type="email" required autocomplete="off" autofocus :disabled="actionLoading" :placeholder="t('admin.adminEmailPlaceholder')" />
             </div>
             <div class="form-field">
               <label for="adm-role">{{ t('admin.role') }}</label>
-              <select id="adm-role" :disabled="actionLoading" v-model="addAdminForm.role" class="input">
+              <select id="adm-role" v-model="addAdminForm.role" class="input" :disabled="actionLoading">
                 <option v-for="role in adminRoleOptions" :key="role" :value="role">{{ t(`admin.${role}`) }}</option>
               </select>
             </div>
-          </div>
-          <div class="inline-actions">
-            <button class="btn btn--primary btn--sm" type="button" :disabled="actionLoading || !addAdminForm.email" @click="addAdmin">
-              {{ t('admin.add') }}
-            </button>
-          </div>
-          <div class="divider" />
-          <h3 class="section-title section-title--sm">{{ t('access.whoSees') }}</h3>
-          <p class="muted">
-            <strong>{{ t('access.visibility.current', { mode: t(`access.visibility.${visibilityOf(tournament)}`) }) }}</strong>
-            · {{ t(`access.visibility.${visibilityOf(tournament)}Hint`) }}
-          </p>
-        </section>
-
-        <section v-if="currentUserRole === 'owner'" class="card stack stack--sm mt-4">
-          <h2 class="section-title">{{ t('access.transfer.title') }}</h2>
-          <p class="muted">{{ t('access.transfer.hint') }}</p>
-          <div class="grid-2">
-            <div class="form-field">
-              <label for="adm-transfer-email">{{ t('access.transfer.email') }}</label>
-              <input id="adm-transfer-email" v-model="transferEmail" class="input" type="email" autocomplete="off" :disabled="actionLoading" :placeholder="t('admin.adminEmailPlaceholder')" />
-            </div>
-          </div>
-          <div class="inline-actions">
-            <button class="btn btn--danger btn--sm" type="button" :disabled="actionLoading || !transferEmail.trim()" @click="transferOwnership">{{ t('access.transfer.button') }}</button>
-          </div>
-        </section>
+            <label v-if="addAdminForm.role === 'owner' && currentUserRole === 'owner'" class="checkbox-row add-admin-modal__transfer" for="adm-transfer-mode">
+              <input id="adm-transfer-mode" v-model="transferMode" type="checkbox" :disabled="actionLoading" />
+              <span>
+                <span class="add-admin-modal__transfer-title">{{ t('access.transfer.title') }}</span>
+                <span class="muted add-admin-modal__transfer-hint">{{ t('access.transfer.hint') }}</span>
+              </span>
+            </label>
+            <p v-if="errorText" class="error-text" role="alert">{{ errorText }}</p>
+            <footer class="add-admin-modal__foot">
+              <button class="btn btn--ghost" type="button" :disabled="actionLoading" @click="closeAddAdmin">{{ t('actions.cancel') }}</button>
+              <button class="btn" :class="transferMode && addAdminForm.role === 'owner' ? 'btn--danger' : 'btn--primary'" type="submit" :disabled="actionLoading || !addAdminForm.email">
+                {{ transferMode && addAdminForm.role === 'owner' ? t('access.transfer.button') : t('admin.add') }}
+              </button>
+            </footer>
+          </form>
+        </AppModal>
 
         <section class="admin-delete-zone">
           <button
@@ -2399,4 +2416,11 @@ onBeforeUnmount(() => {
 }
 
 .entry-icon-btn--reject:hover { filter: brightness(0.97); }
+.add-admin-modal { max-width: 440px; display: grid; gap: var(--space-4); }
+.add-admin-modal__foot { display: flex; justify-content: flex-end; gap: var(--space-2); padding-top: var(--space-2); }
+.admin-add-btn { margin-left: auto; }
+.add-admin-modal__transfer { align-items: flex-start; padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-row); }
+.add-admin-modal__transfer input { margin-top: 3px; }
+.add-admin-modal__transfer-title { display: block; font-weight: 600; }
+.add-admin-modal__transfer-hint { display: block; font-size: 0.82rem; line-height: 1.4; margin-top: 2px; }
 </style>

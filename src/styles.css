@@ -2407,6 +2407,58 @@ textarea.input:focus {
   gap: var(--space-4);
 }
 
+/* Надзаголовок секции (моно, капс) — общий для мастера и настроек */
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0;
+}
+
+/* Секции формы настроек: воздух между группами вместо вложенных рамок */
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--border);
+}
+
+.settings-section:first-of-type {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.settings-section__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 24px;
+}
+
+.settings-section__head .eyebrow { flex: none; }
+
+.settings-section__meta {
+  margin-left: auto;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.label-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.label-row > label { margin: 0; }
+
+@media (min-width: 720px) {
+  .admin-settings-card { padding: var(--space-6); }
+}
+
 @media (min-width: 720px) {
   .admin-settings-fields {
     flex-direction: row;
