@@ -28,7 +28,7 @@ export const ROLE_MATRIX = [
   { key: 'results', owner: true, editor: true, counter: true },
   { key: 'admins', owner: true, editor: true, counter: false },
   { key: 'owners', owner: true, editor: false, counter: false },
-  { key: 'delete', owner: true, editor: true, counter: false },
+  { key: 'delete', owner: true, editor: false, counter: false },
 ]
 
 /** Roles the current user may assign to someone else. */

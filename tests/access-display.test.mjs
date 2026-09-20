@@ -40,6 +40,7 @@ test('the displayed role matrix agrees with the client scoring rules and with wh
     assert.equal(rows.settings, access.manager, role)
     assert.equal(rows.entries, access.manager, role)
     assert.equal(rows.owners, role === 'owner', role)
+    assert.equal(rows.delete, role === 'owner', role)
   }
   assert.deepEqual(assignableRoles('owner'), ['owner', 'editor', 'counter'])
   assert.deepEqual(assignableRoles('editor'), ['editor', 'counter'])

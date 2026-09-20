@@ -19,7 +19,7 @@ export const accessMessages = {
     },
     yes: 'Да',
     no: 'Нет',
-    ownerOnlyHint: 'Назначать владельцев и менять их роль может только владелец. Последнего владельца снять нельзя.',
+    ownerOnlyHint: 'Назначать владельцев, менять их роль и удалять турнир может только владелец. Последнего владельца снять нельзя.',
     changeRole: 'Роль',
     roleChanged: 'Роль обновлена.',
     visibility: {
@@ -103,7 +103,7 @@ export const accessMessages = {
     },
     yes: 'Yes',
     no: 'No',
-    ownerOnlyHint: 'Only an owner grants ownership or changes an owner\'s role. The last owner cannot be removed.',
+    ownerOnlyHint: 'Only an owner grants ownership, changes an owner\'s role or deletes the tournament. The last owner cannot be removed.',
     changeRole: 'Role',
     roleChanged: 'Role updated.',
     visibility: {
@@ -187,7 +187,7 @@ export const accessMessages = {
     },
     yes: 'Taip',
     no: 'Ne',
-    ownerOnlyHint: 'Skirti savininkus ir keisti jų vaidmenį gali tik savininkas. Paskutinio savininko pašalinti negalima.',
+    ownerOnlyHint: 'Skirti savininkus, keisti jų vaidmenį ir šalinti turnyrą gali tik savininkas. Paskutinio savininko pašalinti negalima.',
     changeRole: 'Vaidmuo',
     roleChanged: 'Vaidmuo atnaujintas.',
     visibility: {

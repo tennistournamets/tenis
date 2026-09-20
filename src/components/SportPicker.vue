@@ -1,6 +1,7 @@
 <script setup>
 import { useI18n } from 'vue-i18n'
 import { SPORTS } from '../lib/sportConfig'
+import AppIcon from './AppIcon.vue'
 
 defineProps({
   modelValue: { type: String, default: '' },
@@ -8,11 +9,6 @@ defineProps({
 const emit = defineEmits(['update:modelValue'])
 const { t } = useI18n()
 
-const icons = {
-  tennis: '🎾',
-  padel: '🏸',
-  football: '⚽',
-}
 </script>
 
 <template>
@@ -25,7 +21,7 @@ const icons = {
       :class="{ 'picker-card--active': modelValue === s }"
       @click="emit('update:modelValue', s)"
     >
-      <span class="picker-card__icon">{{ icons[s] }}</span>
+      <span class="picker-card__icon"><AppIcon :name="s" :size="28" /></span>
       <span class="picker-card__label">{{ t('sport.' + s) }}</span>
       <span class="picker-card__tagline">{{ t('sportTagline.' + s) }}</span>
     </button>
@@ -78,8 +74,8 @@ const icons = {
   background: var(--primary, #3b82f6) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E") center / 11px no-repeat;
 }
 .picker-card__icon {
-  font-size: 2rem;
-  line-height: 1;
+  display: inline-flex;
+  color: var(--primary);
 }
 .picker-card__label {
   font-weight: 600;

@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getSportConfig } from '../lib/sportConfig'
+import AppIcon from './AppIcon.vue'
 
 const props = defineProps({
   modelValue: { type: String, default: '' },
@@ -12,12 +13,6 @@ const { t } = useI18n()
 
 const formats = computed(() => getSportConfig(props.sport).allowedFormats)
 
-const icons = {
-  single_elimination: '🏆',
-  round_robin: '🔄',
-  groups_playoff: '🗂️',
-  double_elimination: '🔀',
-}
 </script>
 
 <template>
@@ -30,7 +25,7 @@ const icons = {
       :class="{ 'picker-card--active': modelValue === f }"
       @click="emit('update:modelValue', f)"
     >
-      <span class="picker-card__icon">{{ icons[f] }}</span>
+      <span class="picker-card__icon"><AppIcon :name="f" :size="28" /></span>
       <span class="picker-card__label">{{ t('tournamentFormat.' + f) }}</span>
       <span class="picker-card__tagline">{{ t('formatTagline.' + f) }}</span>
     </button>
@@ -84,8 +79,8 @@ const icons = {
   background: var(--primary, #3b82f6) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E") center / 11px no-repeat;
 }
 .picker-card__icon {
-  font-size: 1.8rem;
-  line-height: 1;
+  display: inline-flex;
+  color: var(--primary);
 }
 .picker-card__label {
   font-weight: 600;

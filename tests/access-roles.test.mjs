@@ -41,6 +41,23 @@ test('roles are validated; only owners grant ownership or change an owner, the l
   await assertDeniedUnchanged(ctx, 'counter', 'select add_tournament_admin_by_email($1,$2,$3)', [t.id, 'outsider@example.test', 'counter'])
 })
 
+test('only an owner deletes a tournament; editors and counters leave the row untouched', async () => {
+  const t = await fixture(ctx)
+  const exists = async () => (await ctx.db.query('select 1 from tournaments where id=$1', [t.id])).rows.length === 1
+  // RLS on DELETE silently matches zero rows for the wrong role, so the check is on the row, not on an error.
+  for (const actor of ['editor', 'counter', 'outsider']) {
+    await asActor(ctx, actor, 'delete from tournaments where id=$1', [t.id])
+    assert.equal(await exists(), true, `${actor} deleted the tournament`)
+  }
+  await asActor(ctx, 'owner', 'delete from tournaments where id=$1', [t.id])
+  assert.equal(await exists(), false, 'owner could not delete the tournament')
+  // The forward migration is replayable and keeps the owner-only rule.
+  await reapplyForwardMigrations(ctx)
+  const again = await fixture(ctx)
+  await asActor(ctx, 'editor', 'delete from tournaments where id=$1', [again.id])
+  assert.equal((await ctx.db.query('select 1 from tournaments where id=$1', [again.id])).rows.length, 1)
+})
+
 test('membership rows cannot be written directly by API roles any more', async () => {
   const t = await fixture(ctx)
   for (const actor of ['owner', 'editor', 'counter', 'outsider', 'platform_admin', 'anon']) {
