@@ -31,6 +31,40 @@ const PATHS = {
     '<path d="M7.6 19.6 10 13"/>',
     '<path d="M16.4 19.6 14 13"/>',
   ],
+  share: [
+    '<circle cx="18" cy="5" r="3"/>',
+    '<circle cx="6" cy="12" r="3"/>',
+    '<circle cx="18" cy="19" r="3"/>',
+    '<path d="m8.6 13.5 6.8 4"/>',
+    '<path d="m15.4 6.5-6.8 4"/>',
+  ],
+  link: [
+    '<path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/>',
+    '<path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/>',
+  ],
+  qr: [
+    '<rect x="3" y="3" width="7" height="7" rx="1"/>',
+    '<rect x="14" y="3" width="7" height="7" rx="1"/>',
+    '<rect x="3" y="14" width="7" height="7" rx="1"/>',
+    '<path d="M14 14h3v3h-3z"/>',
+    '<path d="M20 14h1v1h-1z"/>',
+    '<path d="M14 20h1v1h-1z"/>',
+    '<path d="M18 18h3v3h-3z"/>',
+  ],
+  play: [
+    '<path d="M7 4.5v15l12-7.5z"/>',
+  ],
+  stop: [
+    '<rect x="5" y="5" width="14" height="14" rx="2"/>',
+  ],
+  download: [
+    '<path d="M12 3v12"/>',
+    '<path d="m7 10 5 5 5-5"/>',
+    '<path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>',
+  ],
+  check: [
+    '<path d="M20 6 9 17l-5-5"/>',
+  ],
   trophy: [
     '<path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/>',
     '<path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/>',

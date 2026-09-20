@@ -1,6 +1,7 @@
 <script setup>
+import { computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { SPORTS } from '../lib/sportConfig'
+import { useFeatureFlagsStore } from '../stores/featureFlags'
 import AppIcon from './AppIcon.vue'
 
 defineProps({
@@ -8,13 +9,18 @@ defineProps({
 })
 const emit = defineEmits(['update:modelValue'])
 const { t } = useI18n()
+const flags = useFeatureFlagsStore()
+const sports = computed(() => flags.enabledSports)
+
+onMounted(() => { flags.load().catch(() => {}) })
 
 </script>
 
 <template>
-  <div class="picker-grid">
+  <p v-if="flags.loaded && sports.length === 0" class="picker-empty">{{ t('admin.noSportsEnabled') }}</p>
+  <div v-else class="picker-grid">
     <button
-      v-for="s in SPORTS"
+      v-for="s in sports"
       :key="s"
       type="button"
       class="picker-card"
@@ -29,6 +35,15 @@ const { t } = useI18n()
 </template>
 
 <style scoped>
+.picker-empty {
+  margin: 0;
+  padding: 16px;
+  border: 1px dashed var(--border, #d0d5dd);
+  border-radius: var(--radius, 12px);
+  color: var(--muted);
+  font-size: var(--font-sm, 0.9rem);
+  text-align: center;
+}
 .picker-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));

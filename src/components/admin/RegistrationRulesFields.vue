@@ -2,6 +2,8 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { FEE_CURRENCIES, FEE_UNITS, feeUnitDefault } from '../../lib/registrationRules'
+import DateTimeField from '../DateTimeField.vue'
+import InfoTip from '../InfoTip.vue'
 
 // Shared by the settings form and the create wizard. `form` is the caller's
 // reactive draft; its registration keys are edited in place.
@@ -10,10 +12,13 @@ const props = defineProps({
   tournament: { type: Object, default: null },
   disabled: Boolean,
   idPrefix: { type: String, default: 'reg' },
+  teleportToDialog: Boolean,
 })
 
 const { t } = useI18n()
 const countsPlayers = computed(() => props.tournament?.category === 'doubles' && props.tournament?.doubles_pairing_mode === 'pick_random')
+const capacityHint = computed(() => [t('registrationRules.capacityHint'), countsPlayers.value ? t('registrationRules.capacityPlayersHint') : '']
+  .filter(Boolean).join(' '))
 const unitValue = computed({
   get: () => props.form.entry_fee_unit || feeUnitDefault(props.tournament),
   set: value => { props.form.entry_fee_unit = value },
@@ -22,12 +27,16 @@ const unitLabel = unit => t(unit === 'pair' ? 'registrationRules.feeUnitPair' : 
 </script>
 
 <template>
+  <div class="reg-rules-group">
   <fieldset class="reg-rules" :disabled="disabled">
     <legend>{{ t('registrationRules.settingsTitle') }}</legend>
 
     <div class="grid-2">
       <div class="form-field">
-        <label :for="`${idPrefix}-capacity`">{{ t('registrationRules.capacity') }}</label>
+        <span class="reg-rules__label">
+          <label :for="`${idPrefix}-capacity`">{{ t('registrationRules.capacity') }}</label>
+          <InfoTip :id="`${idPrefix}-capacity-hint`" :text="capacityHint" />
+        </span>
         <input
           :id="`${idPrefix}-capacity`"
           v-model="form.registration_capacity"
@@ -38,22 +47,20 @@ const unitLabel = unit => t(unit === 'pair' ? 'registrationRules.feeUnitPair' : 
           step="1"
           :aria-describedby="`${idPrefix}-capacity-hint`"
         />
-        <p :id="`${idPrefix}-capacity-hint`" class="muted reg-rules__hint">
-          {{ t('registrationRules.capacityHint') }}
-          <template v-if="countsPlayers"> {{ t('registrationRules.capacityPlayersHint') }}</template>
-        </p>
       </div>
 
       <div class="form-field">
-        <label :for="`${idPrefix}-deadline`">{{ t('registrationRules.deadlineField') }}</label>
-        <input
+        <span class="reg-rules__label">
+          <label :for="`${idPrefix}-deadline`">{{ t('registrationRules.deadlineField') }}</label>
+          <InfoTip :id="`${idPrefix}-deadline-hint`" :text="t('registrationRules.deadlineHint')" />
+        </span>
+        <DateTimeField
           :id="`${idPrefix}-deadline`"
           v-model="form.registration_deadline"
-          class="input"
-          type="datetime-local"
           :aria-describedby="`${idPrefix}-deadline-hint`"
+          :disabled="disabled"
+          :teleport-to-dialog="teleportToDialog"
         />
-        <p :id="`${idPrefix}-deadline-hint`" class="muted reg-rules__hint">{{ t('registrationRules.deadlineHint') }}</p>
       </div>
     </div>
 
@@ -62,14 +69,18 @@ const unitLabel = unit => t(unit === 'pair' ? 'registrationRules.feeUnitPair' : 
       {{ t('registrationRules.capacityPublic') }}
     </label>
 
-    <div class="form-field">
+    <div class="reg-rules__label">
       <label class="checkbox-row" :for="`${idPrefix}-waitlist`">
         <input :id="`${idPrefix}-waitlist`" v-model="form.waitlist_enabled" type="checkbox" :aria-describedby="`${idPrefix}-waitlist-hint`" />
         {{ t('registrationRules.waitlistSetting') }}
       </label>
-      <p :id="`${idPrefix}-waitlist-hint`" class="muted reg-rules__hint">{{ t('registrationRules.waitlistSettingHint') }}</p>
+      <InfoTip :id="`${idPrefix}-waitlist-hint`" :text="t('registrationRules.waitlistSettingHint')" />
     </div>
 
+  </fieldset>
+
+  <fieldset class="reg-rules" :disabled="disabled">
+    <legend>{{ t('registrationRules.feeSection') }}</legend>
     <div class="grid-2">
       <div class="form-field">
         <label :for="`${idPrefix}-fee-mode`">{{ t('registrationRules.feeMode') }}</label>
@@ -107,12 +118,15 @@ const unitLabel = unit => t(unit === 'pair' ? 'registrationRules.feeUnitPair' : 
       </select>
     </div>
   </fieldset>
+  </div>
 </template>
 
 <style scoped>
+.reg-rules-group { display: grid; gap: 16px; }
 .reg-rules { margin: 0; padding: 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); display: grid; gap: 12px; }
 .reg-rules legend { padding: 0 6px; font-weight: 750; }
-.reg-rules__hint { margin: 4px 0 0; font-size: 0.82rem; line-height: 1.4; }
+.reg-rules__label { display: flex; align-items: center; gap: 6px; }
+.reg-rules__label > label { margin: 0; }
 .reg-rules__amount { display: grid; grid-template-columns: minmax(0, 1fr) 96px; gap: 8px; }
 .reg-rules__amount > * { min-width: 0; }
 </style>

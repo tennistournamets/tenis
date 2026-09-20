@@ -10,9 +10,13 @@
     "test:sql": "node --test --test-concurrency=2 tests/*.test.mjs",
     "test:postgres": "node scripts/check-postgres.mjs"
   },
-  "engines": { "node": ">=22.12.0 <27" },
+  "engines": {
+    "node": ">=22.12.0 <27"
+  },
   "dependencies": {
     "@supabase/supabase-js": "2.115.0",
+    "@vuepic/vue-datepicker": "14.0.0",
+    "date-fns": "4.4.0",
     "pinia": "3.0.4",
     "qrcode": "1.5.4",
     "three": "0.185.1",

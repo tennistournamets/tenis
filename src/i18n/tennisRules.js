@@ -1,5 +1,6 @@
 export const tennisRuleMessages = {
   ru: {
+    advanced: 'Настроить вручную',
     title: 'Правила счёта · ITF 2026', intro: 'Выберите правила до начала турнира. Они действуют в ручном и live-счёте.',
     preset: 'Готовый формат', custom: 'Свои настройки', preset_standard: 'Классический теннис',
     preset_final10: 'Решающий сет: тай-брейк до 10 при 6:6', preset_match10: 'No-Ad + матч-тай-брейк до 10', preset_short: 'Короткие сеты + No-Ad',
@@ -30,6 +31,7 @@ export const tennisRuleMessages = {
     shortServiceOrder: 'Подачи в коротком тай-брейке', shortServiceNote: 'Объявите участникам порядок и число подач до начала турнира.',
   },
   en: {
+    advanced: 'Customize rules',
     title: 'Scoring rules · ITF 2026', intro: 'Choose the rules before the tournament starts. Manual and live scoring follow the same format.',
     preset: 'Scoring preset', custom: 'Custom settings', preset_standard: 'Classic tennis',
     preset_final10: 'Final set: 10-point tiebreak at 6–6', preset_match10: 'No-Ad + 10-point match tiebreak', preset_short: 'Short sets + No-Ad',
@@ -58,6 +60,7 @@ export const tennisRuleMessages = {
     shortServiceOrder: 'Short-set tiebreak service', shortServiceNote: 'Announce the service order and number of serves before the tournament.',
   },
   lt: {
+    advanced: 'Nustatyti rankiniu būdu',
     title: 'Taškų skaičiavimas · ITF 2026', intro: 'Pasirinkite taisykles prieš turnyro pradžią. Jos taikomos įvedant rezultatą ir skaičiuojant gyvai.',
     preset: 'Paruoštas formatas', custom: 'Pasirinktiniai nustatymai', preset_standard: 'Klasikinis tenisas',
     preset_final10: 'Lemiamas setas: pratęsimas iki 10 esant 6:6', preset_match10: 'No-Ad + mačo pratęsimas iki 10', preset_short: 'Trumpi setai + No-Ad',

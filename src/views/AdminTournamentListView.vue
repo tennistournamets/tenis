@@ -259,6 +259,7 @@ onMounted(async () => {
             class="t-card__copy"
             :slug="item.slug"
             :name="item.name"
+            compact
           />
         </div>
         <div v-if="nextStep(item)" class="t-card__next" :class="`t-card__next--${nextStep(item).tone}`">
@@ -377,6 +378,6 @@ onMounted(async () => {
 @media (max-width: 560px) {
   .t-card__main { align-items: flex-start; flex-wrap: wrap; }
   .t-card__copy { width: 100%; padding-left: 56px; }
-  .t-card__copy :deep(.btn) { min-height: 44px; flex: 1 1 120px; }
+  .t-card__copy :deep(.btn:not(.btn--icon)) { min-height: 44px; flex: 1 1 120px; }
 }
 </style>

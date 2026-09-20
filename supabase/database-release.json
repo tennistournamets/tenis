@@ -58,6 +58,12 @@
       "sha256": "4262ecd9e97a8f53935ecc392c7944e577a0ed68e4224dbf701c8c3ba110a211",
       "tenisAppliedVersion": null,
       "tenisNote": "Not applied to TENIS yet; apply via psql (session pooler) like the previous forward steps."
+    },
+    {
+      "path": "supabase/migrations/20260920185917_feature_flags.sql",
+      "sha256": "2d348b2f0d70a24ea76754f2d1af490007a79b1d71d41bb78934793be1e3ecc4",
+      "tenisAppliedVersion": null,
+      "tenisNote": "Applied to TENIS 2026-09-10 via psql (session pooler) as part of the feature branch; no migration history entry. Re-running is safe."
     }
   ],
   "baseline": {

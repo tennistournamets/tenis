@@ -36,6 +36,7 @@ import { createSnapshotRefresh, subscribeTournament } from '../lib/tournamentSyn
 import { readAdminTournamentSnapshot } from '../lib/tournamentRepository'
 import { indexEntries, groupSetsByMatch, indexLiveScores, buildGroupsView } from '../lib/tournamentProjections'
 import CopyTournamentLink from '../components/CopyTournamentLink.vue'
+import AppIcon from '../components/AppIcon.vue'
 import { useAuthStore } from '../stores/auth'
 import { useNarrowLayout } from '../lib/useNarrowLayout'
 import { useHeaderTitle } from '../lib/headerTitle'
@@ -224,16 +225,6 @@ const canUseLiveScoring = computed(() => scoreAccess.value.live)
 const canEditFinalScores = computed(() => scoreAccess.value.final)
 const regState = computed(() => registrationDisplayState(registration.value, Date.now(), tournament.value))
 const showDeadlineHint = computed(() => canManageTournament.value && regState.value.deadlinePassed && tournament.value?.status === 'registration_open')
-const registrationSummary = computed(() => {
-  const reg = registration.value
-  if (!reg || !canManageTournament.value) return ''
-  const parts = [reg.capacity
-    ? t('registrationRules.adminSummary', { occupied: reg.occupied, capacity: reg.capacity })
-    : t('registrationRules.adminSummaryNoLimit', { occupied: reg.occupied })]
-  if (!isTournamentActive.value && !isTournamentFinished.value) parts.push(t('registrationRules.adminPending', { pending: pendingEntries.value.length }))
-  if (waitlistedEntries.value.length) parts.push(t('registrationRules.waitlistCount', { count: waitlistedEntries.value.length }))
-  return parts.join(' · ')
-})
 const waitlistSeatFree = computed(() => Boolean(registration.value?.capacity) && !registration.value.is_full && waitlistedEntries.value.length > 0)
 const scheduleIndex = computed(() => indexSchedule(schedule.value))
 const scheduleDraftCount = computed(() => draftDiff(schedule.value).count)
@@ -1313,15 +1304,6 @@ onBeforeUnmount(() => {
                 {{ t(`tournament.${tournament.status}`) }}
               </span>
             </div>
-            <div class="badge-row">
-              <span v-if="tournament.sport" class="badge badge--meta">{{ t(`sport.${tournament.sport}`) }}</span>
-              <span v-if="tournament.format" class="badge badge--meta">{{ t(`tournamentFormat.${tournament.format}`) }}</span>
-              <span v-if="sportCfg.supportsCategory" class="badge badge--meta">{{ t(`tournament.${tournament.category}`) }}</span>
-              <span v-if="sportCfg.supportsSetFormat && tournament.set_format" class="badge badge--meta">{{ t(`format.${tournament.set_format}`) }}</span>
-              <span v-if="canManageTournament && registration?.is_full" class="badge badge--warn">{{ t('registrationRules.badgeFull') }}</span>
-              <span v-if="showDeadlineHint" class="badge badge--warn">{{ t('registrationRules.badgeDeadline') }}</span>
-            </div>
-            <p v-if="registrationSummary" class="muted">{{ registrationSummary }}</p>
             <p v-if="tournament.description" class="muted">{{ tournament.description }}</p>
           </div>
           <div v-if="canManageTournament" class="admin-tournament-overview__actions">
@@ -1329,41 +1311,47 @@ onBeforeUnmount(() => {
               v-if="showPublicShareActions"
               :slug="tournament.slug"
               :name="tournament.name"
+              compact
             />
 
-            <button
-              v-if="showPublicShareActions"
-              class="btn btn--outline btn--sm"
-              type="button"
-              @click="qrModalOpen = true"
-            >
-              {{ t('share.qrButton') }}
-            </button>
+            <span v-if="showPublicShareActions" class="tooltip-wrapper" :data-tooltip="t('share.qrButton')">
+              <button
+                class="btn btn--outline btn--sm btn--icon"
+                type="button"
+                :aria-label="t('share.qrButton')"
+                @click="qrModalOpen = true"
+              >
+                <AppIcon name="qr" :size="18" />
+              </button>
+            </span>
 
             <span
               v-if="showStartButton"
               class="tooltip-wrapper"
-              :data-tooltip="startBlockReason || undefined"
+              :data-tooltip="startBlockReason || t('admin.startTournament')"
             >
               <button
-                class="btn btn--success btn--sm"
+                class="btn btn--success btn--sm btn--icon"
                 type="button"
                 :disabled="!canStartTournament || actionLoading"
+                :aria-label="t('admin.startTournament')"
                 @click="startTournament"
               >
-                {{ t('admin.startTournament') }}
+                <AppIcon name="play" :size="18" />
               </button>
             </span>
 
-            <button
-              v-if="isTournamentActive"
-              class="btn btn--ghost btn--sm"
-              type="button"
-              :disabled="actionLoading"
-              @click="stopTournament"
-            >
-              {{ t('admin.stopTournament') }}
-            </button>
+            <span v-if="isTournamentActive" class="tooltip-wrapper" :data-tooltip="t('admin.stopTournament')">
+              <button
+                class="btn btn--outline btn--sm btn--icon"
+                type="button"
+                :disabled="actionLoading"
+                :aria-label="t('admin.stopTournament')"
+                @click="stopTournament"
+              >
+                <AppIcon name="stop" :size="18" />
+              </button>
+            </span>
           </div>
         </div>
 
