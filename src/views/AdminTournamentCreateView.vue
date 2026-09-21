@@ -20,6 +20,7 @@ import RegistrationRulesFields from '../components/admin/RegistrationRulesFields
 import { hasRegistrationRules, pickRegistrationDraft, registrationDraftFields, registrationPatch, validateRegistrationForm } from '../lib/registrationRules'
 import { CREATE_VISIBILITY_MODES } from '../lib/access'
 import { DEFAULT_TENNIS_RULES, tennisRulesSummary } from '../lib/tennisRules'
+import VenueFields from '../components/admin/VenueFields.vue'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -54,6 +55,9 @@ const form = reactive({
   gender: 'men',
   contact_phone: '',
   contact_email: '',
+  venue_address: '',
+  venue_lat: null,
+  venue_lng: null,
   is_public: true,
   visibility: 'link',
   generate_qr: false,
@@ -221,6 +225,9 @@ async function createTournament() {
         : cfg.value.supportsSetFormat ? { tiebreak_to: Number(form.tiebreak_to), gender: form.gender } : { gender: form.gender },
       p_contact_phone: form.contact_phone.trim() || null,
       p_contact_email: form.contact_email.trim() || null,
+      p_venue_address: form.venue_address.trim() || null,
+      p_venue_lat: form.venue_lat,
+      p_venue_lng: form.venue_lng,
     })
 
     if (error) {
@@ -413,6 +420,15 @@ onMounted(async () => {
               <input id="create-email" v-model="form.contact_email" class="input" type="email" placeholder="info@example.com" autocomplete="email" />
             </div>
           </div>
+        </section>
+
+        <section class="wizard__group">
+          <h2 class="wizard__eyebrow">{{ t('venue.section') }}</h2>
+          <VenueFields
+            v-model:address="form.venue_address"
+            v-model:lat="form.venue_lat"
+            v-model:lng="form.venue_lng"
+          />
         </section>
         </template>
 

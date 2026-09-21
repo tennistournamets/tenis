@@ -5,8 +5,9 @@ import { tennisRulesSummary } from '../../lib/tennisRules'
 import TennisRulesSettings from '../TennisRulesSettings.vue'
 import InfoTip from '../InfoTip.vue'
 import RegistrationRulesFields from './RegistrationRulesFields.vue'
+import VenueFields from './VenueFields.vue'
 import { getSportConfig } from '../../lib/sportConfig'
-import { REGISTRATION_DRAFT_KEYS, pickRegistrationDraft, registrationDraftFields, registrationPatch, validateRegistrationForm } from '../../lib/registrationRules'
+import { REGISTRATION_DRAFT_KEYS, formatDeadline, pickRegistrationDraft, registrationDraftFields, registrationPatch, validateRegistrationForm } from '../../lib/registrationRules'
 import { COMMON_TIMEZONES, browserTimezone } from '../../lib/schedule'
 import { VISIBILITY_MODES, accessError, visibilityOf } from '../../lib/access'
 import { useFormDraft, cloneForm, matchVersions } from '../../lib/formDraft'
@@ -22,12 +23,13 @@ const props = defineProps({
   refresh: { type: Function, required: true },
 })
 const emit = defineEmits(['update:saving', 'saved'])
-const { t } = useI18n()
+const { t, locale } = useI18n()
 function settingsFields(data) {
   return { name: data.name, slug: data.slug || '', description: data.description || '', category: data.category,
     set_format: data.set_format, scoring_config: cloneForm(data.scoring_config || {}),
     doubles_pairing_mode: data.doubles_pairing_mode || 'pre_agreed', status: data.status, visibility: visibilityOf(data),
     contact_phone: data.contact_phone || '', contact_email: data.contact_email || '', publish_contact: Boolean(data.publish_contact),
+    venue_address: data.venue_address || '', venue_lat: data.venue_lat ?? null, venue_lng: data.venue_lng ?? null,
     ...registrationDraftFields(data),
     schedule_min_rest: data.schedule_config?.min_rest_minutes == null ? '' : String(data.schedule_config.min_rest_minutes),
     schedule_timezone: data.schedule_config?.timezone || '' }
@@ -95,9 +97,10 @@ const sectionMeta = computed(() => {
     : f.entry_fee_mode === 'free' ? t('registrationRules.feeModeFree') : ''
   return {
     contacts: joinMeta(f.contact_phone, f.contact_email),
+    venue: joinMeta(f.venue_address, f.venue_lat != null ? t('venue.pointSet') : ''),
     registration: joinMeta(
       f.registration_capacity ? `${t('registrationRules.capacity')}: ${f.registration_capacity}` : '',
-      f.registration_deadline ? f.registration_deadline.replace('T', ' ') : '',
+      f.registration_deadline ? formatDeadline(f.registration_deadline, locale.value) : '',
       fee,
     ),
     schedule: joinMeta(f.schedule_timezone, f.schedule_min_rest ? `${f.schedule_min_rest} ${t('schedule.minRestUnit')}` : ''),
@@ -189,6 +192,9 @@ async function saveTournamentSettings() {
     patch.contact_phone = patch.contact_phone?.trim() || null
     patch.contact_email = patch.contact_email?.trim() || null
     patch.publish_contact = Boolean(patch.publish_contact && (patch.contact_phone || patch.contact_email))
+    patch.venue_address = patch.venue_address?.trim() || null
+    patch.venue_lat = patch.venue_lat ?? null
+    patch.venue_lng = patch.venue_lng ?? null
     patch.doubles_pairing_mode = patch.category === 'doubles' ? patch.doubles_pairing_mode : null
     const { data, error } = await supabase.rpc('update_tournament_settings', {
       p_tournament_id: props.tournament.id, p_patch: patch, p_expected_revision: revision,
@@ -259,6 +265,22 @@ async function saveTournamentSettings() {
           <input id="adm-publish-contact" v-model="settingsForm.publish_contact" type="checkbox" :disabled="!settingsForm.contact_phone && !settingsForm.contact_email" />
           {{ t('mobile.publishContacts') }}
         </label>
+      </fieldset>
+    </details>
+    <!-- Место проведения -->
+    <details class="settings-section" :open="openSections.has('venue')" @toggle="toggleSection('venue', $event)">
+      <summary class="settings-section__head">
+        <svg class="settings-section__chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+        <h3 class="eyebrow">{{ t('venue.section') }}</h3>
+        <span class="settings-section__meta">{{ sectionMeta.venue }}</span>
+      </summary>
+      <fieldset class="settings-section__body settings-fieldset" :disabled="formDisabled" :aria-label="t('venue.section')">
+        <VenueFields
+          v-model:address="settingsForm.venue_address"
+          v-model:lat="settingsForm.venue_lat"
+          v-model:lng="settingsForm.venue_lng"
+          :disabled="formDisabled"
+        />
       </fieldset>
     </details>
     <!-- Регистрация и взнос -->

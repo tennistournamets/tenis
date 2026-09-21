@@ -61,6 +61,10 @@ export const registrationRuleMessages = {
       capacityBelowOccupied: 'Лимит меньше числа уже подтверждённых участников. Сначала измените состав.',
       invalidCapacity: 'Лимит участников должен быть целым числом больше нуля.',
       invalidFee: 'Укажите сумму, валюту и единицу взноса.',
+      phoneRequired: 'Укажите телефон.',
+      emailRequired: 'Укажите email.',
+      invalidPhone: 'Введите корректный номер телефона.',
+      invalidEmail: 'Введите корректный email.',
     },
   },
   en: {
@@ -125,6 +129,10 @@ export const registrationRuleMessages = {
       capacityBelowOccupied: 'The limit is below the number of already approved participants. Change the line-up first.',
       invalidCapacity: 'The participant limit must be a whole number above zero.',
       invalidFee: 'Enter the amount, currency and fee unit.',
+      phoneRequired: 'Enter a phone number.',
+      emailRequired: 'Enter an email address.',
+      invalidPhone: 'Enter a valid phone number.',
+      invalidEmail: 'Enter a valid email address.',
     },
   },
   lt: {
@@ -189,6 +197,10 @@ export const registrationRuleMessages = {
       capacityBelowOccupied: 'Riba mažesnė už jau patvirtintų dalyvių skaičių. Pirmiausia pakeiskite sudėtį.',
       invalidCapacity: 'Dalyvių riba turi būti sveikasis skaičius, didesnis už nulį.',
       invalidFee: 'Nurodykite sumą, valiutą ir mokesčio vienetą.',
+      phoneRequired: 'Nurodykite telefono numerį.',
+      emailRequired: 'Nurodykite el. pašto adresą.',
+      invalidPhone: 'Įveskite teisingą telefono numerį.',
+      invalidEmail: 'Įveskite teisingą el. pašto adresą.',
     },
   },
 }

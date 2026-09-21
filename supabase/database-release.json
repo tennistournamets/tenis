@@ -64,6 +64,18 @@
       "sha256": "2d348b2f0d70a24ea76754f2d1af490007a79b1d71d41bb78934793be1e3ecc4",
       "tenisAppliedVersion": null,
       "tenisNote": "Applied to TENIS 2026-09-10 via psql (session pooler) as part of the feature branch; no migration history entry. Re-running is safe."
+    },
+    {
+      "path": "supabase/migrations/20260921192934_entry_contact_split.sql",
+      "sha256": "e41db6875a1909696caeceb4ff70e1053705a28bb2c5d53b72619a071c1e706f",
+      "tenisAppliedVersion": null,
+      "tenisNote": "Not applied to TENIS yet; apply via psql (session pooler) like the previous forward steps."
+    },
+    {
+      "path": "supabase/migrations/20260921210903_tournament_venue.sql",
+      "sha256": "e63938743ca265aafb49661f2dfda905e30ddd2c2bfd695cdd49ed747513fb48",
+      "tenisAppliedVersion": null,
+      "tenisNote": "Not applied to TENIS yet; apply via psql (session pooler) like the previous forward steps."
     }
   ],
   "baseline": {

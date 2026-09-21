@@ -2380,6 +2380,21 @@ textarea.input:focus {
   z-index: 50;
 }
 
+/* Tab tooltips: a tab bar starts at the page gutter, so a tooltip growing
+   leftwards from its tab runs off screen. Anchor them to the tab bar itself
+   (the wrapper goes static, the bar becomes the containing block) so they open
+   rightwards from the gutter and always fit the viewport. */
+.tab-group { position: relative; }
+.tab-group .tooltip-wrapper { position: static; }
+
+.tab-group .tooltip-wrapper[data-tooltip]:hover::after,
+.tab-group .tooltip-wrapper[data-tooltip]:focus::after,
+.tab-group .tooltip-wrapper[data-tooltip]:focus-within::after {
+  right: auto;
+  left: 0;
+  max-width: min(280px, calc(100vw - 32px));
+}
+
 /* Crosstable header tooltips: centered and shown BELOW the header —
    the scroll wrapper (overflow-x: auto) would clip a tooltip above it */
 .rr-cross__head-tip[data-tooltip]:hover::after,

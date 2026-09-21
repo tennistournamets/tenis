@@ -39,7 +39,8 @@ const showMemberTwoOptional = computed(() => entryType.value === 'doubles' && pa
 
 const form = reactive({
   displayName: '',
-  phoneOrEmail: '',
+  phone: '',
+  email: '',
   memberOne: '',
   memberTwo: '',
 })
@@ -48,7 +49,8 @@ const loading = ref(false)
 const errorText = ref('')
 const submitted = ref(false)
 const submittedStatus = ref('pending')
-const contactTouched = ref(false)
+const phoneTouched = ref(false)
+const emailTouched = ref(false)
 
 const initialForm = cloneForm(form)
 const dirty = computed(() => !sameForm(form, initialForm))
@@ -70,25 +72,32 @@ async function discard() {
   reviewedConditions.value = conditions()
 }
 
+// The same shapes the database accepts, so the form never sends a value the
+// RPC would reject.
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const phonePattern = /^\+?[\d\s\-()]{7,20}$/
 
-function isValidContact(value) {
-  const trimmed = value.trim()
-  return emailPattern.test(trimmed) || phonePattern.test(trimmed)
-}
-
-const contactInvalid = computed(() => contactTouched.value && form.phoneOrEmail && !isValidContact(form.phoneOrEmail))
+const phoneValid = computed(() => phonePattern.test(form.phone.trim()))
+const emailValid = computed(() => emailPattern.test(form.email.trim()))
+const phoneInvalid = computed(() => phoneTouched.value && Boolean(form.phone) && !phoneValid.value)
+const emailInvalid = computed(() => emailTouched.value && Boolean(form.email) && !emailValid.value)
 
 async function submit() {
   if (loading.value || registrationClosed.value || conditionsChanged.value) return
   loading.value = true
   errorText.value = ''
   submitted.value = false
-  contactTouched.value = true
+  phoneTouched.value = true
+  emailTouched.value = true
 
-  if (!isValidContact(form.phoneOrEmail)) {
-    errorText.value = t('registrationForm.invalidContact')
+  if (!phoneValid.value) {
+    errorText.value = t('registrationForm.invalidPhone')
+    loading.value = false
+    return
+  }
+
+  if (!emailValid.value) {
+    errorText.value = t('registrationForm.invalidEmail')
     loading.value = false
     return
   }
@@ -101,7 +110,8 @@ async function submit() {
     const { data, error } = await supabase.rpc('register_entry', {
       p_slug: props.tournament.slug,
       p_entry_type: entryType.value,
-      p_phone_or_email: form.phoneOrEmail,
+      p_phone: form.phone,
+      p_email: form.email,
       p_member_one: form.memberOne,
       p_member_two: memberTwo,
       p_display_name: form.displayName || null,
@@ -116,10 +126,12 @@ async function submit() {
     submitted.value = true
     submittedStatus.value = data?.status === 'waitlisted' ? 'waitlisted' : 'pending'
     form.displayName = ''
-    form.phoneOrEmail = ''
+    form.phone = ''
+    form.email = ''
     form.memberOne = ''
     form.memberTwo = ''
-    contactTouched.value = false
+    phoneTouched.value = false
+    emailTouched.value = false
     emit('submitted')
   } catch (error) {
     errorText.value = registrationError(error?.message, t, 'registrationForm.error')
@@ -195,19 +207,37 @@ async function submit() {
     </div>
 
     <div class="form-field">
-      <label for="reg-contact">{{ t('registrationForm.contact') }}</label>
+      <label for="reg-phone">{{ t('registrationForm.phone') }}</label>
       <input
-        id="reg-contact"
-        v-model="form.phoneOrEmail"
+        id="reg-phone"
+        v-model="form.phone"
         class="input"
-        :class="{ 'input--error': contactInvalid }"
-        type="text"
+        :class="{ 'input--error': phoneInvalid }"
+        type="tel"
+        inputmode="tel"
+        autocomplete="tel"
+        :disabled="loading"
+        required
+        @blur="phoneTouched = true"
+      />
+      <p v-if="phoneInvalid" class="error-text" role="alert" style="margin: 4px 0 0">{{ t('registrationForm.invalidPhone') }}</p>
+    </div>
+
+    <div class="form-field">
+      <label for="reg-email">{{ t('registrationForm.email') }}</label>
+      <input
+        id="reg-email"
+        v-model="form.email"
+        class="input"
+        :class="{ 'input--error': emailInvalid }"
+        type="email"
         inputmode="email"
         autocomplete="email"
         :disabled="loading"
         required
-        @blur="contactTouched = true"
+        @blur="emailTouched = true"
       />
+      <p v-if="emailInvalid" class="error-text" role="alert" style="margin: 4px 0 0">{{ t('registrationForm.invalidEmail') }}</p>
     </div>
 
     <button class="btn btn--primary" :disabled="loading || registrationClosed || conditionsChanged" type="submit">
