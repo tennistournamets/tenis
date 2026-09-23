@@ -1380,7 +1380,7 @@ onBeforeUnmount(() => {
           aria-controls="panel-entries"
           @click="setTab('entries')"
         >
-          {{ isTournamentActive ? t('admin.tabParticipants') : t('admin.tabEntries') }}
+          {{ t('admin.tabParticipants') }}
           <span v-if="pendingEntries.length" class="tab__badge">{{ pendingEntries.length }}</span>
         </button>
         <span class="tooltip-wrapper" :data-tooltip="!bracketTabEnabled ? t('admin.bracketLockedTooltip') : undefined">
@@ -2086,9 +2086,14 @@ onBeforeUnmount(() => {
         :class="{ 'tab-panel--active': activeTab === 'courts' }"
       >
         <!-- Без v-if: черновик кортов не должен пропадать при переключении вкладок -->
-        <section class="card stack stack--sm">
-          <CourtsEditor :courts="courts" :disabled="actionLoading || settingsSaving || !canManageTournament" @save="saveCourts" />
-        </section>
+        <CourtsEditor
+          class="card courts-panel"
+          :courts="courts"
+          :schedule="schedule"
+          :tournament="tournament"
+          :disabled="actionLoading || settingsSaving || !canManageTournament"
+          @save="saveCourts"
+        />
       </div>
 
       <div

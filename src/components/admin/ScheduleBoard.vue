@@ -1,8 +1,9 @@
 <script setup>
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { entryMemberNames } from '../../lib/entryDisplay'
 import { supabase } from '../../lib/supabase'
+import InfoTip from '../InfoTip.vue'
 import {
   blocksPublish, conflictText, draftDiff, formatScheduleTime, indexSchedule, scheduleDropAction, scheduleError,
   scheduleLocked, scheduleSummary, timezoneOf,
@@ -191,8 +192,62 @@ const byCourt = computed(() => {
   }
   const timeOf = m => index.value.draft[m.id]?.scheduled_at ? new Date(index.value.draft[m.id].scheduled_at).getTime() : Number.MAX_SAFE_INTEGER
   for (const column of columns) column.items.sort((a, b) => (index.value.draft[a.id]?.queue_order || 0) - (index.value.draft[b.id]?.queue_order || 0) || timeOf(a) - timeOf(b))
-  return [...columns, noCourt, unscheduled].filter(c => c.items.length || c.key !== 'none')
+  // The tray of unscheduled matches leads: it is where drags start, and it
+  // stays pinned while a long row of courts scrolls past it.
+  return [unscheduled, noCourt, ...columns].filter(c => c.items.length || c.key !== 'none')
 })
+
+// Pieces of the slot chip: court and time are shown apart so each can carry
+// its own icon; scheduleSummary stays the one-line text for screen readers.
+function slotParts(match) {
+  const row = index.value.draft[match.id]
+  if (!row) return null
+  const court = row.court_id ? courtsById.value[row.court_id]?.name || '' : ''
+  let time = ''
+  if (row.scheduled_at) {
+    const at = formatScheduleTime(row.scheduled_at, locale.value, timeZone.value)
+    time = row.time_kind === 'not_before' ? t('schedule.notBefore', { time: at }) : at
+  }
+  const queue = row.queue_order ? t('schedule.queueLabel', { n: row.queue_order }) : ''
+  return { court, time, queue }
+}
+const scheduledCount = computed(() => props.matches.filter(m => index.value.draft[m.id]).length)
+const progressPct = computed(() => (props.matches.length ? Math.round((scheduledCount.value / props.matches.length) * 100) : 0))
+const statusTone = computed(() => (diff.value.count ? 'dirty' : props.tournament.schedule_published_at ? 'live' : 'never'))
+
+// Court board: a horizontal row of lanes. Arrows and edge fades appear only
+// when the lanes do not fit.
+const boardEl = ref(null)
+const canScrollLeft = ref(false)
+const canScrollRight = ref(false)
+function updateBoardScroll() {
+  const el = boardEl.value
+  if (!el || view.value !== 'court') { canScrollLeft.value = false; canScrollRight.value = false; return }
+  canScrollLeft.value = el.scrollLeft > 4
+  canScrollRight.value = el.scrollLeft + el.clientWidth < el.scrollWidth - 4
+}
+function scrollBoard(direction) {
+  const el = boardEl.value
+  if (!el) return
+  const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+  el.scrollBy({ left: direction * Math.max(280, el.clientWidth * 0.7), behavior: reduce ? 'auto' : 'smooth' })
+}
+let boardObserver = null
+onMounted(() => {
+  if (typeof ResizeObserver !== 'undefined') boardObserver = new ResizeObserver(updateBoardScroll)
+})
+watch([boardEl, view, () => props.courts.length], async () => {
+  await nextTick()
+  boardObserver?.disconnect()
+  if (boardEl.value) boardObserver?.observe(boardEl.value)
+  updateBoardScroll()
+}, { flush: 'post' })
+onBeforeUnmount(() => boardObserver?.disconnect())
+const slotHidden = match => {
+  // In a court lane the lane already names the court; a bare court slot says nothing more.
+  const parts = slotParts(match)
+  return view.value === 'court' && parts && !parts.time && !parts.queue
+}
 
 const publishedAt = computed(() => formatScheduleTime(props.tournament.schedule_published_at, locale.value, timeZone.value))
 
@@ -242,93 +297,146 @@ onBeforeUnmount(() => { clearTimeout(conflictsTimer); conflictsVersion += 1 })
 </script>
 
 <template>
-  <section class="card stack stack--sm schedule-board" aria-labelledby="schedule-title">
-    <header class="schedule-board__head">
-      <div>
-        <h2 id="schedule-title" class="section-title" style="margin: 0">{{ t('schedule.title') }}</h2>
-        <p class="muted" style="margin: 4px 0 0">{{ t('schedule.intro') }}</p>
-      </div>
-      <div class="schedule-board__publish">
-        <p class="muted" style="margin: 0">
-          <template v-if="tournament.schedule_published_at">{{ t('schedule.publishedAt', { date: publishedAt }) }}</template>
-          <template v-else>{{ t('schedule.notPublished') }}</template>
-        </p>
-        <p class="muted" style="margin: 0">{{ diff.count ? t('schedule.draftChanges', { count: diff.count }) : t('schedule.noDraftChanges') }}</p>
-        <div class="inline-actions">
-          <button class="btn btn--primary btn--sm" type="button" :disabled="disabled || !diff.count || publishBlocked" @click="emit('publish')">{{ t('schedule.publish') }}</button>
-          <button class="btn btn--ghost btn--sm" type="button" :disabled="disabled || !diff.count" @click="emit('revert')">{{ t('schedule.revert') }}</button>
-        </div>
+  <section class="card schedule-board" aria-labelledby="schedule-title">
+    <header class="sb-head">
+      <div class="sb-head__text">
+        <h2 id="schedule-title" class="sb-head__title">
+          {{ t('schedule.title') }}
+          <InfoTip :text="t('schedule.limitations')" />
+        </h2>
+        <p class="sb-head__intro">{{ t('schedule.intro') }}</p>
       </div>
     </header>
 
+    <!-- Статус публикации, прогресс и действия — одной панелью -->
+    <div class="sb-status" :class="`sb-status--${statusTone}`">
+      <div class="sb-status__state" role="status">
+        <span class="sb-status__dot" aria-hidden="true" />
+        <div class="sb-status__lines">
+          <strong v-if="statusTone === 'dirty'">{{ t('schedule.statusDirty', { count: diff.count }) }}</strong>
+          <strong v-else-if="statusTone === 'live'">{{ t('schedule.statusPublished', { date: publishedAt }) }}</strong>
+          <strong v-else>{{ t('schedule.statusNever') }}</strong>
+          <span>
+            <template v-if="statusTone === 'dirty' && tournament.schedule_published_at">{{ t('schedule.publishedAt', { date: publishedAt }) }}</template>
+            <template v-else-if="statusTone === 'dirty' || statusTone === 'never'">{{ t('schedule.statusNeverHint') }}</template>
+            <template v-else>{{ t('schedule.noDraftChanges') }}</template>
+          </span>
+        </div>
+      </div>
+
+      <div v-if="matches.length" class="sb-status__progress">
+        <span class="sb-status__progress-label">{{ t('schedule.progress', { done: scheduledCount, total: matches.length }) }}</span>
+        <span class="sb-progress" role="progressbar" :aria-valuenow="scheduledCount" aria-valuemin="0" :aria-valuemax="matches.length">
+          <span class="sb-progress__fill" :style="{ width: `${progressPct}%` }" />
+        </span>
+      </div>
+
+      <div class="sb-status__actions">
+        <button v-if="diff.count" class="btn btn--ghost btn--sm" type="button" :disabled="disabled" @click="emit('revert')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7v6h6" /><path d="M21 17a9 9 0 0 0-15-6.7L3 13" /></svg>
+          {{ t('schedule.revert') }}
+        </button>
+        <button class="btn btn--primary btn--sm" type="button" :disabled="disabled || !diff.count || publishBlocked" @click="emit('publish')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 2 11 13" /><path d="M22 2 15 22l-4-9-9-4 20-7z" /></svg>
+          {{ t('schedule.publish') }}
+        </button>
+      </div>
+    </div>
+
     <!-- Корты редактируются на своей вкладке; без них назначать матчи некуда -->
-    <div v-if="!courts.length" class="alert alert--info row row--between" role="status">
-      <span>{{ t('schedule.noCourts') }}</span>
+    <div v-if="!courts.length" class="sb-notice" role="status">
+      <svg class="sb-notice__icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 11v5" /><path d="M12 8h.01" /></svg>
+      <span class="sb-notice__text">{{ t('schedule.noCourts') }}</span>
       <button class="btn btn--outline btn--sm" type="button" :disabled="disabled" @click="emit('open-courts')">{{ t('schedule.goToCourts') }}</button>
     </div>
 
-    <div class="divider" />
-
-    <section v-if="conflicts.length || conflictsError" class="schedule-board__conflicts" aria-live="polite">
-      <h3 class="section-title" style="font-size: 1rem">{{ t('schedule.conflicts') }}</h3>
+    <section v-if="conflicts.length || conflictsError" class="sb-conflicts" aria-live="polite">
+      <h3 class="sb-conflicts__title">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" /><path d="M12 9v4" /><path d="M12 17h.01" /></svg>
+        {{ t('schedule.conflicts') }}
+        <span v-if="conflicts.length" class="sb-count">{{ conflicts.length }}</span>
+      </h3>
       <p v-if="conflictsError" class="error-text" role="alert">{{ conflictsError }}</p>
-      <ul v-else class="schedule-board__conflict-list">
+      <ul v-else class="sb-conflicts__list">
         <li v-for="item in conflicts" :key="item.match_id">
           <strong>{{ matchLabelById(item.match_id) }}</strong>
           <ul>
-            <li v-for="(conflict, i) in item.conflicts" :key="i" :class="blocksPublish(conflict) ? 'error-text' : ''">
-              {{ t(blocksPublish(conflict) ? 'schedule.hard' : 'schedule.soft') }}: {{ conflictText(conflict, t, matchLabelById) }}
+            <li v-for="(conflict, i) in item.conflicts" :key="i" :class="blocksPublish(conflict) ? 'is-hard' : 'is-soft'">
+              <span class="sb-conflicts__kind">{{ t(blocksPublish(conflict) ? 'schedule.hard' : 'schedule.soft') }}</span>
+              {{ conflictText(conflict, t, matchLabelById) }}
             </li>
           </ul>
         </li>
       </ul>
     </section>
-    <p class="muted schedule-board__limits">{{ t('schedule.limitations') }}</p>
 
-    <div class="schedule-board__toolbar">
-      <div class="tab-group" role="tablist">
-        <button type="button" role="tab" class="tab" :class="{ 'tab--active': view === 'round' }" :aria-selected="view === 'round'" @click="view = 'round'">{{ t('schedule.viewByRound') }}</button>
-        <button type="button" role="tab" class="tab" :class="{ 'tab--active': view === 'court' }" :aria-selected="view === 'court'" @click="view = 'court'">{{ t('schedule.viewByCourt') }}</button>
+    <div class="sb-toolbar">
+      <div class="sb-segmented" role="tablist">
+        <button type="button" role="tab" class="sb-segmented__btn" :class="{ 'is-active': view === 'round' }" :aria-selected="view === 'round'" @click="view = 'round'">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13" /><path d="M8 12h13" /><path d="M8 18h13" /><path d="M3 6h.01" /><path d="M3 12h.01" /><path d="M3 18h.01" /></svg>
+          {{ t('schedule.viewByRound') }}
+        </button>
+        <button type="button" role="tab" class="sb-segmented__btn" :class="{ 'is-active': view === 'court' }" :aria-selected="view === 'court'" @click="view = 'court'">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="18" rx="1.5" /><rect x="14" y="3" width="7" height="18" rx="1.5" /></svg>
+          {{ t('schedule.viewByCourt') }}
+        </button>
       </div>
+      <div v-if="view === 'court' && (canScrollLeft || canScrollRight)" class="sb-toolbar__scroll">
+        <button type="button" class="sb-scroll-btn" :disabled="!canScrollLeft" :aria-label="t('schedule.scrollLeft')" @click="scrollBoard(-1)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
+        </button>
+        <button type="button" class="sb-scroll-btn" :disabled="!canScrollRight" :aria-label="t('schedule.scrollRight')" @click="scrollBoard(1)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6" /></svg>
+        </button>
+      </div>
+      <p v-if="moveEnabled" class="sb-toolbar__hint" role="status">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 9l-3 3 3 3" /><path d="M9 5l3-3 3 3" /><path d="M15 19l-3 3-3-3" /><path d="M19 9l3 3-3 3" /><path d="M2 12h20" /><path d="M12 2v20" /></svg>
+        {{ selectedMatchId ? t('schedule.selectedMatch', { match: matchLabelById(selectedMatchId) }) : t('schedule.moveHint') }}
+      </p>
     </div>
 
-    <p v-if="moveEnabled" class="schedule-board__move-hint" role="status">
-      {{ selectedMatchId ? t('schedule.selectedMatch', { match: matchLabelById(selectedMatchId) }) : t('schedule.moveHint') }}
-    </p>
+    <p v-if="!matches.length" class="sb-empty">{{ t('bracket.empty') }}</p>
 
-    <p v-if="!matches.length" class="muted">{{ t('bracket.empty') }}</p>
-
-    <div v-else class="schedule-board__groups" :class="{ 'schedule-board__groups--courts': view === 'court' }">
+    <div
+      v-else
+      :ref="el => (boardEl = view === 'court' ? el : null)"
+      class="sb-groups"
+      :class="{ 'sb-groups--courts': view === 'court', 'is-fade-left': canScrollLeft, 'is-fade-right': canScrollRight }"
+      @scroll.passive="updateBoardScroll"
+    >
       <section
         v-for="group in (view === 'round' ? byRound : byCourt)"
         :key="group.key || group.label"
-        class="schedule-group"
-        :class="{ 'schedule-group--drop-over': dropTargetKey === `column:${group.key}` }"
+        class="sb-group"
+        :class="{ 'sb-group--drop-over': dropTargetKey === `column:${group.key}`, 'sb-group--tray': view === 'court' && group.key === 'unassigned' }"
         @dragover="onDragOver($event, `column:${group.key}`, group.key)"
         @dragleave="onDragLeave($event, `column:${group.key}`)"
         @drop="onDrop($event, group.key)"
       >
-        <h3 class="schedule-group__title">{{ group.label }} <span class="badge badge--neutral">{{ group.items.length }}</span></h3>
-        <p v-if="!group.items.length && !dropTarget(group.key)" class="muted" style="margin: 0">—</p>
-        <ul v-else class="schedule-group__list">
+        <h3 class="sb-group__title">
+          <span>{{ group.label }}</span>
+          <span class="sb-count">{{ group.items.length }}</span>
+        </h3>
+        <p v-if="!group.items.length && !dropTarget(group.key)" class="sb-group__empty">—</p>
+        <ul v-else class="sb-group__list">
           <li
             v-for="match in group.items"
             :key="match.id"
-            class="schedule-item"
+            class="sb-item"
             :class="{
-              'schedule-item--changed': changedIds.has(match.id),
-              'schedule-item--conflict': conflictsByMatch[match.id],
-              'schedule-item--dragging': dragMatchId === match.id,
-              'schedule-item--selected': selectedMatchId === match.id,
-              'schedule-item--drop-over': dropTargetKey === `before:${match.id}`,
+              'sb-item--changed': changedIds.has(match.id),
+              'sb-item--conflict': conflictsByMatch[match.id],
+              'sb-item--dragging': dragMatchId === match.id,
+              'sb-item--selected': selectedMatchId === match.id,
+              'sb-item--drop-over': dropTargetKey === `before:${match.id}`,
             }"
             @dragover="onDragOver($event, `before:${match.id}`, group.key, match.id)"
             @dragleave="onDragLeave($event, `before:${match.id}`)"
             @drop.stop="onDrop($event, group.key, match.id)"
           >
             <div
-              class="schedule-item__body"
-              :class="{ 'schedule-item__body--movable': canMove(match) }"
+              class="sb-item__body"
+              :class="{ 'sb-item__body--movable': canMove(match) }"
               :draggable="canMove(match)"
               :role="moveEnabled ? 'button' : undefined"
               :tabindex="moveEnabled ? 0 : undefined"
@@ -341,24 +449,57 @@ onBeforeUnmount(() => { clearTimeout(conflictsTimer); conflictsVersion += 1 })
               @keydown.enter="onCardActivate(match, group.key)"
               @keydown.space.prevent="onCardActivate(match, group.key)"
             >
-              <strong class="schedule-item__teams">{{ matchTitle(match) }}</strong>
-              <span v-if="view === 'court'" class="muted schedule-item__round">{{ roundLabel(match) }}</span>
-              <span class="schedule-item__when" :class="{ muted: !index.draft[match.id] }">
-                {{ summary(match) || t('schedule.unassigned') }}
+              <span v-if="match.match_number" class="sb-item__no">{{ t('schedule.matchNo', { n: match.match_number }) }}</span>
+              <div class="sb-item__main">
+                <span v-if="view === 'court'" class="sb-item__round" :title="roundLabel(match)">{{ roundLabel(match) }}</span>
+                <span class="sb-item__teams">
+                  <span class="sb-item__team" :class="{ 'is-tbd': !match.side_a_entry_id }">{{ teamLabel(match.side_a_entry_id) }}</span>
+                  <span class="sb-item__vs" aria-hidden="true">vs</span>
+                  <span class="sb-item__team" :class="{ 'is-tbd': !match.side_b_entry_id }">{{ teamLabel(match.side_b_entry_id) }}</span>
+                </span>
+              </div>
+              <span class="sb-item__flags">
+                <span v-if="changedIds.has(match.id)" class="sb-tag sb-tag--draft">{{ t('schedule.draft') }}</span>
+                <span v-if="conflictsByMatch[match.id]" class="sb-tag" :class="conflictsByMatch[match.id].some(blocksPublish) ? 'sb-tag--danger' : 'sb-tag--warn'">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" /><path d="M12 9v4" /><path d="M12 17h.01" /></svg>
+                  {{ conflictsByMatch[match.id].length }}
+                </span>
               </span>
-              <span v-if="changedIds.has(match.id)" class="badge badge--warn">{{ t('schedule.draft') }}</span>
-              <span v-if="conflictsByMatch[match.id]" class="badge" :class="conflictsByMatch[match.id].some(blocksPublish) ? 'badge--danger' : 'badge--warn'">
-                {{ conflictsByMatch[match.id].length }}
+              <span v-if="!slotHidden(match)" class="sb-slot" :class="{ 'sb-slot--empty': !slotParts(match) }" :aria-label="summary(match) || t('schedule.unassigned')">
+                <template v-if="slotParts(match)">
+                  <span v-if="slotParts(match).court && view !== 'court'" class="sb-slot__part">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="1.5" /><path d="M12 5v14" /><path d="M3 12h18" /></svg>
+                    {{ slotParts(match).court }}
+                  </span>
+                  <span v-if="slotParts(match).time" class="sb-slot__part sb-slot__part--time">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
+                    {{ slotParts(match).time }}
+                  </span>
+                  <span v-if="slotParts(match).queue" class="sb-slot__part">{{ slotParts(match).queue }}</span>
+                </template>
+                <template v-else>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="17" rx="2" /><path d="M16 2v4" /><path d="M8 2v4" /><path d="M3 10h18" /></svg>
+                  {{ t('schedule.unassigned') }}
+                </template>
               </span>
             </div>
-            <div class="schedule-item__actions">
-              <button class="btn btn--secondary btn--sm" type="button" draggable="false" :disabled="disabled || match.status === 'finished'" @click="emit('assign', match)">
+            <div class="sb-item__actions">
+              <button
+                class="btn btn--sm sb-assign"
+                :class="index.draft[match.id] ? 'btn--ghost' : 'btn--outline'"
+                type="button"
+                draggable="false"
+                :disabled="disabled || match.status === 'finished'"
+                @click="emit('assign', match)"
+              >
+                <svg v-if="index.draft[match.id]" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
+                <svg v-else width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14" /><path d="M5 12h14" /></svg>
                 {{ index.draft[match.id] ? t('schedule.change') : t('schedule.assign') }}
               </button>
             </div>
           </li>
-          <li v-if="dropTarget(group.key)" class="schedule-group__drop" :class="{ 'schedule-group__drop--over': dropTargetKey === `column:${group.key}` }">
-            <button type="button" class="schedule-group__drop-btn" :aria-label="targetLabel(group)" @click="onTargetActivate(group.key)">
+          <li v-if="dropTarget(group.key)" class="sb-group__drop" :class="{ 'sb-group__drop--over': dropTargetKey === `column:${group.key}` }">
+            <button type="button" class="sb-group__drop-btn" :aria-label="targetLabel(group)" @click="onTargetActivate(group.key)">
               {{ targetLabel(group) }}
             </button>
           </li>
@@ -369,44 +510,226 @@ onBeforeUnmount(() => { clearTimeout(conflictsTimer); conflictsVersion += 1 })
 </template>
 
 <style scoped>
-.schedule-board__head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; }
-.schedule-board__publish { display: grid; gap: 6px; justify-items: end; text-align: right; }
-.schedule-board__limits { margin: 0; font-size: 0.82rem; }
-.schedule-board__conflict-list { margin: 0; padding: 0 0 0 18px; display: grid; gap: 8px; font-size: 0.9rem; }
-.schedule-board__conflict-list ul { margin: 4px 0 0; padding-left: 16px; }
-.schedule-board__toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
-.schedule-board__groups { display: grid; gap: 14px; }
-.schedule-board__groups--courts { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); align-items: start; }
-.schedule-group { display: grid; gap: 8px; }
-.schedule-group__title { margin: 0; font-size: 0.95rem; display: flex; align-items: center; gap: 8px; }
-.schedule-group__list { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
-.schedule-item { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-row); }
-.schedule-item--changed { border-color: var(--primary); }
-.schedule-item--conflict { border-style: dashed; }
-.schedule-item__body { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; min-width: 0; flex: 1 1 240px; }
-.schedule-item__teams { overflow-wrap: anywhere; }
-.schedule-item__round { font-size: 0.8rem; }
-.schedule-item__when { font-size: 0.9rem; font-weight: 600; }
-.schedule-item__actions .btn { min-height: 40px; }
-.schedule-board__move-hint { margin: 0; font-size: 0.84rem; color: var(--text-muted); }
-.schedule-group--drop-over { outline: 2px dashed var(--primary); outline-offset: 4px; border-radius: 12px; }
-.schedule-item__body--movable { cursor: grab; }
-.schedule-item__body--movable:active { cursor: grabbing; }
-.schedule-item__body:focus-visible { outline: 3px solid var(--primary-muted); outline-offset: 2px; border-radius: 8px; }
-.schedule-item--dragging { opacity: 0.45; }
-.schedule-item--selected { outline: 2px solid var(--primary); outline-offset: 3px; }
-/* Sits above --conflict, which only dashes the border. */
-.schedule-item--drop-over { border-color: var(--primary); border-style: solid; box-shadow: inset 0 3px 0 -1px var(--primary); }
-.schedule-group__drop { list-style: none; }
-.schedule-group__drop-btn {
-  width: 100%; min-height: 44px; padding: 8px 12px; border: 1px dashed var(--border); border-radius: 12px;
-  background: transparent; color: var(--text-muted); font: inherit; font-size: 0.84rem; cursor: pointer;
+.schedule-board { display: grid; gap: 20px; padding: 24px; }
+
+/* Head */
+.sb-head__title {
+  display: flex; align-items: center; gap: 6px; margin: 0;
+  font-family: var(--font-display); font-size: 1.25rem; font-weight: 700; letter-spacing: -0.01em; color: var(--heading);
 }
-.schedule-group__drop-btn:hover { border-color: var(--primary); color: var(--text); }
-.schedule-group__drop--over .schedule-group__drop-btn { border-color: var(--primary); border-style: solid; color: var(--text); }
-@media (max-width: 560px) {
-  .schedule-board__publish { justify-items: start; text-align: left; }
-  .schedule-item__actions { width: 100%; }
-  .schedule-item__actions .btn { width: 100%; }
+.sb-head__intro { margin: 4px 0 0; max-width: 76ch; color: var(--muted); font-size: 0.9375rem; line-height: 1.5; }
+
+/* Status bar */
+.sb-status {
+  --tone: var(--disabled); --tone-bg: var(--disabled-bg);
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(160px, 240px) auto; align-items: center; gap: 16px 24px;
+  padding: 14px 14px 14px 18px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-row);
+}
+.sb-status--dirty { --tone: var(--warning); --tone-bg: var(--warning-bg); }
+.sb-status--live { --tone: var(--success); --tone-bg: var(--success-bg); }
+.sb-status__state { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.sb-status__dot { width: 10px; height: 10px; flex: none; border-radius: 50%; background: var(--tone); box-shadow: 0 0 0 4px var(--tone-bg); }
+.sb-status__lines { display: grid; gap: 2px; min-width: 0; }
+.sb-status__lines strong { font-size: 0.9375rem; font-weight: 600; color: var(--text); }
+.sb-status__lines span { font-size: 0.8125rem; color: var(--muted); }
+.sb-status__progress { display: grid; gap: 6px; }
+.sb-status__progress-label { font-size: 0.8125rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.sb-progress { display: block; height: 6px; border-radius: 999px; background: var(--border); overflow: hidden; }
+.sb-progress__fill { display: block; height: 100%; border-radius: inherit; background: var(--primary); transition: width 0.3s ease; }
+.sb-status__actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+/* Notice (no courts) */
+.sb-notice {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px;
+  padding: 12px 12px 12px 16px; border-radius: var(--radius-sm);
+  background: var(--primary-soft); color: var(--text); font-size: 0.9rem;
+}
+.sb-notice__icon { color: var(--primary); flex: none; }
+.sb-notice__text { flex: 1 1 240px; }
+
+/* Conflicts */
+.sb-conflicts { padding: 14px 16px; border: 1px solid var(--warning-border); border-radius: var(--radius-sm); background: var(--warning-bg); }
+.sb-conflicts__title { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; font-size: 0.9375rem; font-weight: 600; color: var(--warning-text); }
+.sb-conflicts__list { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; font-size: 0.875rem; }
+.sb-conflicts__list ul { margin: 4px 0 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+.sb-conflicts__list li li { color: var(--text); }
+.sb-conflicts__kind { display: inline-block; margin-right: 6px; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+.is-hard .sb-conflicts__kind { color: var(--danger); }
+.is-soft .sb-conflicts__kind { color: var(--warning-text); }
+
+/* Toolbar */
+.sb-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; }
+.sb-segmented { display: inline-flex; padding: 4px; gap: 4px; border-radius: 12px; background: var(--surface-row); border: 1px solid var(--border); }
+.sb-segmented__btn {
+  display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 14px;
+  border: 0; border-radius: 8px; background: transparent; color: var(--muted);
+  font: inherit; font-size: 0.875rem; font-weight: 600; cursor: pointer; transition: background 0.15s, color 0.15s;
+}
+.sb-segmented__btn:hover { color: var(--text); }
+.sb-segmented__btn.is-active { background: var(--surface-raised); color: var(--text); box-shadow: var(--shadow-sm), 0 0 0 1px var(--border); }
+.sb-segmented__btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+.sb-toolbar__hint { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 0.8125rem; color: var(--muted); }
+.sb-empty { margin: 0; padding: 32px 0; text-align: center; color: var(--muted); }
+
+/* Groups */
+.sb-groups { display: grid; gap: 24px; }
+.sb-groups--courts { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); align-items: start; gap: 16px; }
+.sb-groups--courts .sb-group { padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-row); }
+.sb-group { display: grid; gap: 10px; border-radius: var(--radius-sm); }
+.sb-group__title {
+  display: flex; align-items: center; gap: 8px; margin: 0;
+  font-size: 0.75rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted);
+}
+.sb-count {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 6px;
+  border-radius: 999px; background: var(--disabled-bg); color: var(--muted);
+  font-size: 0.72rem; font-weight: 600; letter-spacing: 0; font-variant-numeric: tabular-nums;
+}
+.sb-group__empty { margin: 0; color: var(--muted); }
+.sb-group__list { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+
+/* Match row */
+.sb-item {
+  display: flex; align-items: center; gap: 12px; padding: 10px 10px 10px 14px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface);
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+.sb-item:hover { border-color: var(--border-strong); background: var(--surface-hover); }
+.sb-item--changed { box-shadow: inset 3px 0 0 var(--warning); }
+.sb-item--conflict { border-color: var(--warning-border); }
+.sb-item__body { display: flex; align-items: center; gap: 14px; flex: 1 1 auto; min-width: 0; }
+.sb-item__no {
+  flex: none; min-width: 34px; padding: 3px 6px; border-radius: 6px; text-align: center;
+  background: var(--disabled-bg); color: var(--muted); font-family: var(--font-mono); font-size: 0.75rem; font-weight: 600;
+}
+.sb-item__main { display: grid; gap: 2px; flex: 1 1 auto; min-width: 0; }
+.sb-item__round { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+.sb-item__teams { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; min-width: 0; }
+.sb-item__team { font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
+.sb-item__team.is-tbd { font-weight: 500; color: var(--disabled); }
+.sb-item__vs { font-size: 0.72rem; font-weight: 600; text-transform: uppercase; color: var(--disabled); }
+.sb-item__flags { display: flex; gap: 6px; flex: none; }
+.sb-item__flags:empty { display: none; }
+.sb-tag {
+  display: inline-flex; align-items: center; gap: 3px; height: 22px; padding: 0 8px; border-radius: 999px;
+  font-size: 0.72rem; font-weight: 600;
+}
+.sb-tag--draft { color: var(--warning-text); background: var(--warning-bg); }
+.sb-tag--warn { color: var(--warning-text); background: var(--warning-bg); }
+.sb-tag--danger { color: var(--danger); background: var(--danger-bg); }
+
+.sb-slot { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; flex: none; }
+.sb-slot__part {
+  display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border-radius: 8px;
+  background: var(--primary-soft); color: var(--text); font-size: 0.8125rem; font-weight: 600; white-space: nowrap;
+}
+.sb-slot svg { flex: none; }
+.sb-slot__part svg { color: var(--primary); }
+.sb-slot__part--time { font-variant-numeric: tabular-nums; }
+.sb-slot--empty {
+  flex-wrap: nowrap; white-space: nowrap; height: 30px; padding: 0 10px; gap: 6px; border: 1px dashed var(--border-strong); border-radius: 8px;
+  color: var(--muted); font-size: 0.8125rem; font-weight: 500;
+}
+.sb-item__actions { flex: none; }
+.sb-assign { min-width: 128px; }
+
+/* Court view: a board of lanes that scrolls sideways once courts outnumber
+   the width. The unscheduled tray is pinned to the left edge. */
+.sb-groups--courts {
+  --lane: 280px;
+  display: grid; grid-auto-flow: column; grid-auto-columns: minmax(var(--lane), 1fr); grid-template-columns: none;
+  align-items: start; gap: 12px; overflow-x: auto; overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity; scroll-padding-left: calc(var(--lane) + 12px);
+  padding-bottom: 12px;
+  scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent;
+  /* Dragging a card must not paint text selections across the board. */
+  user-select: none; -webkit-user-select: none;
+}
+.sb-groups--courts.is-fade-right { mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent); }
+.sb-groups--courts .sb-group {
+  align-content: start; scroll-snap-align: start; min-height: 160px; padding: 12px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-row);
+}
+/* Opaque, and its gap is painted too, so lanes scrolling under it never show through. */
+.sb-groups--courts .sb-group--tray {
+  position: sticky; left: 0; z-index: 2; background: var(--surface);
+  border-color: var(--border-strong);
+  box-shadow: 12px 0 0 0 var(--surface), 20px 0 18px -10px rgba(0, 0, 0, 0.35);
+}
+
+/* Lane card, stacked: number · round · flags / teams / time and action. */
+.sb-groups--courts .sb-item { position: relative; display: block; padding: 12px; }
+.sb-groups--courts .sb-item__body {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 6px 10px; min-width: 0;
+}
+.sb-groups--courts .sb-item__no { grid-column: 1; grid-row: 1; }
+.sb-groups--courts .sb-item__main { display: contents; }
+.sb-groups--courts .sb-item__round {
+  grid-column: 2; grid-row: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.sb-groups--courts .sb-item__flags { grid-column: 3; grid-row: 1; }
+.sb-groups--courts .sb-item__teams { grid-column: 1 / -1; grid-row: 2; flex-direction: column; align-items: flex-start; gap: 2px; padding: 4px 0 2px; }
+.sb-groups--courts .sb-item__team { font-size: 0.9875rem; }
+.sb-groups--courts .sb-item__vs { display: none; }
+/* The action sits on the slot row; the slot row keeps room for it. */
+.sb-groups--courts .sb-slot { grid-column: 1 / -1; grid-row: 3; justify-self: start; justify-content: flex-start; min-height: 32px; padding-right: 108px; max-width: 100%; box-sizing: border-box; }
+.sb-groups--courts .sb-slot--empty { padding-right: 10px; margin-right: 108px; max-width: calc(100% - 108px); }
+.sb-groups--courts .sb-slot--empty, .sb-groups--courts .sb-slot__part { white-space: nowrap; }
+.sb-groups--courts .sb-item__actions { position: absolute; right: 12px; bottom: 12px; }
+.sb-groups--courts .sb-assign { min-width: 0; height: 32px; min-height: 32px; padding: 0 10px; font-size: 0.8125rem; border-radius: 8px; }
+.sb-groups--courts .sb-item__body:not(:has(.sb-slot)) { padding-bottom: 38px; }
+
+.sb-toolbar__scroll { display: inline-flex; gap: 6px; margin-left: auto; }
+.sb-toolbar__scroll + .sb-toolbar__hint { margin-left: 0; }
+.sb-scroll-btn {
+  display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; padding: 0;
+  border: 1px solid var(--border); border-radius: 10px; background: var(--surface-row); color: var(--text); cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, opacity 0.15s;
+}
+.sb-scroll-btn:hover:not(:disabled) { border-color: var(--primary); }
+.sb-scroll-btn:disabled { opacity: 0.35; cursor: default; }
+.sb-scroll-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+/* Move / drag states */
+.sb-item__body--movable { cursor: grab; }
+.sb-item__body--movable:active { cursor: grabbing; }
+.sb-item__body:focus-visible { outline: 2px solid var(--primary); outline-offset: 4px; border-radius: 8px; }
+.sb-item--dragging { opacity: 0.45; }
+.sb-item--selected { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-focus-ring); }
+.sb-item--drop-over { border-color: var(--primary); box-shadow: inset 0 3px 0 -1px var(--primary); }
+.sb-group--drop-over { outline: 2px dashed var(--primary); outline-offset: 4px; }
+.sb-group__drop { list-style: none; }
+.sb-group__drop-btn {
+  width: 100%; min-height: 44px; padding: 8px 12px; border: 1px dashed var(--border-strong); border-radius: var(--radius-sm);
+  background: transparent; color: var(--muted); font: inherit; font-size: 0.8125rem; cursor: pointer; transition: border-color 0.15s, color 0.15s;
+}
+.sb-group__drop-btn:hover { border-color: var(--primary); color: var(--text); }
+.sb-group__drop--over .sb-group__drop-btn { border-color: var(--primary); border-style: solid; color: var(--text); }
+
+@media (max-width: 900px) {
+  .sb-status { grid-template-columns: 1fr; }
+  .sb-status__actions { justify-content: flex-start; flex-wrap: wrap; }
+}
+@media (max-width: 640px) {
+  .schedule-board { padding: 16px; }
+  .sb-status__actions .btn { flex: 1 1 auto; }
+  .sb-item { flex-wrap: wrap; padding: 12px; }
+  .sb-item__body { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: 10px; width: 100%; }
+  .sb-item__teams { flex-direction: column; align-items: flex-start; gap: 0; }
+  .sb-item__vs { display: none; }
+  .sb-item__body { grid-template-columns: auto minmax(0, 1fr); }
+  .sb-item__flags { grid-column: 1 / -1; }
+  .sb-slot { grid-column: 1 / -1; justify-self: start; justify-content: flex-start; }
+  .sb-item__actions, .sb-assign { width: 100%; }
+}
+@media (max-width: 640px) {
+  .sb-groups--courts { --lane: 84vw; scroll-padding-left: 0; }
+  .sb-groups--courts .sb-group--tray { position: static; box-shadow: none; }
+  .sb-groups--courts .sb-item__actions, .sb-groups--courts .sb-assign { width: auto; }
+  .sb-groups--courts .sb-item__body { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .sb-groups--courts .sb-item__flags { grid-column: 3; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sb-progress__fill, .sb-item { transition: none; }
 }
 </style>
