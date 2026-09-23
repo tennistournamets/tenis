@@ -41,6 +41,28 @@ export function tennisRulesSummary(config, t) {
   return parts.join(' · ')
 }
 
+export function tennisRulesRows(config, t) {
+  const r = tennisRules(config)
+  const rows = [
+    { label: t('tennisRules.game'), value: t(`tennisRules.game_${r.game_rule}`) },
+    { label: t('tennisRules.set'), value: t(`tennisRules.set_${r.set_rule}`) },
+  ]
+  if (r.set_rule === 'short') {
+    rows.push({ label: t('tennisRules.shortAt'), value: `${r.short_tiebreak_at}:${r.short_tiebreak_at}` })
+    rows.push({ label: t('tennisRules.shortTo'), value: t(r.short_tiebreak_to === 5 ? 'tennisRules.to5' : 'tennisRules.to7') })
+  }
+  rows.push({ label: t('tennisRules.final'), value: t(`tennisRules.final_${r.final_set_rule}`) })
+  if (usesLongTiebreak(config)) {
+    rows.push({
+      label: t('tennisRules.changeover'),
+      value: t(r.changeover === 'one_then_four' ? 'tennisRules.oneThenFour' : 'tennisRules.everySix'),
+    })
+  }
+  if (r.set_rule === 'short' && r.short_tiebreak_to === 5) rows.push({ label: '', value: t('tennisRules.shortEnds') })
+  if (!config?.tennis && r.tiebreak_to === 10) rows.push({ label: '', value: t('tennisRules.legacy10') })
+  return rows
+}
+
 export function usesLongTiebreak(config) {
   return [1, 3].some(index => {
     const rule = ruleForSet(config, index)

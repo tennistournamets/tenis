@@ -71,10 +71,14 @@ export function formatDeadline(iso, locale = 'en') {
   if (!iso) return ''
   const date = new Date(iso)
   if (Number.isNaN(date.getTime())) return ''
+  const dayOptions = { day: 'numeric', month: 'long' }
+  if (date.getFullYear() !== new Date().getFullYear()) dayOptions.year = 'numeric'
+  const timeOptions = { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }
+  const format = (lang, options) => new Intl.DateTimeFormat(lang, options).format(date)
   try {
-    return new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short', timeZoneName: 'short' }).format(date)
+    return `${format(locale, dayOptions)}, ${format(locale, timeOptions)}`
   } catch {
-    return date.toISOString()
+    return `${format('en', dayOptions)}, ${format('en', timeOptions)}`
   }
 }
 

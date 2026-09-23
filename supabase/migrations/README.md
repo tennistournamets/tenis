@@ -16,6 +16,8 @@ Forward-миграции после baseline (порядок и SHA-256 — в `
 | `20260917205649_manual_schedule.sql` | Этап B: `courts`, `match_schedule` (черновик/публикация), проверка конфликтов, публикация |
 | `20260917211146_roles_and_visibility.sql` | Этап D: роль «только результаты», защита владельцев, `visibility` + триггер синхронизации `is_public` |
 | `20260917212258_ownership_and_password.sql` | Этап D+: передача владения с журналом, режим «по паролю», токены доступа, снимок по токену |
+| `20260921192934_entry_contact_split.sql` | Телефон и email заявки как отдельные колонки `entries.contact_phone`/`contact_email`, триггер заполнения, `register_entry` с `p_phone`/`p_email` |
+| `20260921210903_tournament_venue.sql` | Адрес и координаты площадки: `tournaments.venue_address/venue_lat/venue_lng`, поля в `create_tournament`, в whitelist настроек и в снимке |
 
 Каждая forward-миграция переигрывается без изменения данных: тесты применяют
 всю цепочку повторно (`reapplyForwardMigrations` в `tests/helpers/database.mjs`).
