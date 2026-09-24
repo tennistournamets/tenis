@@ -113,6 +113,9 @@ function acceptTournament(data) {
   tournament.value = data
 }
 const drawMode = ref('auto-random')
+// Rearranging a built bracket is its own mode, switched on by a button (or right
+// after a manual draw) — not by the draw-mode select, which resets on reload.
+const arrangeMode = ref(false)
 const bracketEditing = ref(false)
 const localMatches = ref([])
 const selectedLiveMatch = ref(null)
@@ -627,6 +630,8 @@ const bracketPlanText = computed(() => {
   if (isDoubleElim.value) return t('admin.bracketPlanDE', plan)
   return t(plan.byes ? 'admin.bracketPlanByes' : 'admin.bracketPlanSE', plan)
 })
+const slotsEditable = computed(() => canManageTournament.value && (arrangeMode.value || bracketEditing.value)
+  && !actionLoading.value && !isTournamentActive.value && !isTournamentFinished.value)
 const bracketTabLabel = computed(() => t(isRoundRobin.value ? 'admin.tabTable' : isGroupsPlayoff.value ? 'admin.tabGroups' : 'admin.tabBracket'))
 const isDoubleElim = computed(() => tournamentFormat.value === 'double_elimination')
 const tournamentScoringFamily = computed(() => scoringFamily(tournament.value?.sport || 'tennis'))
@@ -900,6 +905,7 @@ async function generateBracket() {
       p_manual_order: null,
     })
     if (error) throw error
+    arrangeMode.value = drawMode.value === 'manual'
     await loadAll()
   } catch (error) {
     errorText.value = scoringError(error?.message, t)
@@ -1018,6 +1024,9 @@ function swapBracketSlots(payload) {
   const fromMatch = arr.find((m) => m.id === payload.fromMatchId)
   const toMatch = arr.find((m) => m.id === payload.toMatchId)
   if (!fromMatch || !toMatch) return
+  // Only first-round slots take players; a fed match fills itself from results.
+  const fed = id => arr.some(m => m.next_match_id === id || m.loser_next_match_id === id)
+  if (fed(fromMatch.id) || fed(toMatch.id)) return
 
   const fromKey = payload.fromSide === 'a' ? 'side_a_entry_id' : 'side_b_entry_id'
   const toKey = payload.toSide === 'a' ? 'side_a_entry_id' : 'side_b_entry_id'
@@ -2185,7 +2194,18 @@ onBeforeUnmount(() => {
               >
                 {{ t('admin.resetBracket') }}
               </button>
+              <button
+                class="btn btn--sm"
+                :class="arrangeMode ? 'btn--primary' : 'btn--outline'"
+                type="button"
+                :aria-pressed="arrangeMode"
+                :disabled="actionLoading || bracketEditing"
+                @click="arrangeMode = !arrangeMode"
+              >
+                {{ arrangeMode ? t('admin.arrangeDone') : t('admin.arrangeSlots') }}
+              </button>
             </div>
+            <p v-if="arrangeMode || bracketEditing" class="field-hint">{{ t(isDoubleElim ? 'admin.arrangeHintDE' : 'admin.arrangeHint') }}</p>
           </template>
         </section>
 
@@ -2200,6 +2220,8 @@ onBeforeUnmount(() => {
             :entries-map="entriesMap"
             :live-scores-by-match="liveScoresByMatch"
             :can-live-score="canEditScores"
+            :editable-slots="slotsEditable"
+            @swap-slots="swapBracketSlots"
             @view-live="openLiveScoring"
           />
           <BracketBoard
@@ -2208,7 +2230,7 @@ onBeforeUnmount(() => {
           :sets-by-match="setsByMatch"
           :entries-map="entriesMap"
           :live-scores-by-match="liveScoresByMatch"
-          :editable-slots="canManageTournament && drawMode === 'manual' && !actionLoading && !isTournamentActive && !isTournamentFinished"
+          :editable-slots="slotsEditable"
           :can-live-score="canEditScores"
           @swap-slots="swapBracketSlots"
           @view-live="openLiveScoring"

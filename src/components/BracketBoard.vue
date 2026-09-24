@@ -63,6 +63,11 @@ function selectSlot(slot) {
   selectedSlot.value = null
 }
 
+// Players are placed only where the draw puts them: a match that another match
+// feeds (a semifinal, an upper-bracket round 2) fills itself from results.
+const fedMatchIds = computed(() => new Set(props.matches.flatMap(m => [m.next_match_id, m.loser_next_match_id]).filter(Boolean)))
+const slotsEditable = match => props.editableSlots && !fedMatchIds.value.has(match.id)
+
 watch(() => props.editableSlots, (editable) => {
   if (!editable) selectedSlot.value = null
 })
@@ -326,7 +331,7 @@ watch(splitSectionsFlat, () => scheduleUpdate(), { deep: true })
             :match="match"
             :sets-by-match="setsByMatch"
             :entries-map="entriesMap"
-            :editable-slots="editableSlots"
+            :editable-slots="slotsEditable(match)"
             :selected-slot-key="selectedSlot ? `${selectedSlot.matchId}-${selectedSlot.side}` : ''"
             :live-score="liveScoresByMatch[match.id]"
             :can-live-score="canLiveScore"
@@ -346,7 +351,7 @@ watch(splitSectionsFlat, () => scheduleUpdate(), { deep: true })
             :match="match"
             :sets-by-match="setsByMatch"
             :entries-map="entriesMap"
-            :editable-slots="editableSlots"
+            :editable-slots="slotsEditable(match)"
             :selected-slot-key="selectedSlot ? `${selectedSlot.matchId}-${selectedSlot.side}` : ''"
             :live-score="liveScoresByMatch[match.id]"
             :can-live-score="canLiveScore"
