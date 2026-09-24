@@ -2216,11 +2216,32 @@ textarea.input:focus {
   color: var(--primary-hover);
 }
 
-.admin-delete-zone {
+/* Irreversible actions, set apart at the bottom of the settings tab */
+.danger-zone {
   margin-top: var(--space-6);
-  padding-top: var(--space-5);
-  border-top: 1px solid var(--border-strong);
+  border-color: var(--danger-border);
 }
+
+.danger-zone__title { color: var(--danger); }
+
+.danger-zone__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-3) var(--space-5);
+}
+
+.danger-zone__text {
+  display: grid;
+  gap: 6px;
+  flex: 1 1 320px;
+  min-width: 0;
+}
+
+.danger-zone__text p { margin: 0; }
+.danger-zone__label { margin-top: 6px; font-size: 0.875rem; color: var(--text); }
+.danger-zone__input { max-width: 420px; }
 
 /* Admin sections */
 .admin-section {
@@ -2335,6 +2356,13 @@ textarea.input:focus {
   align-items: center;
   min-width: 0;
   max-width: 100%;
+}
+
+.admin-tournament-overview__divider {
+  align-self: stretch;
+  width: 1px;
+  margin: 4px 2px;
+  background: var(--border);
 }
 
 .admin-mobile-surface {
@@ -4020,3 +4048,72 @@ textarea.input:focus {
 .dp__action_button { border-radius: 8px; }
 .dp__action_select { color: var(--primary-contrast); }
 .dp__cell_inner, .dp__inc_dec_button, .dp__overlay_cell { transition: background 0.15s, color 0.15s; }
+
+/* Helper text under a field, and the "what will be generated" preview line */
+.field-hint {
+  margin: 6px 0 0;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.format-plan {
+  margin: 0;
+  font-size: 0.9375rem;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.group-setup {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.group-setup__legend {
+  padding: 0;
+  margin-bottom: 8px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.group-setup__options {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px;
+  justify-self: start;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-row);
+}
+
+.group-setup__option {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 8px;
+  color: var(--muted);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.group-setup__option:hover { color: var(--text); }
+
+.group-setup__option.is-active {
+  background: var(--surface-raised);
+  color: var(--text);
+  box-shadow: var(--shadow-sm), 0 0 0 1px var(--border);
+}
+
+.group-setup__option:focus-within {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}

@@ -10,6 +10,7 @@ import { confirmLeaveForms, withApprovedDeparture } from './lib/unsavedChanges'
 import { headerTitle } from './lib/headerTitle'
 import { useOnlineStatus } from './lib/useOnlineStatus'
 import { useAuthStore } from './stores/auth'
+import BrandLogo from './components/BrandLogo.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -133,12 +134,7 @@ function goToPlatform() {
     <a class="skip-link" href="#main-content" @click.prevent="mainContent?.focus()">{{ t('a11y.skipContent') }}</a>
     <header v-if="layout === 'admin'" class="app-header">
       <RouterLink class="app-header__brand" :to="{ name: 'admin-tournaments' }">
-        <svg class="app-header__logo" width="24" height="24" viewBox="0 0 28 28" fill="none" aria-hidden="true">
-          <rect width="28" height="28" rx="8" fill="var(--primary)" />
-          <path d="M11 8H9.5A1.5 1.5 0 0 0 8 9.5v9A1.5 1.5 0 0 0 9.5 20H11" stroke="#fff" stroke-width="2" stroke-linecap="round" fill="none" />
-          <path d="M17 8h1.5A1.5 1.5 0 0 1 20 9.5v9a1.5 1.5 0 0 1-1.5 1.5H17" stroke="#fff" stroke-width="2" stroke-linecap="round" fill="none" />
-          <circle cx="14" cy="14" r="2.2" fill="var(--lime)" />
-        </svg>
+        <BrandLogo />
         {{ t('app.title') }}
       </RouterLink>
       <div class="app-header__actions">
@@ -181,7 +177,7 @@ function goToPlatform() {
     </header>
 
     <header v-else-if="layout === 'public'" class="app-header">
-      <span class="app-header__brand">{{ t('app.title') }}</span>
+      <span class="app-header__brand"><BrandLogo />{{ t('app.title') }}</span>
       <div class="app-header__actions">
         <ThemeToggle />
         <LanguageSwitcher />

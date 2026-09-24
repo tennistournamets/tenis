@@ -145,10 +145,8 @@ async function submit() {
   <form class="card card--elevated stack stack--sm" @submit.prevent="submit">
     <div>
       <h3 class="section-title">{{ t('registrationForm.title') }}</h3>
-      <p v-if="showEntryType" class="muted">
-        {{ t('registrationForm.entryType') }}:
-        <span class="badge badge--neutral">{{ entryTypeLabel }}</span>
-      </p>
+      <p v-if="showEntryType" class="muted reg-form__type">{{ isTeamSport ? t('registrationForm.teamNote') : t('registrationForm.doublesNote') }}</p>
+      <p class="muted reg-form__legend"><span class="reg-form__req" aria-hidden="true">*</span> {{ t('registrationForm.requiredLegend') }}</p>
     </div>
 
     <p v-if="registrationClosed" class="alert alert--info" role="status">{{ closedMessage }}</p>
@@ -158,7 +156,7 @@ async function submit() {
     </div>
     <p v-else-if="waitlistMode" class="alert alert--info" role="status">{{ t('registrationRules.waitlistNote') }}</p>
     <div class="form-field">
-      <label for="reg-member-one">{{ memberOneLabel }}</label>
+      <label for="reg-member-one">{{ memberOneLabel }} <span class="reg-form__req" aria-hidden="true">*</span></label>
       <input
         id="reg-member-one"
         v-model="form.memberOne"
@@ -171,7 +169,7 @@ async function submit() {
     </div>
 
     <div v-if="showMemberTwo" class="form-field">
-      <label for="reg-member-two">{{ t('registrationForm.memberTwo') }}</label>
+      <label for="reg-member-two">{{ t('registrationForm.memberTwo') }} <span class="reg-form__req" aria-hidden="true">*</span></label>
       <input
         id="reg-member-two"
         v-model="form.memberTwo"
@@ -202,12 +200,14 @@ async function submit() {
         v-model="form.displayName"
         class="input"
         type="text"
+        aria-describedby="reg-display-name-hint"
         :disabled="loading"
       />
+      <p id="reg-display-name-hint" class="field-hint">{{ t('registrationForm.displayNameHint') }}</p>
     </div>
 
     <div class="form-field">
-      <label for="reg-phone">{{ t('registrationForm.phone') }}</label>
+      <label for="reg-phone">{{ t('registrationForm.phone') }} <span class="reg-form__req" aria-hidden="true">*</span></label>
       <input
         id="reg-phone"
         v-model="form.phone"
@@ -224,7 +224,7 @@ async function submit() {
     </div>
 
     <div class="form-field">
-      <label for="reg-email">{{ t('registrationForm.email') }}</label>
+      <label for="reg-email">{{ t('registrationForm.email') }} <span class="reg-form__req" aria-hidden="true">*</span></label>
       <input
         id="reg-email"
         v-model="form.email"
@@ -238,6 +238,7 @@ async function submit() {
         @blur="emailTouched = true"
       />
       <p v-if="emailInvalid" class="error-text" role="alert" style="margin: 4px 0 0">{{ t('registrationForm.invalidEmail') }}</p>
+      <p class="field-hint">{{ t('registrationForm.contactsPrivate') }}</p>
     </div>
 
     <button class="btn btn--primary" :disabled="loading || registrationClosed || conditionsChanged" type="submit">
@@ -250,3 +251,9 @@ async function submit() {
     <div v-if="errorText" class="alert alert--error" role="alert">{{ errorText }}</div>
   </form>
 </template>
+
+<style scoped>
+.reg-form__type { margin: 4px 0 0; }
+.reg-form__legend { margin: 4px 0 0; font-size: 0.8125rem; }
+.reg-form__req { color: var(--danger); font-weight: 600; }
+</style>

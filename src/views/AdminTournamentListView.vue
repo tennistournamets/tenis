@@ -8,6 +8,7 @@ import CopyTournamentLink from '../components/CopyTournamentLink.vue'
 import AppIcon from '../components/AppIcon.vue'
 import { getSportConfig } from '../lib/sportConfig'
 import { useAuthStore } from '../stores/auth'
+import { statusBadgeClass } from '../lib/tournamentStatus'
 
 const { t, locale } = useI18n()
 const router = useRouter()
@@ -50,6 +51,27 @@ const filteredTournaments = computed(() => {
   }
   return list.filter((t) => t.status !== 'completed')
 })
+
+// Running tournaments first, then the ones that need the organizer's next step.
+const STATUS_ORDER = { in_progress: 0, registration_closed: 1, registration_open: 2, draft: 3, completed: 4 }
+// Per-tournament counts behind each card's next step. Best effort: without
+// them the card falls back to the status-only hint.
+const progress = ref({})
+async function loadProgress(ids) {
+  if (!ids.length) { progress.value = {}; return }
+  try {
+    const [entries, matchRows, live] = await Promise.all([
+      supabase.from('entries').select('tournament_id,status').in('tournament_id', ids),
+      supabase.from('matches').select('tournament_id').in('tournament_id', ids),
+      supabase.from('live_scores').select('tournament_id,status').in('tournament_id', ids).eq('status', 'active'),
+    ])
+    const next = Object.fromEntries(ids.map(id => [id, { approved: 0, pending: 0, matches: 0, live: 0 }]))
+    for (const e of entries.data || []) if (next[e.tournament_id] && (e.status === 'approved' || e.status === 'pending')) next[e.tournament_id][e.status] += 1
+    for (const m of matchRows.data || []) if (next[m.tournament_id]) next[m.tournament_id].matches += 1
+    for (const l of live.data || []) if (next[l.tournament_id]) next[l.tournament_id].live += 1
+    progress.value = next
+  } catch { progress.value = {} }
+}
 
 async function loadTournaments() {
   if (!auth.user) {
@@ -94,8 +116,9 @@ async function loadTournaments() {
     const list = rows
       .map((row) => row.tournaments ? { ...row.tournaments, currentRole: row.role } : null)
       .filter((t) => t != null)
-    list.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    list.sort((a, b) => (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9) || new Date(b.created_at) - new Date(a.created_at))
     tournaments.value = list
+    await loadProgress(list.map(item => item.id))
   } catch (error) {
     loadError.value = error?.message || t('drafts.unavailable')
     tournaments.value = []
@@ -133,18 +156,6 @@ function hasPublicShareLink(status) {
   return status !== 'draft'
 }
 
-function statusBadgeClass(status) {
-  if (status === 'completed') {
-    return 'badge--done'
-  }
-  if (status === 'in_progress') {
-    return 'badge--live'
-  }
-  if (status === 'registration_open') {
-    return 'badge--warn'
-  }
-  return 'badge--neutral'
-}
 
 function itemSubtitle(item) {
   const parts = [t(`tournamentFormat.${item.format}`)]
@@ -154,19 +165,36 @@ function itemSubtitle(item) {
   return parts.join(' · ')
 }
 
+// The card's call to action follows the real state, like the checklist on the
+// tournament page: pending entries, then closing registration, the draw, the start.
 function nextStep(item) {
   if (item.currentRole === 'counter') return null
+  const p = progress.value[item.id]
   switch (item.status) {
     case 'registration_open':
-      return { text: t('admin.listHintRegOpen'), tone: 'warn' }
-    case 'in_progress':
-      return { text: t('admin.listHintInProgress'), tone: 'live' }
-    case 'draft':
+      if (!p) return { text: t('admin.listHintRegOpen'), tone: 'warn' }
+      if (p.pending) return { text: t('admin.listHintPending', { n: p.pending }), tone: 'warn' }
+      if (p.approved < 2) return { text: t('admin.listHintNeedEntries'), tone: 'warn' }
+      return { text: t(p.matches ? 'admin.listHintCloseOnly' : 'admin.listHintCloseRegistration'), tone: 'warn' }
     case 'registration_closed':
+      if (p && !p.matches) return { text: t('admin.listHintBuild'), tone: 'setup' }
+      if (p) return { text: t('admin.listHintReadyToStart'), tone: 'setup' }
+      return { text: t('admin.listHintSetup'), tone: 'setup' }
+    case 'in_progress':
+      return { text: p?.live ? t('admin.listHintLive', { n: p.live }) : t('admin.listHintInProgress'), tone: 'live' }
+    case 'draft':
       return { text: t('admin.listHintSetup'), tone: 'setup' }
     default:
       return null
   }
+}
+
+function itemMeta(item) {
+  const parts = [itemSubtitle(item)]
+  const p = progress.value[item.id]
+  if (p?.approved) parts.push(t('admin.listMetaEntries', { n: p.approved }))
+  parts.push(t('admin.listMetaCreated', { date: formatDate(item.created_at) }))
+  return parts.join(' · ')
 }
 
 watch(
@@ -199,7 +227,7 @@ onMounted(async () => {
         </RouterLink>
       </div>
     </div>
-    <p class="muted">{{ pageHint }}</p>
+    <p v-if="hasCounterOnlyTournaments" class="muted">{{ pageHint }}</p>
 
     <div v-if="!hasCounterOnlyTournaments" class="filter-segment" role="group" :aria-label="t('admin.filterLabel')">
       <button
@@ -252,7 +280,7 @@ onMounted(async () => {
               <span v-if="item.currentRole && item.currentRole !== 'owner'" class="badge badge--neutral">{{ t(`admin.${item.currentRole}`) }}</span>
               <span v-if="item.visibility && item.visibility !== 'link'" class="badge badge--neutral">{{ t(`access.visibility.${item.visibility}`) }}</span>
             </div>
-            <p class="t-card__meta">{{ itemSubtitle(item) }} · {{ formatDate(item.created_at) }}</p>
+            <p class="t-card__meta">{{ itemMeta(item) }}</p>
           </div>
           <CopyTournamentLink
             v-if="item.currentRole !== 'counter' && hasPublicShareLink(item.status)"

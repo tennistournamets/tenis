@@ -13,9 +13,15 @@ export function knockoutRoundName(roundNumber, totalRounds, t) {
   return t('bracket.fractionFinal', { k, n: k * 2 })
 }
 
-/** Highest round per knockout stage, the reference point for knockoutRoundName. */
-export function knockoutTotals(matches = []) {
+/**
+ * Highest round per knockout stage, the reference point for knockoutRoundName.
+ * Round-robin matches are stored with stage 'main' too, but their rounds are
+ * tours of an all-play-all, so a round_robin tournament has no knockout totals
+ * and matchRoundName falls back to "Round N".
+ */
+export function knockoutTotals(matches = [], format = '') {
   const totals = {}
+  if (format === 'round_robin') return totals
   for (const m of matches) {
     if (!KNOCKOUT_STAGES.has(m.stage)) continue
     totals[m.stage] = Math.max(totals[m.stage] || 0, Number(m.round_number || 0))

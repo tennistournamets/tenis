@@ -30,7 +30,9 @@ test('draft and published rows are indexed separately; organizers see the draft,
   assert.deepEqual(Object.keys(index.published).sort(), ['m1', 'm3'])
   assert.equal(effectiveSchedule(rows, false).m1.scheduled_at, '2026-10-01T10:00:00Z')
   assert.equal(effectiveSchedule(rows, true).m1.scheduled_at, '2026-10-01T12:00:00Z')
-  assert.equal(effectiveSchedule(rows, true).m3.queue_order, 2)
+  // m3 was removed from the draft: organizers must not see its old court.
+  assert.equal(effectiveSchedule(rows, true).m3, undefined)
+  assert.equal(effectiveSchedule(rows, false).m3.queue_order, 2)
   assert.equal(effectiveSchedule(rows, false).m2, undefined)
   // m1 changed, m2 added, m3 removed from the draft.
   assert.deepEqual(draftDiff(rows).changed.sort(), ['m1', 'm2', 'm3'])
@@ -232,4 +234,16 @@ test('RU, EN and LT schedule messages share the same key set and placeholders', 
     assert.match(scheduleMessages[locale].queueLabel, /\{n\}/)
     assert.match(scheduleMessages[locale].notBefore, /\{time\}/)
   }
+})
+
+test('a court queue may not put a match before the match that feeds it', async () => {
+  const { queueOrderConflicts, mergeConflicts } = await import('../src/lib/schedule.js')
+  const matches = [{ id: 'sf1', next_match_id: 'f' }, { id: 'sf2', next_match_id: 'f' }, { id: 'f' }]
+  const draft = { f: { court_id: 'c5', queue_order: 1 }, sf1: { court_id: 'c5', queue_order: 2 }, sf2: { court_id: 'c4', queue_order: 3 } }
+  assert.deepEqual(queueOrderConflicts(matches, draft), [{ match_id: 'f', conflicts: [{ kind: 'order_violation', severity: 'soft', match_id: 'sf1' }] }])
+  assert.deepEqual(queueOrderConflicts(matches, { ...draft, f: { court_id: 'c5', queue_order: 3 } }), [])
+  const merged = mergeConflicts([{ match_id: 'f', conflicts: [{ kind: 'order_violation', severity: 'soft', match_id: 'sf1' }] }],
+    queueOrderConflicts(matches, draft))
+  assert.equal(merged.length, 1)
+  assert.equal(merged[0].conflicts.length, 1)
 })

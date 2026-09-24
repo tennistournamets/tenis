@@ -27,6 +27,7 @@ import { registrationDisplayState, closedReasonKey } from '../lib/registrationRu
 import { currentPlatform, hasVenue, venueRouteLinks } from '../lib/venue'
 import { effectiveSchedule, timezoneOf } from '../lib/schedule'
 import { clearAccessToken, isAccessExpiredError, readAccessToken, setRobotsMeta, storeAccessToken, visibilityOf } from '../lib/access'
+import { statusBadgeClass } from '../lib/tournamentStatus'
 
 const props = defineProps({
   slug: {
@@ -109,6 +110,8 @@ const pendingEntries = computed(() => entries.value.filter((entry) => entry.stat
 
 const setsByMatch = computed(() => groupSetsByMatch(matchSets.value))
 const liveScoresByMatch = computed(() => indexLiveScores(liveScores.value))
+// Spectators see at a glance that something is being played right now.
+const liveMatchCount = computed(() => Object.values(liveScoresByMatch.value || {}).filter(l => l?.status === 'active').length)
 
 const selectedLiveMatch = computed(() => (
   selectedLiveMatchId.value ? matches.value.find((match) => match.id === selectedLiveMatchId.value) || null : null
@@ -182,21 +185,6 @@ function teamLabel(entryId) {
   return names.length ? names.join(' / ') : t('bracket.tbd')
 }
 
-function statusBadgeClass(status) {
-  if (status === 'completed') {
-    return 'badge--done'
-  }
-  if (status === 'in_progress') {
-    return 'badge--live'
-  }
-  if (status === 'registration_open') {
-    return 'badge--warn'
-  }
-  if (status === 'registration_closed') {
-    return 'badge--warn'
-  }
-  return 'badge--neutral'
-}
 
 const SPORT_ICONS = { tennis: '🎾', padel: '🏸', football: '⚽' }
 const heroIcon = computed(() => SPORT_ICONS[tournament.value?.sport] || '🏆')
@@ -207,11 +195,8 @@ const heroChips = computed(() => {
     t(`tournamentFormat.${tournament.value.format}`),
   ]
   if (sportCfg.value.supportsCategory) chips.push(t(`tournament.${tournament.value.category}`))
-  if (approvedEntries.value.length) {
-    const reg = registration.value
-    const total = reg?.capacity && reg.capacity_public !== false ? ` / ${reg.capacity}` : ''
-    chips.push(`${t('tournament.participants')}: ${approvedEntries.value.length}${total}`)
-  }
+  // The count lives in the "Participants (N)" tab and the entries card; a chip
+  // here only repeated it.
   return chips
 })
 
@@ -247,11 +232,11 @@ const publicTabs = computed(() => {
     tabs.push({ id: 'registration', label: t('tournament.tabRegistration') })
   }
   if (hasBracketContent.value || showRegistrationTab.value) {
+    // Always reachable: before the draw the panel says when it will appear.
+    const format = tournament.value.format
     tabs.push({
       id: 'bracket',
-      label: t('tournament.tabBracket'),
-      disabled: !hasBracketContent.value,
-      tooltip: hasBracketContent.value ? '' : t('tournament.bracketLockedTooltip'),
+      label: t(format === 'round_robin' ? 'admin.tabTable' : format === 'groups_playoff' ? 'admin.tabGroups' : 'tournament.tabBracket'),
     })
   }
   if (hasParticipants.value) {
@@ -470,6 +455,9 @@ onBeforeUnmount(() => {
             <span class="badge" :class="statusBadgeClass(tournament.status)">
               {{ t(`tournament.${tournament.status}`) }}
             </span>
+            <span v-if="liveMatchCount" class="badge badge--live pub-live-badge" :title="t('tournament.liveNowHint', { n: liveMatchCount })">
+              {{ t('tournament.liveNow', { n: liveMatchCount }) }}
+            </span>
           </div>
           <div class="pub-chips">
             <span v-for="(chip, i) in heroChips" :key="i" class="pub-chip">{{ chip }}</span>
@@ -613,7 +601,8 @@ onBeforeUnmount(() => {
 
       <div v-else id="pub-bracket-panel" role="tabpanel" aria-labelledby="pub-tab-bracket">
       <div v-if="!matches.length && !groups.length" class="card empty-state" role="status">
-        <p>{{ t('bracket.empty') }}</p>
+        <p class="empty-state__title">{{ t('bracket.empty') }}</p>
+        <p class="empty-state__hint">{{ t('tournament.bracketLockedTooltip') }}</p>
       </div>
 
       <template v-else-if="isNarrowLayout">
@@ -629,6 +618,7 @@ onBeforeUnmount(() => {
         <div id="pub-mobile-panel" role="tabpanel" :aria-labelledby="`pub-tab-${mobileSurface}`">
         <div v-if="mobileSurface === 'matches'" class="card mobile-match-card">
           <TournamentMatchList
+            :format="tournament?.format"
             :matches="matches"
             :sets-by-match="setsByMatch"
             :entries-map="entriesMap"
@@ -648,7 +638,7 @@ onBeforeUnmount(() => {
           </div>
         </template>
         <template v-else-if="isGroupsPlayoff">
-          <div v-if="groups.length" class="card"><h3 class="section-title">{{ t('admin.groupStage') }}</h3><GroupStageBoard :groups="groupsView" :entries-map="entriesMap" :family="sportCfg.scoringFamily" /></div>
+          <div v-if="groups.length" class="card"><h3 class="section-title">{{ t('admin.groupStage') }}</h3><GroupStageBoard :groups="groupsView" :entries-map="entriesMap" :family="sportCfg.scoringFamily"  :sets-by-match="setsByMatch" :live-scores-by-match="liveScoresByMatch" @view-live="openPublicLive" /></div>
           <div v-if="playoffMatches.length" class="card" style="margin-top: var(--space-4)"><h3 class="section-title">{{ t('admin.playoff') }}</h3><BracketBoard :matches="playoffMatches" :sets-by-match="setsByMatch" :entries-map="entriesMap" :live-scores-by-match="liveScoresByMatch" @view-live="openPublicLive" /></div>
         </template>
         <div v-else-if="isDoubleElim" class="card">
@@ -680,7 +670,7 @@ onBeforeUnmount(() => {
       <template v-else-if="isGroupsPlayoff">
         <div v-if="groups.length" class="card">
           <h3 class="section-title">{{ t('admin.groupStage') }}</h3>
-          <GroupStageBoard :groups="groupsView" :entries-map="entriesMap" :family="sportCfg.scoringFamily" />
+          <GroupStageBoard :groups="groupsView" :entries-map="entriesMap" :family="sportCfg.scoringFamily"  :sets-by-match="setsByMatch" :live-scores-by-match="liveScoresByMatch" @view-live="openPublicLive" />
         </div>
         <div v-if="playoffMatches.length" class="card" style="margin-top: var(--space-4)">
           <h3 class="section-title">{{ t('admin.playoff') }}</h3>

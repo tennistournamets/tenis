@@ -1,7 +1,7 @@
 <script setup>
 import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ruleForSet } from '../lib/tennisRules'
+import { ruleForSet, settleTiebreakGames } from '../lib/tennisRules'
 const props = defineProps({
   modelValue: { type: Array, required: true }, scoringConfig: { type: Object, default: () => ({}) },
   setFormat: { type: String, default: 'best_of_3' }, teamA: String, teamB: String, disabled: Boolean,
@@ -29,7 +29,9 @@ function change(row, key, value) {
 }
 // Board: winner of each set by games (or match-tiebreak points), for highlighting.
 const main = row => (matchTb(row) ? 'tiebreak' : 'games')
-function setWinner(row) {
+function setWinner(typed) {
+  // 6:6 with a finished tie-break counts as won, the way it will be saved (7:6).
+  const row = settleTiebreakGames(typed, rule(typed))
   const a = row[`side_a_${main(row)}`], b = row[`side_b_${main(row)}`]
   if (a === '' || b === '' || a == null || b == null || Number(a) === Number(b)) return null
   return Number(a) > Number(b) ? 'a' : 'b'

@@ -24,6 +24,9 @@ const expanded = reactive({})
 const model = computed(() => buildRoundRobinModel(props.matches, props.entriesMap, props.rows))
 
 const colCount = computed(() => (props.family === 'goals' ? 10 : 7))
+// Before the first result every row is 0/0/0: ranks would only be the
+// alphabet, so the table shows dashes and quiet zeros instead.
+const anyPlayed = computed(() => props.rows.some(r => Number(r.played) > 0))
 
 function toggle(entryId) {
   expanded[entryId] = !expanded[entryId]
@@ -61,7 +64,8 @@ const columns = computed(() => props.family === 'goals'
 
 <template>
   <div class="standings-wrap" tabindex="0" role="region" :aria-label="t('standings.title')">
-    <table class="standings rr-standings">
+    <p v-if="rows.length && !anyPlayed" class="rr-standings__note">{{ t('standings.noResultsYet') }}</p>
+    <table class="standings rr-standings" :class="{ 'rr-standings--unplayed': !anyPlayed }">
       <caption class="sr-only">{{ t('standings.title') }}</caption>
       <thead>
         <tr>
@@ -76,7 +80,7 @@ const columns = computed(() => props.family === 'goals'
             class="rr-standings__row"
             :class="{ 'rr-standings__row--open': expanded[r.entry_id] }"
           >
-            <td class="standings__rank">{{ r.rank }}</td>
+            <td class="standings__rank">{{ anyPlayed ? r.rank : '—' }}</td>
             <th scope="row" class="standings__team">
               <button type="button" class="rr-standings__team-cell" :aria-label="t('a11y.scheduleFor', { name: r.display_name })" :aria-expanded="Boolean(expanded[r.entry_id])" :aria-controls="expanded[r.entry_id] ? `${tableId}-${r.entry_id}` : undefined" @click="toggle(r.entry_id)">
                 <svg
@@ -201,6 +205,15 @@ const columns = computed(() => props.family === 'goals'
 .standings td strong {
   color: var(--primary);
   font-family: var(--font-mono);
+}
+.rr-standings--unplayed td,
+.rr-standings--unplayed td strong {
+  color: var(--disabled);
+}
+.rr-standings__note {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 0.8125rem;
 }
 
 .rr-standings__row {

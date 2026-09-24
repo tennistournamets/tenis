@@ -112,6 +112,10 @@ const sectionMeta = computed(() => {
     access: joinMeta(t('tournament.' + f.status), t('access.visibility.' + f.visibility)),
   }
 })
+// A collapsed section without data says so, instead of an empty header row.
+const EMPTY_META = { contacts: 'admin.notSpecified', venue: 'admin.notSpecified', registration: 'admin.noRegistrationLimits', schedule: 'admin.scheduleDefaults' }
+const metaText = key => sectionMeta.value[key] || t(EMPTY_META[key])
+const metaEmpty = key => !sectionMeta.value[key]
 // Server snapshots cannot overwrite local edits or silently rebase revisions.
 watch(() => props.tournament, data => settingsDraft.receive(settingsFields(data), data.settings_revision), { immediate: true })
 watch(settingsSaving, value => emit('update:saving', value), { flush: 'sync' })
@@ -248,7 +252,7 @@ async function saveTournamentSettings() {
       <summary class="settings-section__head">
         <svg class="settings-section__chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
         <h3 class="eyebrow">{{ t('mobile.organizerContacts') }}</h3>
-        <span class="settings-section__meta">{{ sectionMeta.contacts }}</span>
+        <span class="settings-section__meta" :class="{ 'settings-section__meta--empty': metaEmpty('contacts') }">{{ metaText('contacts') }}</span>
       </summary>
       <fieldset class="settings-section__body settings-fieldset" :disabled="formDisabled" :aria-label="t('mobile.organizerContacts')">
         <div class="grid-2">
@@ -272,7 +276,7 @@ async function saveTournamentSettings() {
       <summary class="settings-section__head">
         <svg class="settings-section__chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
         <h3 class="eyebrow">{{ t('venue.section') }}</h3>
-        <span class="settings-section__meta">{{ sectionMeta.venue }}</span>
+        <span class="settings-section__meta" :class="{ 'settings-section__meta--empty': metaEmpty('venue') }">{{ metaText('venue') }}</span>
       </summary>
       <fieldset class="settings-section__body settings-fieldset" :disabled="formDisabled" :aria-label="t('venue.section')">
         <VenueFields
@@ -288,7 +292,7 @@ async function saveTournamentSettings() {
       <summary class="settings-section__head">
         <svg class="settings-section__chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
         <h3 class="eyebrow">{{ t('registrationRules.settingsTitle') }}</h3>
-        <span class="settings-section__meta">{{ sectionMeta.registration }}</span>
+        <span class="settings-section__meta" :class="{ 'settings-section__meta--empty': metaEmpty('registration') }">{{ metaText('registration') }}</span>
       </summary>
       <div class="settings-section__body">
         <RegistrationRulesFields :form="settingsForm" :tournament="tournament" :disabled="formDisabled" id-prefix="adm-reg" variant="plain" />
@@ -299,7 +303,7 @@ async function saveTournamentSettings() {
       <summary class="settings-section__head">
         <svg class="settings-section__chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
         <h3 class="eyebrow">{{ t('schedule.settingsTitle') }}</h3>
-        <span class="settings-section__meta">{{ sectionMeta.schedule }}</span>
+        <span class="settings-section__meta" :class="{ 'settings-section__meta--empty': metaEmpty('schedule') }">{{ metaText('schedule') }}</span>
       </summary>
       <fieldset class="settings-section__body settings-fieldset" :disabled="formDisabled" :aria-label="t('schedule.settingsTitle')">
         <div class="grid-2">
@@ -448,7 +452,8 @@ async function saveTournamentSettings() {
     </details>
     </div>
 
-    <footer class="admin-settings-card__footer">
+    <footer class="admin-settings-card__footer" :class="{ 'admin-settings-card__footer--dirty': canSaveSettings && !settingsConflict }">
+      <span class="admin-settings-card__footer-status" role="status">{{ canSaveSettings && !settingsConflict ? t('drafts.unsaved') : t('admin.noChanges') }}</span>
       <button v-if="hasTournamentSettingsChanges && !settingsConflict" class="btn btn--ghost" type="button" :disabled="settingsSaving || busy" @click="reloadSettings">{{ t('drafts.reload') }}</button>
       <button
         class="btn btn--primary"
@@ -466,6 +471,19 @@ async function saveTournamentSettings() {
 .admin-settings-card { gap: var(--space-5); }
 .admin-settings-card__head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; }
 .admin-settings-card__status { margin: 0; font-size: 0.85rem; }
+.admin-settings-card__footer { align-items: center; }
+.admin-settings-card__footer-status { margin-right: auto; font-size: 0.875rem; color: var(--muted); }
+/* With unsaved edits the save bar follows the viewport, so it is never out of reach. */
+.admin-settings-card__footer--dirty {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  padding-bottom: calc(var(--space-3) + env(safe-area-inset-bottom, 0px));
+  background: var(--surface);
+  box-shadow: 0 -8px 16px -12px rgba(0, 0, 0, 0.35);
+}
+.admin-settings-card__footer--dirty .admin-settings-card__footer-status { color: var(--warning-text); font-weight: 600; }
+.settings-section__meta--empty { color: var(--disabled); font-style: italic; }
 .settings-fieldset { margin: 0; padding: 0; border: 0; min-width: 0; }
 
 /* Аккордеон: отступы живут в summary, поэтому вся полоса заголовка кликабельна */

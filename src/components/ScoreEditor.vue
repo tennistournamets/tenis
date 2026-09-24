@@ -10,7 +10,7 @@ import { saveMatchResult } from '../lib/saveMatchResult'
 import { confirmDialog } from '../lib/confirmDialog'
 import TennisSetInputs from './TennisSetInputs.vue'
 import { knockoutTotals, matchRoundName } from '../lib/roundLabels'
-import { scoreRows, buildSetPayload, scoringError } from '../lib/tennisRules'
+import { scoreRows, buildSetPayload, scoringError, hasMatchWinner } from '../lib/tennisRules'
 
 const props = defineProps({
   scoringConfig: { type: Object, default: () => ({}) },
@@ -106,13 +106,22 @@ const isFinished = m => m.status === 'finished'
 const filterMatch = (m) => {
   if (filter.value === 'finished') return isFinished(m)
   if (filter.value === 'todo') return !isFinished(m) && canScore(m)
+  if (filter.value === 'waiting') return !isFinished(m) && !canScore(m)
   return true
 }
 const counts = computed(() => ({
   all: visibleMatches.value.length,
   todo: visibleMatches.value.filter(m => !isFinished(m) && canScore(m)).length,
   finished: visibleMatches.value.filter(isFinished).length,
+  waiting: visibleMatches.value.filter(m => !isFinished(m) && !canScore(m)).length,
 }))
+// Every match lands in exactly one filter besides "All", so the counts add up.
+const filterKeys = computed(() => ['all', 'todo', 'finished', ...(counts.value.waiting ? ['waiting'] : [])])
+const filterLabel = key => t(`scoringFlow.${{ all: 'filterAll', todo: 'filterToEnter', finished: 'filterFinished', waiting: 'filterWaiting' }[key]}`)
+const liveCount = computed(() => playable.value.filter(m => liveStatus(m.id) === 'active').length)
+// The server accepts only a complete result; say so before the click, not after.
+const missingWinner = match => !hasMatchWinner(setForms[match.id] || [], props.scoringConfig, props.setFormat)
+const requiredWins = computed(() => (props.setFormat === 'best_of_5' ? 3 : 2))
 const playable = computed(() => props.matches.filter(m => !isByeMatch(m)))
 const playedCount = computed(() => playable.value.filter(isFinished).length)
 function matchStatus(match) {
@@ -230,7 +239,7 @@ async function save(match) {
         <p class="se-head__hint">{{ t('scoringFlow.hint') }}</p>
       </div>
       <div v-if="playable.length" class="se-progress">
-        <span class="se-progress__label">{{ t('scoringFlow.progress', { done: playedCount, total: playable.length }) }}</span>
+        <span class="se-progress__label">{{ t('scoringFlow.progress', { done: playedCount, total: playable.length }) }}<template v-if="liveCount"> · {{ t('scoringFlow.progressLive', { n: liveCount }) }}</template></span>
         <span class="se-progress__bar" role="progressbar" :aria-valuenow="playedCount" aria-valuemin="0" :aria-valuemax="playable.length">
           <span class="se-progress__fill" :style="{ width: `${Math.round((playedCount / playable.length) * 100)}%` }" />
         </span>
@@ -241,7 +250,7 @@ async function save(match) {
 
     <div v-if="matches.length" class="se-filter" role="tablist">
       <button
-        v-for="key in ['all', 'todo', 'finished']"
+        v-for="key in filterKeys"
         :key="key"
         type="button"
         role="tab"
@@ -250,7 +259,7 @@ async function save(match) {
         :aria-selected="filter === key"
         @click="filter = key"
       >
-        {{ t(`scoringFlow.${key === 'all' ? 'filterAll' : key === 'todo' ? 'filterToEnter' : 'filterFinished'}`) }}
+        {{ filterLabel(key) }}
         <span class="se-filter__count">{{ counts[key] }}</span>
       </button>
     </div>
@@ -276,10 +285,9 @@ async function save(match) {
               {{ matchStatus(match) === 'live' ? t('live.live') : t(`scoringFlow.status${matchStatus(match).charAt(0).toUpperCase()}${matchStatus(match).slice(1)}`) }}
             </span>
             <button
-              v-if="canLiveScore && match.status !== 'finished'"
+              v-if="canLiveScore && match.status !== 'finished' && canScore(match)"
               class="btn btn--ghost btn--sm se-card__live"
               type="button"
-              :disabled="!canScore(match)"
               @click="emit('start-live', match)"
             >
               <span class="live-dot" aria-hidden="true" />
@@ -323,6 +331,11 @@ async function save(match) {
               {{ (setForms[match.id] || [])[0]?.error }}
             </p>
 
+            <p
+              v-if="missingWinner(match) && liveStatus(match.id) !== 'active' && !removed(match.id) && !(setForms[match.id] || [])[0]?.error"
+              class="se-card__hint"
+            >{{ t('scoringFlow.needWinner', { n: requiredWins }) }}</p>
+
             <footer class="score-match__actions se-card__foot">
               <Transition name="saved-pop">
                 <span v-if="savedFlash[match.id]" class="score-saved-badge">
@@ -335,7 +348,7 @@ async function save(match) {
                 :class="match.status === 'finished' ? 'btn--outline' : 'btn--primary'"
                 type="button"
                 :title="t(match.status === 'finished' ? 'scoringFlow.correct' : 'scoringFlow.finish')"
-                :disabled="disabled || stale(match) || liveStatus(match.id) === 'active' || !canScore(match) || (setForms[match.id] || []).some(row => row.saving)"
+                :disabled="disabled || stale(match) || liveStatus(match.id) === 'active' || !canScore(match) || missingWinner(match) || (setForms[match.id] || []).some(row => row.saving)"
                 @click="save(match)"
               >
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>
@@ -374,6 +387,7 @@ async function save(match) {
   background: var(--disabled-bg); color: var(--muted); font-size: 0.72rem; font-weight: 600; letter-spacing: 0; font-variant-numeric: tabular-nums;
 }
 .se-filter__btn.is-active .se-filter__count { background: var(--primary-soft); color: var(--primary); }
+.se-card__hint { margin: 0; color: var(--muted); font-size: 0.8125rem; line-height: 1.45; }
 .se-empty { margin: 0; padding: 24px 0; text-align: center; color: var(--muted); }
 
 .se-round { display: grid; gap: 10px; }

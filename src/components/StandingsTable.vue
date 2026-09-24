@@ -82,6 +82,11 @@ const { t } = useI18n()
   text-align: left;
   font-weight: 600;
   color: var(--text);
+  /* Pair names are long: wrap them instead of pushing the table sideways. */
+  white-space: normal;
+  overflow-wrap: anywhere;
+  min-width: 9rem;
+  line-height: 1.35;
 }
 .standings td:last-child strong {
   color: var(--primary);
