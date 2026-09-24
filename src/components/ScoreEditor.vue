@@ -9,6 +9,7 @@ import { useUnsavedChanges } from '../lib/unsavedChanges'
 import { saveMatchResult } from '../lib/saveMatchResult'
 import { confirmDialog } from '../lib/confirmDialog'
 import TennisSetInputs from './TennisSetInputs.vue'
+import { knockoutTotals, matchRoundName } from '../lib/roundLabels'
 import { scoreRows, buildSetPayload, scoringError } from '../lib/tennisRules'
 
 const props = defineProps({
@@ -135,13 +136,10 @@ const matchesByRound = computed(() => {
     .map(group => ({ ...group, matches: group.matches.sort((a, b) => a.match_number - b.match_number || a.id.localeCompare(b.id)) }))
 })
 
+const roundTotals = computed(() => knockoutTotals(props.matches))
 function roundLabel(roundNumber, stage) {
-  const n = Math.max(0, ...props.matches.filter(m => m.stage === stage).map(m => m.round_number))
-  if (n === 0) return ''
-  if (roundNumber === n) return t('bracket.final')
-  if (roundNumber === n - 1) return t('bracket.semifinals')
-  if (roundNumber === n - 2) return t('bracket.quarterfinals')
-  return t('bracket.roundN', { n: roundNumber })
+  if (!roundNumber) return ''
+  return matchRoundName({ stage, round_number: roundNumber }, roundTotals.value, t)
 }
 
 const isDoubles = computed(() => props.category === 'doubles')
@@ -273,7 +271,6 @@ async function save(match) {
           :class="[`se-card--${matchStatus(match)}`, { 'score-match--saved': savedFlash[match.id], 'se-card--compact': !canScore(match) && !removed(match.id) }]"
         >
           <header class="se-card__head">
-            <span v-if="match.match_number" class="se-card__no">{{ t('schedule.matchNo', { n: match.match_number }) }}</span>
             <span class="se-status" :class="`se-status--${matchStatus(match)}`">
               <span class="se-status__dot" aria-hidden="true" />
               {{ matchStatus(match) === 'live' ? t('live.live') : t(`scoringFlow.status${matchStatus(match).charAt(0).toUpperCase()}${matchStatus(match).slice(1)}`) }}
@@ -388,10 +385,6 @@ async function save(match) {
 .se-card--finished { background: var(--surface); }
 .se-card--live { border-color: var(--accent); }
 .se-card__head { display: flex; align-items: center; gap: 10px; min-height: 32px; }
-.se-card__no {
-  flex: none; min-width: 34px; padding: 3px 6px; border-radius: 6px; text-align: center;
-  background: var(--disabled-bg); color: var(--muted); font-family: var(--font-mono); font-size: 0.75rem; font-weight: 600;
-}
 .se-status { display: inline-flex; align-items: center; gap: 6px; font-size: 0.8125rem; font-weight: 600; color: var(--muted); }
 .se-status__dot { width: 7px; height: 7px; border-radius: 50%; background: var(--disabled); }
 .se-status--ready { color: var(--warning-text); }

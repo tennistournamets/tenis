@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { entryMemberNames } from '../../lib/entryDisplay'
 import { supabase } from '../../lib/supabase'
 import InfoTip from '../InfoTip.vue'
+import { knockoutTotals, matchRoundName } from '../../lib/roundLabels'
 import {
   blocksPublish, conflictText, draftDiff, formatScheduleTime, indexSchedule, scheduleDropAction, scheduleError,
   scheduleLocked, scheduleSummary, timezoneOf,
@@ -49,11 +50,18 @@ function teamLabel(entryId) {
 }
 const matchTitle = match => `${teamLabel(match.side_a_entry_id)} — ${teamLabel(match.side_b_entry_id)}`
 const matchLabelById = id => { const m = props.matches.find(x => x.id === id); return m ? matchTitle(m) : '' }
+const roundTotals = computed(() => knockoutTotals(props.matches))
+// Double elimination needs "Upper/Lower bracket" to tell its rounds apart;
+// a single bracket or a group playoff reads fine as just "Semifinal".
+const hasLosers = computed(() => props.matches.some(m => m.stage === 'losers'))
 function roundLabel(match) {
   if (match.stage === 'grand_final' || match.stage === 'third_place') return t(`mobile.matchStage.${match.stage}`)
   const round = Number(match.round_number || 0)
   const base = t(`mobile.matchStage.${match.stage || 'main'}`)
-  return round ? `${base} · ${t('bracket.roundN', { n: round > 1000 ? round % 1000 : round })}` : base
+  if (!round) return base
+  const name = matchRoundName(match, roundTotals.value, t)
+  const prefixed = match.stage === 'group' || match.stage === 'losers' || (match.stage === 'winners' && hasLosers.value)
+  return prefixed ? `${base} · ${name}` : name
 }
 const summary = match => scheduleSummary(index.value.draft[match.id], { courtsById: courtsById.value, t, locale: locale.value, timeZone: timeZone.value })
 // Court columns are the only place an assignment can be expressed by pointing
@@ -243,6 +251,15 @@ watch([boardEl, view, () => props.courts.length], async () => {
   updateBoardScroll()
 }, { flush: 'post' })
 onBeforeUnmount(() => boardObserver?.disconnect())
+// Court view splits into a fixed tray of unscheduled matches and a scrolling
+// row of lanes, so no lane ever slides underneath the tray.
+const zones = computed(() => {
+  if (view.value !== 'court') return [{ key: 'all', groups: byRound.value }]
+  return [
+    { key: 'tray', groups: byCourt.value.filter(g => g.key === 'unassigned') },
+    { key: 'lanes', groups: byCourt.value.filter(g => g.key !== 'unassigned') },
+  ]
+})
 const slotHidden = match => {
   // In a court lane the lane already names the court; a bare court slot says nothing more.
   const parts = slotParts(match)
@@ -397,15 +414,22 @@ onBeforeUnmount(() => { clearTimeout(conflictsTimer); conflictsVersion += 1 })
 
     <p v-if="!matches.length" class="sb-empty">{{ t('bracket.empty') }}</p>
 
-    <div
-      v-else
-      :ref="el => (boardEl = view === 'court' ? el : null)"
-      class="sb-groups"
-      :class="{ 'sb-groups--courts': view === 'court', 'is-fade-left': canScrollLeft, 'is-fade-right': canScrollRight }"
-      @scroll.passive="updateBoardScroll"
-    >
+    <div v-else class="sb-layout" :class="{ 'sb-layout--courts': view === 'court' }">
+      <div
+        v-for="zone in zones"
+        :key="zone.key"
+        :ref="el => { if (zone.key === 'lanes') boardEl = el }"
+        class="sb-groups"
+        :class="{
+          'sb-groups--tray': zone.key === 'tray',
+          'sb-groups--courts': zone.key === 'lanes',
+          'is-fade-left': zone.key === 'lanes' && canScrollLeft,
+          'is-fade-right': zone.key === 'lanes' && canScrollRight,
+        }"
+        @scroll.passive="zone.key === 'lanes' && updateBoardScroll()"
+      >
       <section
-        v-for="group in (view === 'round' ? byRound : byCourt)"
+        v-for="group in zone.groups"
         :key="group.key || group.label"
         class="sb-group"
         :class="{ 'sb-group--drop-over': dropTargetKey === `column:${group.key}`, 'sb-group--tray': view === 'court' && group.key === 'unassigned' }"
@@ -449,7 +473,6 @@ onBeforeUnmount(() => { clearTimeout(conflictsTimer); conflictsVersion += 1 })
               @keydown.enter="onCardActivate(match, group.key)"
               @keydown.space.prevent="onCardActivate(match, group.key)"
             >
-              <span v-if="match.match_number" class="sb-item__no">{{ t('schedule.matchNo', { n: match.match_number }) }}</span>
               <div class="sb-item__main">
                 <span v-if="view === 'court'" class="sb-item__round" :title="roundLabel(match)">{{ roundLabel(match) }}</span>
                 <span class="sb-item__teams">
@@ -465,7 +488,7 @@ onBeforeUnmount(() => { clearTimeout(conflictsTimer); conflictsVersion += 1 })
                   {{ conflictsByMatch[match.id].length }}
                 </span>
               </span>
-              <span v-if="!slotHidden(match)" class="sb-slot" :class="{ 'sb-slot--empty': !slotParts(match) }" :aria-label="summary(match) || t('schedule.unassigned')">
+              <span v-if="view !== 'court'" class="sb-slot" :class="{ 'sb-slot--empty': !slotParts(match) }" :aria-label="summary(match) || t('schedule.unassigned')">
                 <template v-if="slotParts(match)">
                   <span v-if="slotParts(match).court && view !== 'court'" class="sb-slot__part">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="1.5" /><path d="M12 5v14" /><path d="M3 12h18" /></svg>
@@ -484,6 +507,15 @@ onBeforeUnmount(() => { clearTimeout(conflictsTimer); conflictsVersion += 1 })
               </span>
             </div>
             <div class="sb-item__actions">
+              <!-- Lane footer: the lane names the court and "not scheduled" already,
+                   so only time and queue place are left to show next to the action. -->
+              <span v-if="view === 'court' && !slotHidden(match) && slotParts(match)" class="sb-slot sb-slot--lane" :aria-label="summary(match)">
+                <span v-if="slotParts(match).time" class="sb-slot__part sb-slot__part--time">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
+                  {{ slotParts(match).time }}
+                </span>
+                <span v-if="slotParts(match).queue" class="sb-slot__part">{{ slotParts(match).queue }}</span>
+              </span>
               <button
                 class="btn btn--sm sb-assign"
                 :class="index.draft[match.id] ? 'btn--ghost' : 'btn--outline'"
@@ -505,6 +537,7 @@ onBeforeUnmount(() => { clearTimeout(conflictsTimer); conflictsVersion += 1 })
           </li>
         </ul>
       </section>
+      </div>
     </div>
   </section>
 </template>
@@ -573,8 +606,6 @@ onBeforeUnmount(() => { clearTimeout(conflictsTimer); conflictsVersion += 1 })
 
 /* Groups */
 .sb-groups { display: grid; gap: 24px; }
-.sb-groups--courts { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); align-items: start; gap: 16px; }
-.sb-groups--courts .sb-group { padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-row); }
 .sb-group { display: grid; gap: 10px; border-radius: var(--radius-sm); }
 .sb-group__title {
   display: flex; align-items: center; gap: 8px; margin: 0;
@@ -598,10 +629,6 @@ onBeforeUnmount(() => { clearTimeout(conflictsTimer); conflictsVersion += 1 })
 .sb-item--changed { box-shadow: inset 3px 0 0 var(--warning); }
 .sb-item--conflict { border-color: var(--warning-border); }
 .sb-item__body { display: flex; align-items: center; gap: 14px; flex: 1 1 auto; min-width: 0; }
-.sb-item__no {
-  flex: none; min-width: 34px; padding: 3px 6px; border-radius: 6px; text-align: center;
-  background: var(--disabled-bg); color: var(--muted); font-family: var(--font-mono); font-size: 0.75rem; font-weight: 600;
-}
 .sb-item__main { display: grid; gap: 2px; flex: 1 1 auto; min-width: 0; }
 .sb-item__round { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
 .sb-item__teams { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; min-width: 0; }
@@ -639,45 +666,45 @@ onBeforeUnmount(() => { clearTimeout(conflictsTimer); conflictsVersion += 1 })
   --lane: 280px;
   display: grid; grid-auto-flow: column; grid-auto-columns: minmax(var(--lane), 1fr); grid-template-columns: none;
   align-items: start; gap: 12px; overflow-x: auto; overscroll-behavior-x: contain;
-  scroll-snap-type: x proximity; scroll-padding-left: calc(var(--lane) + 12px);
+  scroll-snap-type: x proximity;
   padding-bottom: 12px;
   scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent;
   /* Dragging a card must not paint text selections across the board. */
   user-select: none; -webkit-user-select: none;
 }
 .sb-groups--courts.is-fade-right { mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent); }
-.sb-groups--courts .sb-group {
+.sb-groups--courts.is-fade-left.is-fade-right { mask-image: linear-gradient(to right, transparent, #000 32px, #000 calc(100% - 40px), transparent); }
+.sb-groups--courts.is-fade-left:not(.is-fade-right) { mask-image: linear-gradient(to right, transparent, #000 32px); }
+.sb-layout { display: grid; gap: 24px; }
+.sb-layout--courts { grid-template-columns: 280px minmax(0, 1fr); align-items: start; gap: 12px; }
+.sb-groups--tray { display: grid; }
+.sb-groups--tray .sb-group, .sb-groups--courts .sb-group {
   align-content: start; scroll-snap-align: start; min-height: 160px; padding: 12px;
   border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-row);
 }
-/* Opaque, and its gap is painted too, so lanes scrolling under it never show through. */
-.sb-groups--courts .sb-group--tray {
-  position: sticky; left: 0; z-index: 2; background: var(--surface);
-  border-color: var(--border-strong);
-  box-shadow: 12px 0 0 0 var(--surface), 20px 0 18px -10px rgba(0, 0, 0, 0.35);
-}
+/* The tray sits in its own column; a dashed frame marks it as the source of drags. */
+.sb-groups--tray .sb-group--tray { background: var(--surface); border-style: dashed; border-color: var(--border-strong); }
 
 /* Lane card, stacked: number · round · flags / teams / time and action. */
-.sb-groups--courts .sb-item { position: relative; display: block; padding: 12px; }
-.sb-groups--courts .sb-item__body {
-  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 6px 10px; min-width: 0;
+.sb-layout--courts .sb-item { position: relative; display: block; padding: 12px; }
+.sb-layout--courts .sb-item__body {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 6px 10px; min-width: 0;
 }
-.sb-groups--courts .sb-item__no { grid-column: 1; grid-row: 1; }
-.sb-groups--courts .sb-item__main { display: contents; }
-.sb-groups--courts .sb-item__round {
-  grid-column: 2; grid-row: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+.sb-layout--courts .sb-item__main { display: contents; }
+.sb-layout--courts .sb-item__round {
+  grid-column: 1; grid-row: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.sb-groups--courts .sb-item__flags { grid-column: 3; grid-row: 1; }
-.sb-groups--courts .sb-item__teams { grid-column: 1 / -1; grid-row: 2; flex-direction: column; align-items: flex-start; gap: 2px; padding: 4px 0 2px; }
-.sb-groups--courts .sb-item__team { font-size: 0.9875rem; }
-.sb-groups--courts .sb-item__vs { display: none; }
-/* The action sits on the slot row; the slot row keeps room for it. */
-.sb-groups--courts .sb-slot { grid-column: 1 / -1; grid-row: 3; justify-self: start; justify-content: flex-start; min-height: 32px; padding-right: 108px; max-width: 100%; box-sizing: border-box; }
-.sb-groups--courts .sb-slot--empty { padding-right: 10px; margin-right: 108px; max-width: calc(100% - 108px); }
-.sb-groups--courts .sb-slot--empty, .sb-groups--courts .sb-slot__part { white-space: nowrap; }
-.sb-groups--courts .sb-item__actions { position: absolute; right: 12px; bottom: 12px; }
-.sb-groups--courts .sb-assign { min-width: 0; height: 32px; min-height: 32px; padding: 0 10px; font-size: 0.8125rem; border-radius: 8px; }
-.sb-groups--courts .sb-item__body:not(:has(.sb-slot)) { padding-bottom: 38px; }
+.sb-layout--courts .sb-item__flags { grid-column: 2; grid-row: 1; }
+.sb-layout--courts .sb-item__teams { grid-column: 1 / -1; grid-row: 2; flex-direction: column; align-items: flex-start; gap: 2px; padding: 4px 0 2px; }
+.sb-layout--courts .sb-item__team { font-size: 0.9875rem; }
+.sb-layout--courts .sb-item__vs { display: none; }
+/* Footer row in flow: time/queue chips on the left, the action on the right; wraps when narrow. */
+.sb-layout--courts .sb-item__actions {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 10px;
+}
+.sb-layout--courts .sb-slot--lane { flex: 1 1 auto; justify-content: flex-start; min-width: 0; }
+.sb-layout--courts .sb-slot__part { white-space: nowrap; }
+.sb-layout--courts .sb-assign { flex: none; min-width: 0; height: 32px; min-height: 32px; padding: 0 10px; font-size: 0.8125rem; border-radius: 8px; }
 
 .sb-toolbar__scroll { display: inline-flex; gap: 6px; margin-left: auto; }
 .sb-toolbar__scroll + .sb-toolbar__hint { margin-left: 0; }
@@ -714,20 +741,19 @@ onBeforeUnmount(() => { clearTimeout(conflictsTimer); conflictsVersion += 1 })
   .schedule-board { padding: 16px; }
   .sb-status__actions .btn { flex: 1 1 auto; }
   .sb-item { flex-wrap: wrap; padding: 12px; }
-  .sb-item__body { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: 10px; width: 100%; }
+  .sb-item__body { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; gap: 10px; width: 100%; }
   .sb-item__teams { flex-direction: column; align-items: flex-start; gap: 0; }
   .sb-item__vs { display: none; }
-  .sb-item__body { grid-template-columns: auto minmax(0, 1fr); }
   .sb-item__flags { grid-column: 1 / -1; }
   .sb-slot { grid-column: 1 / -1; justify-self: start; justify-content: flex-start; }
   .sb-item__actions, .sb-assign { width: 100%; }
 }
 @media (max-width: 640px) {
-  .sb-groups--courts { --lane: 84vw; scroll-padding-left: 0; }
-  .sb-groups--courts .sb-group--tray { position: static; box-shadow: none; }
-  .sb-groups--courts .sb-item__actions, .sb-groups--courts .sb-assign { width: auto; }
-  .sb-groups--courts .sb-item__body { grid-template-columns: auto minmax(0, 1fr) auto; }
-  .sb-groups--courts .sb-item__flags { grid-column: 3; }
+  .sb-layout--courts { grid-template-columns: minmax(0, 1fr); }
+  .sb-groups--courts { --lane: 84vw; }
+  .sb-layout--courts .sb-item__actions, .sb-layout--courts .sb-assign { width: auto; }
+  .sb-layout--courts .sb-item__body { grid-template-columns: minmax(0, 1fr) auto; }
+  .sb-layout--courts .sb-item__flags { grid-column: 2; }
 }
 @media (prefers-reduced-motion: reduce) {
   .sb-progress__fill, .sb-item { transition: none; }
