@@ -5,6 +5,7 @@ import { compareBySchedule, scheduleSummary } from '../lib/schedule'
 
 import { entryMemberNames } from '../lib/entryDisplay'
 import { formatSetScore } from '../lib/tennisRules'
+import { knockoutTotals, matchRoundName } from '../lib/roundLabels'
 import { pointLabel, scoreLine } from '../lib/useTennisScoring'
 
 const props = defineProps({
@@ -62,11 +63,12 @@ function stageLabel(stage) {
   return t(`mobile.matchStage.${stage || 'main'}`)
 }
 
+const roundTotals = computed(() => knockoutTotals(props.matches))
 function roundLabel(match) {
   if (match.stage === 'grand_final') return t('mobile.matchStage.grand_final')
   if (match.stage === 'third_place') return t('mobile.matchStage.third_place')
   const round = Number(match.round_number || 0)
-  return round ? t('bracket.roundN', { n: round > 1000 ? round % 1000 : round }) : stageLabel(match.stage)
+  return round ? matchRoundName(match, roundTotals.value, t) : stageLabel(match.stage)
 }
 
 function finalScore(match) {

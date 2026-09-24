@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 
 import BracketMatchCard from './BracketMatchCard.vue'
 import InfiniteCanvas from './InfiniteCanvas.vue'
+import { knockoutRoundName } from '../lib/roundLabels'
 
 const props = defineProps({
   matches: {
@@ -184,20 +185,8 @@ const splitSectionsFlat = computed(() => {
 })
 
 function roundLabel(roundNumber) {
-  const n = totalRounds.value
-  if (n === 0) {
-    return ''
-  }
-  if (roundNumber === n) {
-    return t('bracket.final')
-  }
-  if (roundNumber === n - 1) {
-    return t('bracket.semifinals')
-  }
-  if (roundNumber === n - 2) {
-    return t('bracket.quarterfinals')
-  }
-  return t('bracket.roundN', { n: roundNumber })
+  if (totalRounds.value === 0) return ''
+  return knockoutRoundName(roundNumber, totalRounds.value, t)
 }
 
 function getBox(el, container) {
