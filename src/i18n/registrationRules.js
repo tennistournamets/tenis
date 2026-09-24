@@ -1,5 +1,8 @@
 export const registrationRuleMessages = {
   ru: {
+    capacityNone: 'Без ограничения',
+    doubleElimCapacity: 'Двойное выбывание работает с 4, 8, 16 или 32 участниками: лимит не даст набрать лишних.',
+    doubleElimNoCapacity: 'Без лимита лишняя заявка сделает сетку невозможной: двойному выбыванию нужно 4, 8, 16 или 32 участника.',
     title: 'Условия участия',
     occupied: 'Занято {occupied} из {capacity}',
     free: 'Свободно: {free}',
@@ -68,6 +71,9 @@ export const registrationRuleMessages = {
     },
   },
   en: {
+    capacityNone: 'No limit',
+    doubleElimCapacity: 'Double elimination runs with 4, 8, 16 or 32 entries; the limit keeps the field at that size.',
+    doubleElimNoCapacity: 'Without a limit one extra entry breaks the draw: double elimination needs 4, 8, 16 or 32 entries.',
     title: 'Entry conditions',
     occupied: '{occupied} of {capacity} places taken',
     free: 'Available: {free}',
@@ -136,6 +142,9 @@ export const registrationRuleMessages = {
     },
   },
   lt: {
+    capacityNone: 'Be apribojimo',
+    doubleElimCapacity: 'Dvigubas atkritimas veikia su 4, 8, 16 arba 32 dalyviais: limitas neleis surinkti daugiau.',
+    doubleElimNoCapacity: 'Be limito viena papildoma paraiška sugadins tinklelį: reikia 4, 8, 16 arba 32 dalyvių.',
     title: 'Dalyvavimo sąlygos',
     occupied: 'Užimta {occupied} iš {capacity} vietų',
     free: 'Laisva: {free}',

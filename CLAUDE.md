@@ -126,6 +126,7 @@ supabase/
 - `propagate_winner()` - advances winner via `next_match_id`; routes loser via `loser_next_match_id` (double-elim)
 - `swap_bracket_slots()`, `apply_bracket_layout()` - manual single-elim arrangement
 - `form_random_pairs()`, `form_manual_pairs()`, `split_pairs()` - doubles pairing
+- `set_entry_seed_order(tournament_id, entry_ids[])` - manual seeding of the approved field before the draw (feeds manual draw and group snake); snapshot entries carry `seed_order`
 - `start_live_match()`, `record_point()`, `stop_live_match()` - live scoring lifecycle
 - `add_tournament_admin_by_email()`, `remove_tournament_admin()` - co-organizer management
 - `is_tournament_admin()`, `can_live_score()`, `is_platform_admin()` - access checks
@@ -174,7 +175,7 @@ Planned/known gaps, roughly by priority. Not implemented yet.
 - **New sports** — basketball, volleyball, table tennis, badminton: add to `sport` enum + `sportConfig`/`scoringEngines` (+ a scoring engine per family). Consider a "sets to N points" generic engine.
 
 ### Tournament management
-- **Seeding UI** — manual seed order for RR/groups/brackets (seed_order exists, no UI).
+- **Seeding UI** — drag-and-drop reordering (today: move up/down in the entry row menu via `set_entry_seed_order`).
 - **Withdrawals / byes / re-open** after generation without full regen.
 - **Scheduling** — dates/times/venue-court per match.
 - **Undo/rebuild** across all formats — `bracket_versions` is single-elim oriented; extend snapshots to RR/groups/double-elim.

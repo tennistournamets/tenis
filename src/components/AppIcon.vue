@@ -16,11 +16,15 @@ const PATHS = {
     '<path d="M7.2 4.4c2.3 2.2 3.5 4.7 3.5 7.6s-1.2 5.4-3.5 7.6"/>',
     '<path d="M16.8 4.4c-2.3 2.2-3.5 4.7-3.5 7.6s1.2 5.4 3.5 7.6"/>',
   ],
+  // A padel racket, tilted, with its perforated face: upright it read as a map pin.
   padel: [
-    '<ellipse cx="12" cy="9.5" rx="6.5" ry="7"/>',
-    '<circle cx="12" cy="9.5" r="2.2"/>',
-    '<path d="M12 16.5V21"/>',
-    '<path d="M9.5 21.5h5"/>',
+    '<ellipse cx="10" cy="10" rx="6" ry="6.8" transform="rotate(-45 10 10)"/>',
+    '<path d="m14.4 14.4 5.6 5.6"/>',
+    '<path d="m18.4 21.6 3.2-3.2"/>',
+    '<circle cx="8" cy="10" r=".6"/>',
+    '<circle cx="10" cy="8" r=".6"/>',
+    '<circle cx="12" cy="10" r=".6"/>',
+    '<circle cx="10" cy="12" r=".6"/>',
   ],
   football: [
     '<circle cx="12" cy="12" r="9"/>',

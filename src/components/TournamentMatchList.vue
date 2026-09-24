@@ -15,6 +15,7 @@ const props = defineProps({
   liveScoresByMatch: { type: Object, default: () => ({}) },
   canEditFinal: { type: Boolean, default: false },
   canLiveScore: { type: Boolean, default: false },
+  format: { type: String, default: '' },
 })
 
 const emit = defineEmits(['edit-result', 'view-live'])
@@ -63,7 +64,7 @@ function stageLabel(stage) {
   return t(`mobile.matchStage.${stage || 'main'}`)
 }
 
-const roundTotals = computed(() => knockoutTotals(props.matches))
+const roundTotals = computed(() => knockoutTotals(props.matches, props.format))
 function roundLabel(match) {
   if (match.stage === 'grand_final') return t('mobile.matchStage.grand_final')
   if (match.stage === 'third_place') return t('mobile.matchStage.third_place')

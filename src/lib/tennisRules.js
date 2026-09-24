@@ -81,10 +81,32 @@ export function scoreRows(sets = [], setFormat = 'best_of_3') {
 }
 
 const blank = value => value === '' || value == null
+
+// Mirrors tennis_race_result in SQL: 1 — side A won, 2 — side B, 0 — still open, -1 — impossible.
+export function raceResult(a, b, target, margin) {
+  if (a == null || b == null || a < 0 || b < 0) return -1
+  const hi = Math.max(a, b), lo = Math.min(a, b)
+  if (hi < target || Math.abs(a - b) < margin) return margin === 1 && hi >= target ? -1 : 0
+  if ((hi === target && lo <= target - margin) || (margin === 2 && hi > target && Math.abs(a - b) === 2)) return a > b ? 1 : 2
+  return -1
+}
+
+// Organizers often type a tie-break set as 6:6 plus the tie-break score. The
+// server stores it as 7:6 (the tie-break winner takes the last game), so a
+// finished tie-break at the tie-break game count settles the games.
+export function settleTiebreakGames(row, rule) {
+  if (rule.kind === 'match_tiebreak' || rule.at == null) return row
+  const [a, b, ta, tb] = [row.side_a_games, row.side_b_games, row.side_a_tiebreak, row.side_b_tiebreak].map(v => (blank(v) ? null : Number(v)))
+  if (a !== rule.at || b !== rule.at || ta == null || tb == null) return row
+  const won = raceResult(ta, tb, rule.target, rule.margin)
+  if (won !== 1 && won !== 2) return row
+  return { ...row, side_a_games: won === 1 ? rule.at + 1 : rule.at, side_b_games: won === 2 ? rule.at + 1 : rule.at }
+}
 export function buildSetPayload(rows, config, setFormat) {
   const result = []
-  for (const row of rows) {
-    const rule = ruleForSet(config, row.set_index, setFormat)
+  for (const typed of rows) {
+    const rule = ruleForSet(config, typed.set_index, setFormat)
+    const row = settleTiebreakGames(typed, rule)
     const fields = rule.kind === 'match_tiebreak'
       ? ['side_a_tiebreak', 'side_b_tiebreak']
       : ['side_a_games', 'side_b_games', 'side_a_tiebreak', 'side_b_tiebreak']
@@ -138,4 +160,30 @@ export function scoringError(message, t) {
   if (/No further sets/.test(message)) return t('tennisRules.matchOver')
   if (/Set indices/.test(message)) return t('tennisRules.setOrder')
   return message
+}
+
+// Sets each side has clearly won in the typed rows, and how many a win needs.
+// Deliberately lenient (more games and at least the set target, or the match
+// tie-break target): it only answers "is there obviously no winner yet?" so the
+// form can explain itself; the server still validates the exact score.
+export function decidedSets(rows = [], config = {}, setFormat = 'best_of_3') {
+  const wins = { a: 0, b: 0 }
+  for (const typed of rows) {
+    const rule = ruleForSet(config, typed.set_index, setFormat)
+    const row = settleTiebreakGames(typed, rule)
+    const [a, b] = rule.kind === 'match_tiebreak'
+      ? [row.side_a_tiebreak, row.side_b_tiebreak]
+      : [row.side_a_games, row.side_b_games]
+    if (blank(a) || blank(b)) continue
+    const target = rule.kind === 'match_tiebreak' ? rule.target : rule.games_to
+    const [na, nb] = [Number(a), Number(b)]
+    if (Math.max(na, nb) < target || na === nb) continue
+    wins[na > nb ? 'a' : 'b'] += 1
+  }
+  return { ...wins, required: setFormat === 'best_of_5' ? 3 : 2 }
+}
+
+export function hasMatchWinner(rows, config, setFormat) {
+  const { a, b, required } = decidedSets(rows, config, setFormat)
+  return a >= required || b >= required
 }

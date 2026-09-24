@@ -6,7 +6,7 @@ import { supabase } from '../../lib/supabase'
 import InfoTip from '../InfoTip.vue'
 import { knockoutTotals, matchRoundName } from '../../lib/roundLabels'
 import {
-  blocksPublish, conflictText, draftDiff, formatScheduleTime, indexSchedule, scheduleDropAction, scheduleError,
+  blocksPublish, conflictText, draftDiff, mergeConflicts, queueOrderConflicts, formatScheduleTime, indexSchedule, scheduleDropAction, scheduleError,
   scheduleLocked, scheduleSummary, timezoneOf,
 } from '../../lib/schedule'
 
@@ -36,7 +36,9 @@ const courtsById = computed(() => Object.fromEntries(props.courts.map(c => [c.id
 const index = computed(() => indexSchedule(props.schedule))
 const diff = computed(() => draftDiff(props.schedule))
 const changedIds = computed(() => new Set(diff.value.changed))
-const conflictsByMatch = computed(() => Object.fromEntries(conflicts.value.map(c => [c.match_id, c.conflicts])))
+// Server checks (time, court, rest) plus the court-queue order checked here.
+const allConflicts = computed(() => mergeConflicts(conflicts.value, queueOrderConflicts(props.matches, index.value.draft)))
+const conflictsByMatch = computed(() => Object.fromEntries(allConflicts.value.map(c => [c.match_id, c.conflicts])))
 // Mirrors publish_schedule: a finished or live match keeps its schedule but
 // never stands in the way of publishing the rest of the draft.
 const publishBlocked = computed(() => conflicts.value.some(c => c.conflicts.some(blocksPublish)))
@@ -50,7 +52,7 @@ function teamLabel(entryId) {
 }
 const matchTitle = match => `${teamLabel(match.side_a_entry_id)} — ${teamLabel(match.side_b_entry_id)}`
 const matchLabelById = id => { const m = props.matches.find(x => x.id === id); return m ? matchTitle(m) : '' }
-const roundTotals = computed(() => knockoutTotals(props.matches))
+const roundTotals = computed(() => knockoutTotals(props.matches, props.tournament?.format))
 // Double elimination needs "Upper/Lower bracket" to tell its rounds apart;
 // a single bracket or a group playoff reads fine as just "Semifinal".
 const hasLosers = computed(() => props.matches.some(m => m.stage === 'losers'))
@@ -367,15 +369,15 @@ onBeforeUnmount(() => { clearTimeout(conflictsTimer); conflictsVersion += 1 })
       <button class="btn btn--outline btn--sm" type="button" :disabled="disabled" @click="emit('open-courts')">{{ t('schedule.goToCourts') }}</button>
     </div>
 
-    <section v-if="conflicts.length || conflictsError" class="sb-conflicts" aria-live="polite">
+    <section v-if="allConflicts.length || conflictsError" class="sb-conflicts" aria-live="polite">
       <h3 class="sb-conflicts__title">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" /><path d="M12 9v4" /><path d="M12 17h.01" /></svg>
         {{ t('schedule.conflicts') }}
-        <span v-if="conflicts.length" class="sb-count">{{ conflicts.length }}</span>
+        <span v-if="allConflicts.length" class="sb-count">{{ allConflicts.length }}</span>
       </h3>
       <p v-if="conflictsError" class="error-text" role="alert">{{ conflictsError }}</p>
       <ul v-else class="sb-conflicts__list">
-        <li v-for="item in conflicts" :key="item.match_id">
+        <li v-for="item in allConflicts" :key="item.match_id">
           <strong>{{ matchLabelById(item.match_id) }}</strong>
           <ul>
             <li v-for="(conflict, i) in item.conflicts" :key="i" :class="blocksPublish(conflict) ? 'is-hard' : 'is-soft'">

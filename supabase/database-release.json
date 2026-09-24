@@ -76,6 +76,12 @@
       "sha256": "e63938743ca265aafb49661f2dfda905e30ddd2c2bfd695cdd49ed747513fb48",
       "tenisAppliedVersion": null,
       "tenisNote": "Not applied to TENIS yet; apply via psql (session pooler) like the previous forward steps."
+    },
+    {
+      "path": "supabase/migrations/20260924210822_entry_seed_order.sql",
+      "sha256": "8039e678c924f7d4dff1df7f212f84d1b8b0e65300c6af887f5530f01a22bba4",
+      "tenisAppliedVersion": null,
+      "tenisNote": "Not applied to TENIS yet; apply via psql (session pooler) like the previous forward steps."
     }
   ],
   "baseline": {

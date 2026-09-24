@@ -18,10 +18,13 @@ export function indexSchedule(rows = []) {
 }
 
 /** Rows the current viewer should see: organizers work on the draft, everyone else reads the publication. */
+// The draft is the organizer's complete intended schedule: publish copies it
+// over the publication and clearing a match deletes its draft row. So a match
+// without a draft row is unassigned for the organizer, even if the published
+// version still has it; mixing the two showed courts the draft had removed.
 export function effectiveSchedule(rows = [], preferDraft = false) {
   const index = indexSchedule(rows)
-  if (!preferDraft) return index.published
-  return { ...index.published, ...index.draft }
+  return preferDraft ? index.draft : index.published
 }
 
 const sameAssignment = (a, b) => Boolean(a) && Boolean(b)
@@ -256,4 +259,36 @@ export function compareBySchedule(a, b) {
   const ka = scheduleSortKey(a), kb = scheduleSortKey(b)
   for (let i = 0; i < ka.length; i++) if (ka[i] !== kb[i]) return ka[i] - kb[i]
   return 0
+}
+
+// The server compares start times only. A court queue has an order of its own:
+// a match must not stand before a match that feeds it a player on the same
+// court (a final queued ahead of its semifinals). Reported like the server's
+// order check, as a soft conflict on the later match.
+export function queueOrderConflicts(matches = [], draftByMatch = {}) {
+  const out = []
+  for (const match of matches) {
+    const row = draftByMatch[match.id]
+    if (!row?.court_id || row.queue_order == null) continue
+    const feeders = matches.filter(f => f.next_match_id === match.id || f.loser_next_match_id === match.id)
+    const early = feeders.filter(f => {
+      const fr = draftByMatch[f.id]
+      return fr?.court_id === row.court_id && fr.queue_order != null && fr.queue_order > row.queue_order
+    })
+    if (early.length) out.push({ match_id: match.id, conflicts: early.map(f => ({ kind: 'order_violation', severity: 'soft', match_id: f.id })) })
+  }
+  return out
+}
+
+// Server and client conflicts for one list: grouped per match, duplicates dropped.
+export function mergeConflicts(...lists) {
+  const byMatch = new Map()
+  for (const item of lists.flat()) {
+    const list = byMatch.get(item.match_id) || []
+    for (const c of item.conflicts || []) {
+      if (!list.some(x => x.kind === c.kind && x.match_id === c.match_id)) list.push(c)
+    }
+    byMatch.set(item.match_id, list)
+  }
+  return [...byMatch].map(([match_id, conflicts]) => ({ match_id, conflicts }))
 }

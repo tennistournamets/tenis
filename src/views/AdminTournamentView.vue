@@ -22,6 +22,8 @@ import ScheduleBoard from '../components/admin/ScheduleBoard.vue'
 import CourtsEditor from '../components/admin/CourtsEditor.vue'
 import MatchScheduleModal from '../components/admin/MatchScheduleModal.vue'
 import AccessMatrix from '../components/admin/AccessMatrix.vue'
+import TournamentNextStep from '../components/admin/TournamentNextStep.vue'
+import KebabMenu from '../components/KebabMenu.vue'
 import InfoTip from '../components/InfoTip.vue'
 import AppModal from '../components/AppModal.vue'
 import { accessError, assignableRoles, canEditMembership } from '../lib/access'
@@ -43,6 +45,8 @@ import { useAuthStore } from '../stores/auth'
 import { useNarrowLayout } from '../lib/useNarrowLayout'
 import { useHeaderTitle } from '../lib/headerTitle'
 import { onTabKeydown as onSurfaceTabKeydown } from '../lib/tabNavigation'
+import { statusBadgeClass } from '../lib/tournamentStatus'
+import { bracketPlan, groupCountOptions, groupPlan, roundRobinPlan } from '../lib/formatPlan'
 
 const props = defineProps({
   id: {
@@ -195,6 +199,47 @@ function entryLabel(entry) {
   return names.length ? names.join(' / ') : entry.display_name
 }
 
+// Draw order: the manual draw and the group snake read seed_order first, then
+// the application time — the same order the list shows and the menu edits.
+const sortedApproved = computed(() => [...approvedEntries.value].sort((a, b) =>
+  (a.seed_order ?? Number.MAX_SAFE_INTEGER) - (b.seed_order ?? Number.MAX_SAFE_INTEGER)
+  || String(a.created_at || '').localeCompare(String(b.created_at || '')) || a.id.localeCompare(b.id)))
+const seedPosition = entry => sortedApproved.value.findIndex(e => e.id === entry.id) + 1
+const approvedQuery = ref('')
+const filteredApproved = computed(() => {
+  const q = approvedQuery.value.trim().toLowerCase()
+  return q ? sortedApproved.value.filter(e => entryLabel(e).toLowerCase().includes(q)) : sortedApproved.value
+})
+// Seeding matters until the draw exists; a random bracket draw ignores it.
+const canSeed = computed(() => canManageTournament.value && !hasBracket.value && !isTournamentActive.value && !isTournamentFinished.value)
+
+async function moveSeed(entry, delta) {
+  if (actionLoading.value) return
+  const order = sortedApproved.value.map(e => e.id)
+  const from = order.indexOf(entry.id)
+  const to = from + delta
+  if (from < 0 || to < 0 || to >= order.length) return
+  order.splice(to, 0, order.splice(from, 1)[0])
+  actionLoading.value = true
+  errorText.value = ''
+  try {
+    const { error } = await supabase.rpc('set_entry_seed_order', { p_tournament_id: props.id, p_entry_ids: order })
+    if (error) throw error
+    await loadAll(true)
+  } catch (error) {
+    const message = error?.message || ''
+    errorText.value = message.startsWith('seeding.') ? t(message)
+      : error?.code === 'PGRST202' ? t('seeding.unavailable') : scoringError(message, t)
+  } finally { actionLoading.value = false }
+}
+
+// One avatar per member: a pair shows both players, not the first one's initials.
+function memberInitials(entry) {
+  const names = entryMemberNames(entry)
+  const list = names.length ? names : [entryLabel(entry) || '?']
+  return list.slice(0, 2).map(name => name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('') || '?')
+}
+
 function entryInitials(entry) {
   const label = entryLabel(entry) || '?'
   return label
@@ -296,6 +341,39 @@ async function finishTournament() {
     errorText.value = scoringError(error?.message, t)
     try { await loadTournament() } catch { /* Keep the actionable mutation error. */ }
   } finally { actionLoading.value = false }
+}
+
+// Registration must be closed before the field turns into matches, otherwise
+// a late entry is approved into a tournament that has no place for it.
+async function patchStatus(status) {
+  const { data, error } = await supabase.rpc('update_tournament_settings', {
+    p_tournament_id: props.id, p_patch: { status }, p_expected_revision: tournament.value.settings_revision,
+  })
+  if (error) throw error
+  acceptTournament(data)
+}
+
+async function closeRegistration() {
+  if (actionLoading.value || settingsSaving.value) return
+  actionLoading.value = true
+  errorText.value = ''
+  try {
+    if (!(await confirmDialog(t('nextStep.closeRegistrationConfirm')))) return
+    await patchStatus('registration_closed')
+    await loadAll(true)
+  } catch (error) {
+    errorText.value = scoringError(error?.message, t)
+    try { await loadTournament() } catch { /* Keep the actionable mutation error. */ }
+  } finally { actionLoading.value = false }
+}
+
+// Called inside a generation action (actionLoading already held). Returns false
+// when the organizer keeps registration open and the generation must not run.
+async function ensureRegistrationClosed() {
+  if (tournament.value?.status !== 'registration_open' && tournament.value?.status !== 'draft') return true
+  if (!(await confirmDialog(t('nextStep.closeBeforeGenerate')))) return false
+  await patchStatus('registration_closed')
+  return true
 }
 
 async function stopTournament() {
@@ -525,6 +603,31 @@ const hasBracket = computed(() => matches.value.length > 0)
 const tournamentFormat = computed(() => tournament.value?.format || 'single_elimination')
 const isRoundRobin = computed(() => tournamentFormat.value === 'round_robin')
 const isGroupsPlayoff = computed(() => tournamentFormat.value === 'groups_playoff')
+// The second tab holds a bracket, a round-robin table or groups: name it after what it shows.
+// What each format will produce from the approved field, shown before generating.
+const rrPlan = computed(() => roundRobinPlan(approvedEntries.value.length))
+const groupOptions = computed(() => groupCountOptions(approvedEntries.value.length))
+watch(groupOptions, (options) => {
+  if (options.length && !options.includes(Number(groupCount.value))) groupCount.value = options[0]
+}, { immediate: true })
+const groupPlanText = computed(() => {
+  const plan = groupPlan(approvedEntries.value.length, groupCount.value, tournament.value?.format_config?.advance_per_group)
+  return t('admin.groupPlan', {
+    groups: plan.groups,
+    size: plan.minSize === plan.maxSize ? plan.minSize : `${plan.minSize}–${plan.maxSize}`,
+    matches: plan.matches,
+    advance: plan.advance,
+    qualifiers: plan.qualifiers,
+  })
+})
+const bracketPlanBlocked = computed(() => isDoubleElim.value && !hasBracket.value && !bracketPlan(approvedEntries.value.length, 'double_elimination').valid)
+const bracketPlanText = computed(() => {
+  const plan = bracketPlan(approvedEntries.value.length, tournamentFormat.value)
+  if (plan.n < 2) return t('nextStep.entriesTooFew')
+  if (isDoubleElim.value) return t('admin.bracketPlanDE', plan)
+  return t(plan.byes ? 'admin.bracketPlanByes' : 'admin.bracketPlanSE', plan)
+})
+const bracketTabLabel = computed(() => t(isRoundRobin.value ? 'admin.tabTable' : isGroupsPlayoff.value ? 'admin.tabGroups' : 'admin.tabBracket'))
 const isDoubleElim = computed(() => tournamentFormat.value === 'double_elimination')
 const tournamentScoringFamily = computed(() => scoringFamily(tournament.value?.sport || 'tennis'))
 const isGoalsSport = computed(() => tournamentScoringFamily.value === 'goals')
@@ -790,6 +893,7 @@ async function generateBracket() {
   try {
     if (hasBracket.value && !(await confirmDialog(rebuildConfirmText('admin.rebuildConfirm')))) return
     errorText.value = ''
+    if (!(await ensureRegistrationClosed())) return
     const { error } = await supabase.rpc(fn, {
       p_tournament_id: props.id,
       p_mode: drawMode.value,
@@ -808,6 +912,7 @@ async function generateGroups() {
   try {
     if (hasGroups.value && !(await confirmDialog(rebuildConfirmText('admin.rebuildConfirm')))) return
     errorText.value = ''
+    if (!(await ensureRegistrationClosed())) return
     const { error } = await supabase.rpc('generate_groups', {
       p_tournament_id: props.id,
       p_group_count: Number(groupCount.value) || 2,
@@ -838,8 +943,9 @@ async function generateSchedule() {
   if (actionLoading.value) return
   actionLoading.value = true
   try {
-    if (hasBracket.value && !(await confirmDialog(rebuildConfirmText('admin.rebuildConfirm')))) return
+    if (hasBracket.value && !(await confirmDialog(rebuildConfirmText('admin.rebuildConfirm'), { danger: true }))) return
     errorText.value = ''
+    if (!(await ensureRegistrationClosed())) return
     const { error } = await supabase.rpc('generate_round_robin', {
       p_tournament_id: props.id,
     })
@@ -1044,11 +1150,12 @@ async function transferOwnership() {
 const adminRoleOptions = computed(() => assignableRoles(currentUserRole.value))
 const canEditAdmin = admin => canEditMembership(currentUserRole.value, admin.role) && admin.user_id !== auth.user?.id
 
+// Typing the tournament's name is the confirmation for this one irreversible action.
+const deleteConfirmName = ref('')
 async function deleteTournament() {
-  if (actionLoading.value) return
+  if (actionLoading.value || deleteConfirmName.value.trim() !== tournament.value?.name?.trim()) return
   actionLoading.value = true
   try {
-    if (!(await confirmDialog(t('admin.deleteTournamentConfirm'), { danger: true }))) return
     errorText.value = ''
     stopRealtime?.(); stopRealtime = null
     const { error } = await supabase.from('tournaments').delete().eq('id', props.id)
@@ -1061,18 +1168,6 @@ async function deleteTournament() {
   } finally { actionLoading.value = false }
 }
 
-function statusBadgeClass(status) {
-  if (status === 'completed') {
-    return 'badge--done'
-  }
-  if (status === 'in_progress') {
-    return 'badge--live'
-  }
-  if (status === 'registration_open') {
-    return 'badge--success'
-  }
-  return 'badge--neutral'
-}
 
 const TABS = ['entries', 'bracket', 'courts', 'schedule', 'scores', 'settings']
 
@@ -1085,7 +1180,8 @@ const bracketTabEnabled = computed(() =>
 
 function isTabEnabled(tab) {
   if (tab === 'bracket') return bracketTabEnabled.value
-  if (tab === 'scores') return canEditScores.value
+  // Managers always reach "Scores": before the start it explains when entry opens.
+  if (tab === 'scores') return canEditScores.value || canManageTournament.value
   return canManageTournament.value
 }
 
@@ -1314,6 +1410,7 @@ onBeforeUnmount(() => {
               </span>
             </div>
             <p v-if="tournament.description" class="muted">{{ tournament.description }}</p>
+            <p v-if="showStartButton && startBlockReason" id="adm-start-reason" class="sr-only">{{ startBlockReason }}</p>
           </div>
           <div v-if="canManageTournament" class="admin-tournament-overview__actions">
             <CopyTournamentLink
@@ -1334,37 +1431,55 @@ onBeforeUnmount(() => {
               </button>
             </span>
 
-            <span
+            <!-- The tournament's main action is a labelled button, set apart from the share icons. -->
+            <span v-if="showStartButton || isTournamentActive" class="admin-tournament-overview__divider" aria-hidden="true" />
+            <button
               v-if="showStartButton"
-              class="tooltip-wrapper"
-              :data-tooltip="startBlockReason || t('admin.startTournament')"
+              class="btn btn--success btn--sm"
+              type="button"
+              :disabled="!canStartTournament || actionLoading"
+              :aria-describedby="startBlockReason ? 'adm-start-reason' : undefined"
+              @click="startTournament"
             >
+              <AppIcon name="play" :size="16" />
+              {{ t('admin.startTournament') }}
+            </button>
+            <template v-if="isTournamentActive">
               <button
-                class="btn btn--success btn--sm btn--icon"
-                type="button"
-                :disabled="!canStartTournament || actionLoading"
-                :aria-label="t('admin.startTournament')"
-                @click="startTournament"
-              >
-                <AppIcon name="play" :size="18" />
-              </button>
-            </span>
-
-            <span v-if="isTournamentActive" class="tooltip-wrapper" :data-tooltip="t('admin.stopTournament')">
-              <button
-                class="btn btn--outline btn--sm btn--icon"
+                class="btn btn--outline btn--sm"
                 type="button"
                 :disabled="actionLoading"
-                :aria-label="t('admin.stopTournament')"
                 @click="stopTournament"
               >
-                <AppIcon name="stop" :size="18" />
+                <AppIcon name="stop" :size="16" />
+                {{ t('admin.stopTournament') }}
               </button>
-            </span>
+              <button
+                class="btn btn--primary btn--sm"
+                type="button"
+                :disabled="actionLoading"
+                @click="finishTournament"
+              >
+                {{ t('admin.finishTournament') }}
+              </button>
+            </template>
           </div>
         </div>
 
       </section>
+
+      <TournamentNextStep
+        v-if="canManageTournament"
+        :status="tournament.status"
+        :format="tournament.format"
+        :approved-count="approvedEntries.length"
+        :pending-count="pendingEntries.length"
+        :matches-count="matches.length"
+        :busy="actionLoading || settingsSaving"
+        @go="setTab"
+        @close-registration="closeRegistration"
+        @start="startTournament"
+      />
 
       <p v-if="showDeadlineHint" class="alert alert--info" role="status">{{ t('registrationRules.deadlineCloseHint') }}</p>
 
@@ -1396,7 +1511,7 @@ onBeforeUnmount(() => {
             aria-controls="panel-bracket"
             @click="setTab('bracket')"
           >
-            {{ t('admin.tabBracket') }}
+            {{ bracketTabLabel }}
           </button>
         </span>
         <button
@@ -1426,16 +1541,16 @@ onBeforeUnmount(() => {
           {{ t('schedule.tab') }}
           <span v-if="scheduleDraftCount" class="tab__badge">{{ scheduleDraftCount }}</span>
         </button>
-        <span class="tooltip-wrapper" :data-tooltip="!canEditScores ? t('admin.scoresLockedTooltip') : undefined">
+        <span class="tooltip-wrapper" :data-tooltip="!isTabEnabled('scores') ? t('admin.scoresLockedTooltip') : undefined">
           <button
             id="tab-scores"
             role="tab"
             class="tab"
             :class="{ 'tab--active': activeTab === 'scores' }"
             :aria-selected="activeTab === 'scores'"
-            :aria-disabled="!canEditScores"
+            :aria-disabled="!isTabEnabled('scores')"
             :tabindex="activeTab === 'scores' ? 0 : -1"
-            :disabled="!canEditScores"
+            :disabled="!isTabEnabled('scores')"
             aria-controls="panel-scores"
             @click="setTab('scores')"
           >
@@ -1600,21 +1715,38 @@ onBeforeUnmount(() => {
                 {{ t('admin.editPairs') }}
               </button>
             </div>
-            <div v-if="approvedEntries.length" class="entry-list">
-              <div v-for="entry in approvedEntries" :key="entry.id" class="participant-item">
-                <span class="entry-avatar entry-avatar--ok">{{ entryInitials(entry) }}</span>
-                <strong class="entry-name">{{ entryLabel(entry) }}</strong>
-                <button
-                  v-if="!isTournamentActive && !isTournamentFinished"
-                  class="btn btn--ghost btn--sm"
-                  type="button"
-                  :disabled="actionLoading"
-                  @click="updateEntryStatus(entry.id, 'pending')"
-                >
-                  {{ t('admin.reopen') }}
-                </button>
+            <template v-if="approvedEntries.length">
+              <p v-if="canSeed" class="field-hint mb-3">{{ t('admin.seedHint') }}</p>
+              <input
+                v-if="approvedEntries.length > 8"
+                v-model="approvedQuery"
+                class="input entry-search"
+                type="search"
+                :placeholder="t('admin.searchEntries')"
+                :aria-label="t('admin.searchEntries')"
+              />
+              <div v-if="filteredApproved.length" class="entry-list">
+                <div v-for="entry in filteredApproved" :key="entry.id" class="participant-item">
+                  <span class="entry-seed" :title="t('admin.seedLabel')">{{ seedPosition(entry) }}</span>
+                  <span class="entry-avatars" :class="{ 'entry-avatars--pair': memberInitials(entry).length > 1 }" aria-hidden="true">
+                    <span v-for="(initials, i) in memberInitials(entry)" :key="i" class="entry-avatar entry-avatar--ok">{{ initials }}</span>
+                  </span>
+                  <strong class="entry-name">{{ entryLabel(entry) }}</strong>
+                  <KebabMenu
+                    v-if="!isTournamentActive && !isTournamentFinished"
+                    :aria-label="t('admin.rowActions', { name: entryLabel(entry) })"
+                  >
+                    <template v-if="canSeed">
+                      <button type="button" role="menuitem" :disabled="actionLoading || seedPosition(entry) === 1" @click="moveSeed(entry, -1)">{{ t('admin.seedUp') }}</button>
+                      <button type="button" role="menuitem" :disabled="actionLoading || seedPosition(entry) === sortedApproved.length" @click="moveSeed(entry, 1)">{{ t('admin.seedDown') }}</button>
+                    </template>
+                    <button type="button" role="menuitem" :disabled="actionLoading" @click="updateEntryStatus(entry.id, 'pending')">{{ t('admin.reopen') }}</button>
+                    <button type="button" role="menuitem" class="kebab__danger" :disabled="actionLoading" @click="updateEntryStatus(entry.id, 'rejected')">{{ t('admin.reject') }}</button>
+                  </KebabMenu>
+                </div>
               </div>
-            </div>
+              <p v-else class="muted">{{ t('admin.noSearchResults') }}</p>
+            </template>
             <p v-else class="muted">{{ t('admin.noApproved') }}</p>
           </div>
 
@@ -1903,17 +2035,20 @@ onBeforeUnmount(() => {
         </template>
         <div id="admin-mobile-panel" :role="isNarrowLayout && isTournamentActive && matches.length ? 'tabpanel' : undefined" :aria-labelledby="isNarrowLayout && isTournamentActive && matches.length ? `admin-surface-${adminMobileBracketSurface}` : undefined">
           <section v-if="isNarrowLayout && isTournamentActive && matches.length && adminMobileBracketSurface === 'matches'" class="card mobile-score-center mt-3">
-            <TournamentMatchList :matches="matches" :entries-map="entriesMap" :sets-by-match="setsByMatch" :live-scores-by-match="liveScoresByMatch" :can-edit-final="canEditFinalScores" :can-live-score="canUseLiveScoring" @edit-result="openRrMatch" @view-live="openLiveScoring" />
+            <TournamentMatchList :format="tournament.format" :matches="matches" :entries-map="entriesMap" :sets-by-match="setsByMatch" :live-scores-by-match="liveScoresByMatch" :can-edit-final="canEditFinalScores" :can-live-score="canUseLiveScoring" @edit-result="openRrMatch" @view-live="openLiveScoring" />
           </section>
         <!-- Round-robin: schedule + standings + fixtures -->
         <template v-if="isRoundRobin">
           <section v-if="canManageTournament && !isTournamentActive" class="card stack stack--sm">
-            <h2 class="section-title">{{ t('standings.title') }}</h2>
+            <h2 class="section-title">{{ t('standings.matchesTitle') }}</h2>
+            <p class="muted">{{ t('standings.rrPlan', rrPlan) }}</p>
+            <p v-if="hasBracket" class="muted">{{ t('standings.rrRegenerateWarn') }}</p>
             <div class="inline-actions">
               <button
-                class="btn btn--primary btn--sm"
+                class="btn btn--sm"
+                :class="hasBracket ? 'btn--danger' : 'btn--primary'"
                 type="button"
-                :disabled="actionLoading"
+                :disabled="actionLoading || approvedEntries.length < 2"
                 @click="generateSchedule"
               >
                 {{ hasBracket ? t('standings.regenerateSchedule') : t('standings.generateSchedule') }}
@@ -1921,7 +2056,7 @@ onBeforeUnmount(() => {
             </div>
           </section>
 
-          <section v-if="standings.length && showAdminBracketOverview" class="card stack stack--sm mt-4">
+          <section v-if="hasBracket && standings.length && showAdminBracketOverview" class="card stack stack--sm mt-4">
             <h2 class="section-title">{{ t('standings.title') }}</h2>
             <RoundRobinStandings
               :rows="standings"
@@ -1932,21 +2067,43 @@ onBeforeUnmount(() => {
               @view-live="openLiveScoring"
             />
           </section>
+
+          <section v-if="hasBracket && !isNarrowLayout" class="card mt-4">
+            <TournamentMatchList
+              :format="tournament.format"
+              :matches="matches"
+              :entries-map="entriesMap"
+              :sets-by-match="setsByMatch"
+              :live-scores-by-match="liveScoresByMatch"
+              :can-edit-final="canEditFinalScores"
+              :can-live-score="canUseLiveScoring"
+              @edit-result="openRrMatch"
+              @view-live="openLiveScoring"
+            />
+          </section>
         </template>
 
         <!-- Groups + playoff -->
         <template v-else-if="isGroupsPlayoff">
           <section v-if="canManageTournament && !isTournamentActive" class="card stack stack--sm">
             <h2 class="section-title">{{ t('admin.groupStage') }}</h2>
-            <div v-if="!hasGroups" class="form-field form-field--xs">
-              <label for="grp-count">{{ t('admin.groupCount') }}</label>
-              <input id="grp-count" v-model.number="groupCount" class="input" type="number" min="2" />
-            </div>
+            <fieldset v-if="!hasGroups" class="group-setup">
+              <legend class="group-setup__legend">{{ t('admin.groupCount') }}</legend>
+              <div v-if="groupOptions.length" class="group-setup__options" role="radiogroup" :aria-label="t('admin.groupCount')">
+                <label v-for="g in groupOptions" :key="g" class="group-setup__option" :class="{ 'is-active': Number(groupCount) === g }">
+                  <input v-model.number="groupCount" class="sr-only" type="radio" name="grp-count" :value="g" />
+                  {{ g }}
+                </label>
+              </div>
+              <p v-else class="muted">{{ t('admin.groupNeedMore') }}</p>
+              <p v-if="groupOptions.length" class="format-plan">{{ groupPlanText }}</p>
+              <p class="field-hint">{{ t('admin.groupSeedingHint') }}</p>
+            </fieldset>
             <div class="inline-actions">
               <button
                 class="btn btn--primary btn--sm"
                 type="button"
-                :disabled="actionLoading"
+                :disabled="actionLoading || (!hasGroups && !groupOptions.length)"
                 @click="generateGroups"
               >
                 {{ hasGroups ? t('admin.regenerateGroups') : t('admin.generateGroups') }}
@@ -1965,7 +2122,7 @@ onBeforeUnmount(() => {
 
           <section v-if="hasGroups && showAdminBracketOverview" class="card stack stack--sm mt-4">
             <h2 class="section-title">{{ t('admin.groupStage') }}</h2>
-            <GroupStageBoard :groups="groupsView" :entries-map="entriesMap" :family="tournamentScoringFamily" />
+            <GroupStageBoard :groups="groupsView" :entries-map="entriesMap" :family="tournamentScoringFamily"  :sets-by-match="setsByMatch" :live-scores-by-match="liveScoresByMatch" @view-live="openLiveScoring" />
           </section>
 
           <section v-if="hasPlayoff && showAdminBracketOverview" class="card stack stack--sm mt-4">
@@ -1982,14 +2139,17 @@ onBeforeUnmount(() => {
         </template>
 
         <section v-if="!isRoundRobin && !isGroupsPlayoff && canManageTournament && !isTournamentActive" class="card stack stack--sm">
-          <h2 class="section-title">{{ t('tournament.bracket') }} — {{ t('admin.drawSection') }}</h2>
+          <h2 class="section-title">{{ t('admin.drawSection') }}</h2>
+          <p class="muted format-plan">{{ bracketPlanText }}</p>
+          <p v-if="bracketPlanBlocked" class="alert alert--info" role="status">{{ t('admin.doubleElimNeedsPow2', { n: approvedEntries.length }) }}</p>
 
           <div class="form-field form-field--narrow">
             <label for="adm-draw">{{ t('admin.drawMode') }}</label>
-            <select id="adm-draw" v-model="drawMode" class="input">
+            <select id="adm-draw" v-model="drawMode" class="input" aria-describedby="adm-draw-hint">
               <option value="auto-random">{{ t('admin.drawRandom') }}</option>
               <option value="manual">{{ t('admin.drawManual') }}</option>
             </select>
+            <p id="adm-draw-hint" class="field-hint">{{ t(drawMode === 'manual' ? 'admin.drawManualHint' : 'admin.drawRandomHint') }}</p>
           </div>
 
           <template v-if="!hasBracket">
@@ -1997,7 +2157,7 @@ onBeforeUnmount(() => {
               <button
                 class="btn btn--primary btn--sm"
                 type="button"
-                :disabled="actionLoading"
+                :disabled="actionLoading || bracketPlanBlocked || approvedEntries.length < 2"
                 @click="generateBracket"
               >
                 {{ drawMode === 'manual' ? t('admin.generateManual') : t('admin.generateRandom') }}
@@ -2029,7 +2189,10 @@ onBeforeUnmount(() => {
           </template>
         </section>
 
-        <section v-if="!isRoundRobin && !isGroupsPlayoff && showAdminBracketOverview" class="card stack stack--sm mt-4">
+        <section v-if="!isRoundRobin && !isGroupsPlayoff && !hasBracket && !canManageTournament" class="card empty-state">
+          <p class="empty-state__hint">{{ t('bracket.empty') }}</p>
+        </section>
+        <section v-if="!isRoundRobin && !isGroupsPlayoff && hasBracket && showAdminBracketOverview" class="card stack stack--sm mt-4">
           <DoubleElimBoard
             v-if="isDoubleElim"
             :matches="displayMatches"
@@ -2129,8 +2292,14 @@ onBeforeUnmount(() => {
         class="tab-panel"
         :class="{ 'tab-panel--active': activeTab === 'scores' }"
       >
-        <section v-if="isNarrowLayout" class="card mobile-score-center">
+        <section v-if="!canEditScores" class="card empty-state">
+          <AppIcon name="play" :size="28" class="empty-state__icon" />
+          <h2 class="empty-state__title">{{ t('admin.scoresBeforeStartTitle') }}</h2>
+          <p class="empty-state__hint">{{ startBlockReason || t('admin.scoresLockedTooltip') }}</p>
+        </section>
+        <section v-else-if="isNarrowLayout" class="card mobile-score-center">
           <TournamentMatchList
+            :format="tournament.format"
             :matches="matches"
             :entries-map="entriesMap"
             :sets-by-match="setsByMatch"
@@ -2285,24 +2454,25 @@ onBeforeUnmount(() => {
           </form>
         </AppModal>
 
-        <section class="admin-delete-zone">
-          <button
-            v-if="isTournamentActive"
-            class="btn btn--danger btn--sm"
-            type="button"
-            :disabled="actionLoading"
-            @click="finishTournament"
-          >
-            {{ t('admin.finishTournament') }}
-          </button>
-          <button
-            class="btn btn--danger btn--sm"
-            type="button"
-            :disabled="actionLoading"
-            @click="deleteTournament"
-          >
-            {{ t('admin.deleteTournament') }}
-          </button>
+        <!-- Finishing lives in the page header; only the irreversible delete stays here. -->
+        <section v-if="currentUserRole === 'owner'" class="card danger-zone" aria-labelledby="adm-danger-title">
+          <h2 id="adm-danger-title" class="section-title danger-zone__title">{{ t('admin.dangerZone') }}</h2>
+          <div class="danger-zone__row">
+            <div class="danger-zone__text">
+              <strong>{{ t('admin.deleteTournament') }}</strong>
+              <p class="muted">{{ t('admin.deleteTournamentHint') }}</p>
+              <label class="danger-zone__label" for="adm-delete-confirm">{{ t('admin.deleteTypeName', { name: tournament.name }) }}</label>
+              <input id="adm-delete-confirm" v-model="deleteConfirmName" class="input danger-zone__input" type="text" autocomplete="off" spellcheck="false" />
+            </div>
+            <button
+              class="btn btn--danger btn--sm"
+              type="button"
+              :disabled="actionLoading || deleteConfirmName.trim() !== tournament.name.trim()"
+              @click="deleteTournament"
+            >
+              {{ t('admin.deleteTournament') }}
+            </button>
+          </div>
         </section>
       </div>
 
@@ -2359,6 +2529,22 @@ onBeforeUnmount(() => {
 <style scoped>
 /* Entry rows (approve / roster) */
 .participant-item { gap: var(--space-3); }
+
+.entry-seed {
+  flex-shrink: 0;
+  min-width: 1.75rem;
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  color: var(--muted);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.entry-avatars { display: inline-flex; flex-shrink: 0; }
+.entry-avatars--pair .entry-avatar { width: 30px; height: 30px; font-size: 0.7rem; border: 2px solid var(--surface); }
+.entry-avatars--pair .entry-avatar + .entry-avatar { margin-left: -8px; }
+
+.entry-search { max-width: 320px; margin-bottom: var(--space-3); }
 
 .entry-avatar {
   flex-shrink: 0;

@@ -71,6 +71,13 @@ function setSummary(matchId) {
   return sets.map(formatSetScore).join(' · ')
 }
 
+// One saved set reads as "Set 1: 0:1" (games in that set), several as
+// "By sets: 6:4 · 3:6" — never "Sets: 0:1", which looks like sets won.
+function setsLabel(matchId) {
+  const sets = props.setsByMatch[matchId] || []
+  return sets.length === 1 ? t('bracket.setOne', { n: sets[0].set_index || 1 }) : t('bracket.bySets')
+}
+
 const matchFinished = () => props.match.status === 'finished'
 const hasLiveScore = () => props.liveScore?.status === 'active'
 const canScoreMatch = () =>
@@ -232,7 +239,8 @@ function selectSlot(event, side) {
     </div>
     <div class="match-card__meta">
       <template v-if="(setsByMatch[match.id] || []).length">
-        {{ t('tournament.sets') }}: <span class="match-card__score">{{ setSummary(match.id) }}</span>
+        {{ setsLabel(match.id) }}: <span class="match-card__score">{{ setSummary(match.id) }}</span>
+        <span v-if="!matchFinished()" class="match-card__unfinished">· {{ t('bracket.unfinished') }}</span>
       </template>
       <template v-else-if="match.side_a_score != null && match.side_b_score != null">
         <span class="match-card__score">
@@ -268,4 +276,8 @@ function selectSlot(event, side) {
 <style scoped>
 .match-card__schedule { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 0.8rem; }
 .match-card__schedule-text { overflow-wrap: anywhere; }
+.match-card__unfinished {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
 </style>

@@ -15,6 +15,8 @@ const props = defineProps({
   teleportToDialog: Boolean,
   // 'card' — два fieldset с рамкой и legend (мастер); 'plain' — без рамок, с eyebrow-заголовками (настройки)
   variant: { type: String, default: 'card' },
+  // The wizard step already has this title as its heading.
+  hideMainLegend: Boolean,
 })
 
 const { t } = useI18n()
@@ -25,13 +27,27 @@ const unitValue = computed({
   get: () => props.form.entry_fee_unit || feeUnitDefault(props.tournament),
   set: value => { props.form.entry_fee_unit = value },
 })
+// Double elimination (v1) needs a power-of-two field, so its seat limit is a
+// choice of valid sizes rather than a free number. A pick-random doubles field
+// counts players, two per future pair.
+const isDoubleElim = computed(() => props.tournament?.format === 'double_elimination')
+const capacityOptions = computed(() => {
+  const sizes = [4, 8, 16, 32].map(n => (countsPlayers.value ? n * 2 : n))
+  const current = Number(props.form.registration_capacity)
+  return current && !sizes.includes(current) ? [...sizes, current].sort((a, b) => a - b) : sizes
+})
+const capacityModel = computed({
+  get: () => (props.form.registration_capacity === '' || props.form.registration_capacity == null ? '' : Number(props.form.registration_capacity)),
+  // The draft keeps the capacity as text, like the number input does.
+  set: value => { props.form.registration_capacity = value === '' ? '' : String(value) },
+})
 const unitLabel = unit => t(unit === 'pair' ? 'registrationRules.feeUnitPair' : unit === 'team' ? 'registrationRules.feeUnitTeam' : 'registrationRules.feeUnitPlayer')
 </script>
 
 <template>
   <div class="reg-rules-group" :class="{ 'reg-rules-group--plain': variant === 'plain' }">
   <fieldset class="reg-rules" :disabled="disabled">
-    <legend :class="{ 'sr-only': variant === 'plain' }">{{ t('registrationRules.settingsTitle') }}</legend>
+    <legend :class="{ 'sr-only': variant === 'plain' || hideMainLegend }">{{ t('registrationRules.settingsTitle') }}</legend>
 
     <div class="grid-2">
       <div class="form-field">
@@ -39,7 +55,18 @@ const unitLabel = unit => t(unit === 'pair' ? 'registrationRules.feeUnitPair' : 
           <label :for="`${idPrefix}-capacity`">{{ t('registrationRules.capacity') }}</label>
           <InfoTip :id="`${idPrefix}-capacity-hint`" :text="capacityHint" />
         </span>
+        <select
+          v-if="isDoubleElim"
+          :id="`${idPrefix}-capacity`"
+          v-model="capacityModel"
+          class="input"
+          :aria-describedby="`${idPrefix}-capacity-hint ${idPrefix}-capacity-de`"
+        >
+          <option value="">{{ t('registrationRules.capacityNone') }}</option>
+          <option v-for="n in capacityOptions" :key="n" :value="n">{{ n }}</option>
+        </select>
         <input
+          v-else
           :id="`${idPrefix}-capacity`"
           v-model="form.registration_capacity"
           class="input"
@@ -49,6 +76,9 @@ const unitLabel = unit => t(unit === 'pair' ? 'registrationRules.feeUnitPair' : 
           step="1"
           :aria-describedby="`${idPrefix}-capacity-hint`"
         />
+        <p v-if="isDoubleElim" :id="`${idPrefix}-capacity-de`" class="field-hint" :class="{ 'reg-rules__warn': capacityModel === '' }">
+          {{ t(capacityModel === '' ? 'registrationRules.doubleElimNoCapacity' : 'registrationRules.doubleElimCapacity') }}
+        </p>
       </div>
 
       <div class="form-field">
@@ -124,6 +154,7 @@ const unitLabel = unit => t(unit === 'pair' ? 'registrationRules.feeUnitPair' : 
 </template>
 
 <style scoped>
+.reg-rules__warn { color: var(--warning-text); }
 .reg-rules-group { display: grid; gap: 16px; }
 .reg-rules { margin: 0; padding: 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); display: grid; gap: 12px; }
 .reg-rules legend { padding: 0 6px; font-weight: 750; }

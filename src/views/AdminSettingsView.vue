@@ -107,6 +107,9 @@ async function saveProfile() {
 
 <template>
   <div class="stack" style="max-width: 720px">
+    <RouterLink class="admin-back-link" :to="{ name: 'admin-tournaments' }">
+      {{ t('admin.backToList') }}
+    </RouterLink>
     <h1 class="page-title">{{ t('admin.settingsTitle') }}</h1>
 
     <section class="card stack stack--sm">
@@ -159,10 +162,7 @@ async function saveProfile() {
       </form>
     </section>
 
-    <section class="card stack stack--sm muted">
-      <h2 class="section-title">{{ t('admin.settingsNotifications') }}</h2>
-      <p>{{ t('admin.settingsNotificationsPlaceholder') }}</p>
-    </section>
+    <!-- Notifications settings return here once they exist; an empty "coming soon" card only added noise. -->
   </div>
 </template>
 

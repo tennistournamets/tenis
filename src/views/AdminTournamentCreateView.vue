@@ -29,6 +29,8 @@ const flags = useFeatureFlagsStore()
 
 const saving = ref(false)
 const errorText = ref('')
+const nameError = ref('')
+const nameInput = ref(null)
 const stepHeading = ref(null)
 const wizardRoot = ref(null)
 const slugInput = ref(null)
@@ -119,6 +121,23 @@ watch(() => form.sport, (sport) => {
 const resolvedSlug = computed(() => normalizeTournamentSlug(form.slug.trim() || form.name) || fallbackSlug)
 const publicLink = computed(() => tournamentShareUrl(resolvedSlug.value))
 watch(() => form.slug, () => { slugError.value = '' })
+watch(() => form.name, () => { nameError.value = '' })
+// The slug field shows the address the name will produce, not an unrelated example.
+const slugPlaceholder = computed(() => normalizeTournamentSlug(form.name) || 'summer-cup-2026')
+// Step names for the progress bar; finished steps can be revisited.
+const STEP_KEYS = ['wizardStepSport', 'wizardStepFormat', 'wizardStepDetails', 'wizardStepRules', 'wizardStepRegistration', 'wizardStepPublish']
+const stepName = i => t(`admin.${STEP_KEYS[i - 1]}`)
+function goToStep(i) {
+  if (i < step.value && !saving.value) { errorText.value = ''; slugError.value = ''; step.value = i }
+}
+const recapLink = computed(() => publicLink.value)
+const recapRegistration = computed(() => {
+  const parts = []
+  if (form.registration_capacity) parts.push(t('admin.wizardRecapCapacity', { n: form.registration_capacity }))
+  if (form.registration_deadline) parts.push(t('admin.wizardRecapDeadline'))
+  if (form.entry_fee_mode === 'paid') parts.push(t('admin.wizardRecapFee'))
+  return parts.length ? parts.join(' · ') : t('admin.wizardRecapNoRules')
+})
 watch(step, async () => {
   await nextTick()
   stepHeading.value?.focus({ preventScroll: true })
@@ -135,8 +154,8 @@ async function nextStep() {
   slugError.value = ''
   if (step.value === 3) {
     if (!form.name.trim()) {
-      errorText.value = t('admin.wizardNameRequired')
-      await showCreateError(formError)
+      nameError.value = t('admin.wizardNameRequired')
+      await showCreateError(nameInput)
       return
     }
     if (form.slug.trim() && !normalizeTournamentSlug(form.slug)) {
@@ -183,8 +202,8 @@ async function createTournament() {
   // Поле названия живёт на шаге 3 — на финальном шаге браузерный required его не видит.
   if (!form.name.trim()) {
     step.value = 3
-    errorText.value = t('admin.wizardNameRequired')
-    await showCreateError(formError)
+    nameError.value = t('admin.wizardNameRequired')
+    await showCreateError(nameInput)
     return
   }
   if (form.slug.trim() && !normalizeTournamentSlug(form.slug)) {
@@ -341,10 +360,20 @@ onMounted(async () => {
         </button>
       </div>
       <div class="wizard__progress-wrap" role="status" aria-live="polite">
-        <div class="wizard__progress" aria-hidden="true">
-          <span v-for="i in TOTAL_STEPS" :key="i" class="wizard__seg" :class="{ 'wizard__seg--on': step >= i }" />
+        <div class="wizard__progress">
+          <button
+            v-for="i in TOTAL_STEPS"
+            :key="i"
+            type="button"
+            class="wizard__seg"
+            :class="{ 'wizard__seg--on': step >= i, 'wizard__seg--link': i < step }"
+            :title="stepName(i)"
+            :aria-label="t('admin.wizardGoToStep', { n: i, name: stepName(i) })"
+            :disabled="i >= step || saving"
+            @click="goToStep(i)"
+          />
         </div>
-        <span class="wizard__step-count">{{ t('admin.wizardStepOf', { n: step, total: TOTAL_STEPS }) }}</span>
+        <span class="wizard__step-count">{{ t('admin.wizardStepOf', { n: step, total: TOTAL_STEPS }) }} · {{ stepName(step) }}</span>
       </div>
       <button type="button" class="btn btn--ghost btn--sm" @click="cancel">{{ t('admin.wizardExit') }}</button>
     </header>
@@ -381,7 +410,9 @@ onMounted(async () => {
 
           <div class="form-field">
             <label for="create-name">{{ t('admin.name') }}</label>
-            <input id="create-name" v-model="form.name" class="input input--lg" type="text" required autocomplete="off" />
+            <input id="create-name" ref="nameInput" v-model="form.name" class="input input--lg" :class="{ 'input--error': nameError }" type="text" required autocomplete="off"
+              :aria-invalid="Boolean(nameError)" :aria-describedby="nameError ? 'create-name-error' : undefined" />
+            <p v-if="nameError" id="create-name-error" class="error-text" role="alert">{{ nameError }}</p>
           </div>
 
           <div class="form-field">
@@ -396,7 +427,7 @@ onMounted(async () => {
           <div class="form-field">
             <label for="create-slug">{{ t('admin.slug') }}</label>
             <input id="create-slug" ref="slugInput" v-model="form.slug" class="input" type="text" maxlength="80"
-              autocapitalize="none" spellcheck="false" placeholder="summer-cup-2026"
+              autocapitalize="none" spellcheck="false" :placeholder="slugPlaceholder"
               :aria-invalid="Boolean(slugError)" aria-describedby="create-slug-preview create-slug-error" />
             <p id="create-slug-preview" class="wizard__link-preview">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>
@@ -465,7 +496,7 @@ onMounted(async () => {
             </div>
 
             <div class="form-field">
-              <label for="create-gender">{{ t('admin.championshipGender') }}</label>
+              <label for="create-gender">{{ t('admin.divisionLabel') }}</label>
               <select id="create-gender" v-model="form.gender" class="input">
                 <option value="men">{{ t('admin.genderMen') }}</option>
                 <option value="women">{{ t('admin.genderWomen') }}</option>
@@ -499,9 +530,10 @@ onMounted(async () => {
         <section class="wizard__group wizard__group--plain">
           <RegistrationRulesFields
             :form="form"
-            :tournament="{ sport: form.sport, category: effectiveCategory, doubles_pairing_mode: form.doubles_pairing_random ? 'pick_random' : 'pre_agreed' }"
+            :tournament="{ sport: form.sport, format: form.format, category: effectiveCategory, doubles_pairing_mode: form.doubles_pairing_random ? 'pick_random' : 'pre_agreed' }"
             :disabled="saving"
             id-prefix="create-reg"
+            hide-main-legend
           />
         </section>
         </template>
@@ -518,6 +550,8 @@ onMounted(async () => {
             <span class="wizard__recap-name">{{ form.name || t('admin.wizardUntitled') }}</span>
             <span class="wizard__recap-meta">{{ previewMeta }}</span>
             <span v-if="form.sport === 'tennis'" class="wizard__recap-rules">{{ tennisRulesSummary(form.scoring_config, t) }}</span>
+            <span class="wizard__recap-rules">{{ recapRegistration }}</span>
+            <span class="wizard__recap-rules wizard__recap-link">{{ recapLink }}</span>
           </div>
         </div>
         <section class="wizard__group wizard__group--plain">
@@ -649,11 +683,21 @@ onMounted(async () => {
 
 .wizard__seg {
   width: 34px;
-  height: 5px;
+  height: 21px;
+  padding: 8px 0;
+  border: 0;
   border-radius: 3px;
   background: var(--border);
+  background-clip: content-box;
+  cursor: default;
   transition: background 0.2s;
 }
+
+.wizard__seg:disabled { opacity: 1; }
+.wizard__seg--link { cursor: pointer; }
+.wizard__seg--link:hover { background-color: var(--primary-hover); }
+.wizard__seg:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.wizard__recap-link { font-family: var(--font-mono); overflow-wrap: anywhere; }
 
 .wizard__seg--on { background: var(--primary); }
 

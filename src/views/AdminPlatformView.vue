@@ -4,8 +4,9 @@ import { useI18n } from 'vue-i18n'
 
 import { SPORTS, sportFlagKey } from '../lib/sportConfig'
 import { useFeatureFlagsStore } from '../stores/featureFlags'
+import AppIcon from '../components/AppIcon.vue'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const flags = useFeatureFlagsStore()
 
 const loading = ref(true)
@@ -13,7 +14,6 @@ const loadError = ref('')
 const saveError = ref('')
 const pending = ref(new Set())
 
-const SPORT_ICONS = { tennis: '🎾', padel: '🏸', football: '⚽' }
 
 // Every sport known to the frontend registry, whether or not the DB has a row yet.
 const sportRows = computed(() => SPORTS.map((sport) => {
@@ -42,7 +42,7 @@ function isPending(key) {
 function formatDate(value) {
   if (!value) return ''
   try {
-    return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
+    return new Intl.DateTimeFormat(locale.value, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
   } catch {
     return ''
   }
@@ -77,7 +77,10 @@ onMounted(async () => {
 <template>
   <div class="stack" style="max-width: 720px">
     <div>
-      <h1 class="page-title">{{ t('admin.platformTitle') }}</h1>
+      <RouterLink class="admin-back-link" :to="{ name: 'admin-tournaments' }">
+      {{ t('admin.backToList') }}
+    </RouterLink>
+    <h1 class="page-title">{{ t('admin.platformTitle') }}</h1>
       <p class="muted">{{ t('admin.platformIntro') }}</p>
     </div>
 
@@ -94,7 +97,7 @@ onMounted(async () => {
 
       <ul class="flag-list" :aria-busy="loading">
         <li v-for="row in sportRows" :key="row.key" class="flag-row">
-          <span class="flag-row__icon" aria-hidden="true">{{ SPORT_ICONS[row.sport] || '🏆' }}</span>
+          <span class="flag-row__icon" aria-hidden="true"><AppIcon :name="row.sport" :size="22" /></span>
           <div class="flag-row__text">
             <span class="flag-row__name">{{ t('sport.' + row.sport) }}</span>
             <span class="flag-row__meta">
@@ -172,9 +175,15 @@ onMounted(async () => {
   border-top: none;
 }
 .flag-row__icon {
-  font-size: 1.5rem;
-  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
   flex: none;
+  color: var(--primary);
+  background: var(--primary-soft);
 }
 .flag-row__text {
   display: flex;
