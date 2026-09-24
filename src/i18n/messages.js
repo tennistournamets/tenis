@@ -263,6 +263,10 @@ export const messages = {
       memberTwoOptional: 'Партнёр (по желанию)',
     },
     admin: {
+      arrangeSlots: 'Переставить участников',
+      arrangeDone: 'Готово',
+      arrangeHint: 'Перетащите участника на другое место первого круга или нажмите на двух участников по очереди: они поменяются местами. Затем сохраните расстановку.',
+      arrangeHintDE: 'Переставлять можно в первом круге верхней сетки: перетащите участника или нажмите на двух по очереди. Нижняя сетка заполняется по результатам. Затем сохраните расстановку.',
       listHintCloseOnly: 'Матчи готовы: закройте регистрацию',
       listHintPending: 'Заявок ждут решения: {n}',
       listHintNeedEntries: 'Нужно минимум два подтверждённых участника',
@@ -1122,6 +1126,10 @@ export const messages = {
       memberTwoOptional: 'Partner (optional)',
     },
     admin: {
+      arrangeSlots: 'Rearrange players',
+      arrangeDone: 'Done',
+      arrangeHint: 'Drag a player to another first-round slot, or tap two players in turn to swap them. Then save the layout.',
+      arrangeHintDE: 'Players can be moved in the first upper-bracket round: drag or tap two in turn. The lower bracket fills from results. Then save the layout.',
       listHintCloseOnly: 'Matches are ready: close registration',
       listHintPending: 'Entries awaiting decision: {n}',
       listHintNeedEntries: 'At least two approved entries are needed',
@@ -1981,6 +1989,10 @@ export const messages = {
       memberTwoOptional: 'Partneris (nebūtina)',
     },
     admin: {
+      arrangeSlots: 'Perstatyti dalyvius',
+      arrangeDone: 'Baigta',
+      arrangeHint: 'Nuvilkite dalyvį į kitą pirmo rato vietą arba paeiliui paspauskite du dalyvius — jie apsikeis. Tada išsaugokite.',
+      arrangeHintDE: 'Perstatyti galima pirmame viršutinio tinklelio rate: nuvilkite arba paeiliui paspauskite du. Apatinis tinklelis pildosi pagal rezultatus. Tada išsaugokite.',
       listHintCloseOnly: 'Rungtynės paruoštos: uždarykite registraciją',
       listHintPending: 'Paraiškų laukia sprendimo: {n}',
       listHintNeedEntries: 'Reikia bent dviejų patvirtintų dalyvių',

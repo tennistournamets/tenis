@@ -11,8 +11,10 @@ const props = defineProps({
   entriesMap: { type: Object, default: () => ({}) },
   liveScoresByMatch: { type: Object, default: () => ({}) },
   canLiveScore: { type: Boolean, default: false },
+  // Manual draw: players are rearranged in the first upper-bracket round only.
+  editableSlots: { type: Boolean, default: false },
 })
-const emit = defineEmits(['view-live'])
+const emit = defineEmits(['view-live', 'swap-slots'])
 const { t } = useI18n()
 const isNarrowLayout = useNarrowLayout()
 const activeStage = ref('winners')
@@ -62,6 +64,8 @@ watch(panels, (next) => {
           :entries-map="entriesMap"
           :live-scores-by-match="liveScoresByMatch"
           :can-live-score="canLiveScore"
+          :editable-slots="editableSlots"
+          @swap-slots="emit('swap-slots', $event)"
           @view-live="emit('view-live', $event)"
         />
       </div>
