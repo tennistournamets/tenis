@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppIcon from './AppIcon.vue'
-import { entryMemberNames } from '../lib/entryDisplay'
+import { entryDisplayNames } from '../lib/entryDisplay'
 import { tournamentChampion } from '../lib/tournamentChampion'
 
 // The tournament's outcome, shared by the admin page and the public page: the
@@ -25,7 +25,8 @@ const champion = computed(() => tournamentChampion({
 }))
 const championName = computed(() => {
   const entry = props.entriesMap[champion.value?.entryId]
-  const names = entryMemberNames(entry)
+  // The same name the bracket and the tables show (the chosen display name first).
+  const names = entryDisplayNames(entry)
   return names.length ? names.join(' / ') : entry?.display_name || t('bracket.tbd')
 })
 const completed = computed(() => props.status === 'completed')

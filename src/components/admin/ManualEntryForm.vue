@@ -13,6 +13,8 @@ const props = defineProps({
   entries: { type: Array, default: () => [] },
   busy: Boolean,
   canManage: Boolean,
+  // A bracket, groups or fixtures already exist: an approved addition makes them stale.
+  hasStructure: Boolean,
 })
 const emit = defineEmits(['update:busy', 'saved'])
 const { t } = useI18n()
@@ -94,6 +96,7 @@ async function addEntryManually() {
   // form, sometimes a namesake. Ask, do not block.
   const twin = sameNameMember(props.entries, [m1, category === 'doubles' ? m2 : ''])
   if (twin && !(await confirmDialog(t('admin.addEntrySameName', { name: twin })))) return
+  if (props.hasStructure && !addEntryForm.asPending && !(await confirmDialog(t('groupsFlow.rosterChangeConfirm')))) return
 
   actionLoading.value = true
 

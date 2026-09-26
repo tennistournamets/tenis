@@ -1,7 +1,7 @@
 <script setup>
 import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ruleForSet, settleTiebreakGames } from '../lib/tennisRules'
+import { ruleForSet, setResult } from '../lib/tennisRules'
 const props = defineProps({
   modelValue: { type: Array, required: true }, scoringConfig: { type: Object, default: () => ({}) },
   setFormat: { type: String, default: 'best_of_3' }, teamA: String, teamB: String, disabled: Boolean,
@@ -30,11 +30,10 @@ function change(row, key, value) {
 // Board: winner of each set by games (or match-tiebreak points), for highlighting.
 const main = row => (matchTb(row) ? 'tiebreak' : 'games')
 function setWinner(typed) {
-  // 6:6 with a finished tie-break counts as won, the way it will be saved (7:6).
-  const row = settleTiebreakGames(typed, rule(typed))
-  const a = row[`side_a_${main(row)}`], b = row[`side_b_${main(row)}`]
-  if (a === '' || b === '' || a == null || b == null || Number(a) === Number(b)) return null
-  return Number(a) > Number(b) ? 'a' : 'b'
+  // Only a set that is complete under the rules counts (6:5 or 3:2 is still in
+  // play); 6:6 with a finished tie-break counts as won, the way it is saved (7:6).
+  const result = setResult(typed, rule(typed))
+  return result === 1 ? 'a' : result === 2 ? 'b' : null
 }
 const setsWon = side => props.modelValue.filter(row => setWinner(row) === side).length
 // A games value is one digit whenever the set has a tiebreak cap, so the cursor

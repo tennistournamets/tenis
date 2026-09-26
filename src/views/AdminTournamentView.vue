@@ -299,6 +299,8 @@ const canEditScores = computed(() => scoreAccess.value.scores)
 const canUseLiveScoring = computed(() => scoreAccess.value.live)
 const canEditFinalScores = computed(() => scoreAccess.value.final)
 const regState = computed(() => registrationDisplayState(registration.value, Date.now(), tournament.value))
+// Every seat is taken by approved entries: approving more would only be refused by the server.
+const seatsFull = computed(() => registration.value?.capacity != null && registration.value?.occupied != null && registration.value.occupied >= registration.value.capacity)
 // Past the deadline an open registration accepts nothing: the badge says closed.
 const badgeStatus = computed(() => (regState.value.deadlinePassed && tournament.value?.status === 'registration_open' ? 'registration_closed' : displayStatus(tournament.value)))
 const showDeadlineHint = computed(() => canManageTournament.value && regState.value.deadlinePassed && tournament.value?.status === 'registration_open')
@@ -335,7 +337,7 @@ const showStartButton = computed(() => {
 // Concrete reason why "Start tournament" is disabled (shown as tooltip).
 const startBlockReason = computed(() => {
   if (canStartTournament.value) return null
-  if (tournament.value?.status !== 'registration_closed') return t('admin.startNeedRegClosed')
+  if (tournament.value?.status !== 'registration_closed') return t(regState.value.deadlinePassed ? 'admin.startNeedRegClosedDeadline' : 'admin.startNeedRegClosed')
   if (matches.value.length && rosterState.value.stale) return t('groupsFlow.startNeedRegenerate')
   // Round robin and groups have matches, not a bracket.
   return isRoundRobin.value || isGroupsPlayoff.value ? t('admin.startNeedMatches', { tab: bracketTabLabel.value }) : t('admin.startNeedBracket')
@@ -1702,6 +1704,7 @@ onBeforeUnmount(() => {
             :entries="entries"
             :busy="actionLoading || settingsSaving"
             :can-manage="canManageTournament"
+            :has-structure="hasBracket"
             @update:busy="actionLoading = $event"
             @saved="refreshScoreData"
           />
@@ -1732,9 +1735,9 @@ onBeforeUnmount(() => {
                   <button
                     class="entry-icon-btn entry-icon-btn--approve"
                     type="button"
-                    :disabled="actionLoading"
+                    :disabled="actionLoading || seatsFull"
                     :aria-label="t('a11y.entryAction', { action: t('admin.approve'), name: entryLabel(entry) })"
-                    :title="t('admin.approve')"
+                    :title="seatsFull ? t('registrationRules.errors.full') : t('admin.approve')"
                     @click="updateEntryStatus(entry.id, 'approved')"
                   >
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
@@ -1770,9 +1773,9 @@ onBeforeUnmount(() => {
                     <button
                       class="entry-icon-btn entry-icon-btn--approve"
                       type="button"
-                      :disabled="actionLoading"
+                      :disabled="actionLoading || seatsFull"
                       :aria-label="t('a11y.entryAction', { action: t('admin.approve'), name: entryLabel(entry) })"
-                      :title="t('admin.approve')"
+                      :title="seatsFull ? t('registrationRules.errors.full') : t('admin.approve')"
                       @click="updateEntryStatus(entry.id, 'approved')"
                     >
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
