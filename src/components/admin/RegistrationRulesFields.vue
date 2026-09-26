@@ -1,7 +1,7 @@
 <script setup>
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { FEE_CURRENCIES, FEE_UNITS, feeUnitDefault } from '../../lib/registrationRules'
+import { FEE_CURRENCIES, feeUnitDefault, feeUnitsFor } from '../../lib/registrationRules'
 import DateTimeField from '../DateTimeField.vue'
 import InfoTip from '../InfoTip.vue'
 
@@ -23,8 +23,10 @@ const { t } = useI18n()
 const countsPlayers = computed(() => props.tournament?.category === 'doubles' && props.tournament?.doubles_pairing_mode === 'pick_random')
 const capacityHint = computed(() => [t('registrationRules.capacityHint'), countsPlayers.value ? t('registrationRules.capacityPlayersHint') : '']
   .filter(Boolean).join(' '))
+// Only units that exist in this tournament: no "per pair" in singles.
+const feeUnits = computed(() => feeUnitsFor(props.tournament))
 const unitValue = computed({
-  get: () => props.form.entry_fee_unit || feeUnitDefault(props.tournament),
+  get: () => (feeUnits.value.includes(props.form.entry_fee_unit) ? props.form.entry_fee_unit : feeUnitDefault(props.tournament)),
   set: value => { props.form.entry_fee_unit = value },
 })
 // Double elimination (v1) needs a power-of-two field, so its seat limit is a
@@ -146,7 +148,7 @@ const unitLabel = unit => t(unit === 'pair' ? 'registrationRules.feeUnitPair' : 
     <div v-if="form.entry_fee_mode === 'paid'" class="form-field">
       <label :for="`${idPrefix}-fee-unit`">{{ t('registrationRules.feeUnit') }}</label>
       <select :id="`${idPrefix}-fee-unit`" v-model="unitValue" class="input">
-        <option v-for="unit in FEE_UNITS" :key="unit" :value="unit">{{ unitLabel(unit) }}</option>
+        <option v-for="unit in feeUnits" :key="unit" :value="unit">{{ unitLabel(unit) }}</option>
       </select>
     </div>
   </fieldset>

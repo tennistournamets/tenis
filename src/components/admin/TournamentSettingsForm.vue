@@ -7,7 +7,7 @@ import InfoTip from '../InfoTip.vue'
 import RegistrationRulesFields from './RegistrationRulesFields.vue'
 import VenueFields from './VenueFields.vue'
 import { getSportConfig } from '../../lib/sportConfig'
-import { REGISTRATION_DRAFT_KEYS, formatDeadline, pickRegistrationDraft, registrationDraftFields, registrationPatch, validateRegistrationForm } from '../../lib/registrationRules'
+import { REGISTRATION_DRAFT_KEYS, formatDeadline, pickRegistrationDraft, registrationDraftFields, registrationPatch, validateRegistrationForm, organizerContactError } from '../../lib/registrationRules'
 import { COMMON_TIMEZONES, browserTimezone } from '../../lib/schedule'
 import { VISIBILITY_MODES, accessError, visibilityOf } from '../../lib/access'
 import { useFormDraft, cloneForm, matchVersions } from '../../lib/formDraft'
@@ -166,6 +166,8 @@ async function saveTournamentSettings() {
   const regForm = pickRegistrationDraft(submitted)
   const regError = validateRegistrationForm(regForm)
   if (regError) { settingsError.value = t(regError); return }
+  const contactError = organizerContactError(submitted.contact_phone, submitted.contact_email)
+  if (contactError) { settingsError.value = t(contactError); return }
   const minRest = String(submitted.schedule_min_rest ?? '').trim()
   if (minRest !== '' && !/^\d+$/.test(minRest)) { settingsError.value = t('schedule.errors.invalidConfig'); return }
   const deadlineChanged = regForm.registration_deadline !== settingsDraft.baseline.value.registration_deadline

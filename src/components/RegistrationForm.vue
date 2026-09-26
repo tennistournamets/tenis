@@ -6,7 +6,7 @@ import { useUnsavedChanges, confirmDiscard } from '../lib/unsavedChanges'
 import { cloneForm, sameForm } from '../lib/formDraft'
 import { supabase } from '../lib/supabase'
 import { scoringFamily } from '../lib/sportConfig'
-import { registrationDisplayState, registrationError, closedReasonKey } from '../lib/registrationRules'
+import { registrationDisplayState, registrationError, closedReasonKey, entryNamesError } from '../lib/registrationRules'
 
 const props = defineProps({
   tournament: {
@@ -102,6 +102,13 @@ async function submit() {
     return
   }
 
+  const namesError = entryNamesError(entryType.value, form.memberOne, form.memberTwo, form.displayName)
+  if (namesError) {
+    errorText.value = t(namesError)
+    loading.value = false
+    return
+  }
+
   const memberTwo = entryType.value === 'doubles' && form.memberTwo.trim()
     ? form.memberTwo
     : null
@@ -162,6 +169,7 @@ async function submit() {
         v-model="form.memberOne"
         class="input"
         type="text"
+        maxlength="100"
         autocomplete="name"
         :disabled="loading"
         required
@@ -175,6 +183,7 @@ async function submit() {
         v-model="form.memberTwo"
         class="input"
         type="text"
+        maxlength="100"
         autocomplete="name"
         :disabled="loading"
         required
@@ -188,6 +197,7 @@ async function submit() {
         v-model="form.memberTwo"
         class="input"
         type="text"
+        maxlength="100"
         autocomplete="name"
         :disabled="loading"
       />
@@ -200,6 +210,7 @@ async function submit() {
         v-model="form.displayName"
         class="input"
         type="text"
+        maxlength="160"
         aria-describedby="reg-display-name-hint"
         :disabled="loading"
       />

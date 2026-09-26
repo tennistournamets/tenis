@@ -124,14 +124,36 @@ export function pickRegistrationDraft(form) {
   return Object.fromEntries(REGISTRATION_DRAFT_KEYS.map(key => [key, form[key]]))
 }
 
+/** Fee units that exist in a tournament: a team (football), a pair (doubles), always a player. */
+export function feeUnitsFor(tournament) {
+  if (scoringFamily(tournament?.sport || 'tennis') === 'goals') return ['team', 'player']
+  return tournament?.category === 'doubles' ? ['pair', 'player'] : ['player']
+}
+
 /** Returns an i18n key describing the first invalid field, or null. */
 export function validateRegistrationForm(form) {
   const capacity = String(form.registration_capacity ?? '').trim()
   if (capacity !== '' && !(/^\d+$/.test(capacity) && Number(capacity) > 0)) return 'registrationRules.errors.invalidCapacity'
+  // The waitlist queues entries beyond the limit; without a limit it never applies.
+  if (form.waitlist_enabled && capacity === '') return 'registrationRules.errors.waitlistNeedsCapacity'
   if (form.entry_fee_mode === 'paid') {
     if (!FEE_CURRENCIES.includes(form.entry_fee_currency)) return 'registrationRules.errors.invalidFee'
-    if (amountToMinor(form.entry_fee_amount, form.entry_fee_currency) == null) return 'registrationRules.errors.invalidFee'
+    const minor = amountToMinor(form.entry_fee_amount, form.entry_fee_currency)
+    if (minor == null) return 'registrationRules.errors.invalidFee'
+    if (minor === 0) return 'registrationRules.errors.zeroFee'
   }
+  return null
+}
+
+const CONTACT_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const CONTACT_PHONE = /^\+?[\d\s\-()]{7,20}$/
+
+/** Organizer contacts: optional, but a filled field must be a phone / an email (same shapes as the server). */
+export function organizerContactError(phone, email) {
+  const p = String(phone ?? '').trim()
+  const e = String(email ?? '').trim()
+  if (p && !CONTACT_PHONE.test(p)) return 'registrationRules.errors.invalidPhone'
+  if (e && !CONTACT_EMAIL.test(e)) return 'registrationRules.errors.invalidEmail'
   return null
 }
 
@@ -154,8 +176,25 @@ export function registrationPatch(form, tournament = null) {
   }
   if (patch.entry_fee_mode === 'paid') {
     patch.entry_fee_currency = form.entry_fee_currency
-    patch.entry_fee_unit = form.entry_fee_unit || feeUnitDefault(tournament)
+    // A unit that does not exist in this tournament (per pair in singles) falls back to its default.
+    patch.entry_fee_unit = feeUnitsFor(tournament).includes(form.entry_fee_unit) ? form.entry_fee_unit : feeUnitDefault(tournament)
     patch.entry_fee_minor = amountToMinor(form.entry_fee_amount, form.entry_fee_currency)
   }
   return patch
+}
+
+// Same limits as validate_entry_names() on the server.
+export const MEMBER_NAME_MAX = 100
+export const DISPLAY_NAME_MAX = 160
+const nameKey = name => String(name ?? '').trim().replace(/\s+/g, ' ').toLowerCase()
+
+/** i18n key of the first problem with the entered names, or null. */
+export function entryNamesError(entryType, memberOne, memberTwo, displayName = '') {
+  const one = String(memberOne ?? '').trim()
+  const two = String(memberTwo ?? '').trim()
+  if (one.length > MEMBER_NAME_MAX || two.length > MEMBER_NAME_MAX || String(displayName ?? '').trim().length > DISPLAY_NAME_MAX) {
+    return 'registrationRules.errors.nameTooLong'
+  }
+  if (entryType === 'doubles' && two && nameKey(one) === nameKey(two)) return 'registrationRules.errors.samePlayer'
+  return null
 }

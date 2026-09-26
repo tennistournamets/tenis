@@ -17,7 +17,7 @@ import AppIcon from '../components/AppIcon.vue'
 import FormatPicker from '../components/FormatPicker.vue'
 import TennisRulesSettings from '../components/TennisRulesSettings.vue'
 import RegistrationRulesFields from '../components/admin/RegistrationRulesFields.vue'
-import { hasRegistrationRules, pickRegistrationDraft, registrationDraftFields, registrationPatch, validateRegistrationForm } from '../lib/registrationRules'
+import { hasRegistrationRules, pickRegistrationDraft, registrationDraftFields, registrationPatch, validateRegistrationForm, organizerContactError } from '../lib/registrationRules'
 import { CREATE_VISIBILITY_MODES } from '../lib/access'
 import { DEFAULT_TENNIS_RULES, tennisRulesSummary } from '../lib/tennisRules'
 import VenueFields from '../components/admin/VenueFields.vue'
@@ -163,6 +163,12 @@ async function nextStep() {
       await showCreateError(slugInput)
       return
     }
+    const contactError = organizerContactError(form.contact_phone, form.contact_email)
+    if (contactError) {
+      errorText.value = t(contactError)
+      await showCreateError(formError)
+      return
+    }
   }
   if (step.value === 5) {
     const regError = validateRegistrationForm(pickRegistrationDraft(form))
@@ -210,6 +216,13 @@ async function createTournament() {
     step.value = 3
     slugError.value = t('mobile.invalidSlug')
     await showCreateError(slugInput)
+    return
+  }
+  const contactError = organizerContactError(form.contact_phone, form.contact_email)
+  if (contactError) {
+    step.value = 3
+    errorText.value = t(contactError)
+    await showCreateError(formError)
     return
   }
   const regForm = pickRegistrationDraft(form)
