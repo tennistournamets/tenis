@@ -2323,6 +2323,29 @@ textarea.input:focus {
 
 .admin-page-alert {
   margin-bottom: var(--space-4);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  scroll-margin-top: 96px;
+}
+
+.admin-page-alert__close {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  margin: -4px -6px -4px 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.admin-page-alert__close:hover {
+  background: color-mix(in srgb, currentColor 12%, transparent);
 }
 
 .admin-tournament-overview__top {

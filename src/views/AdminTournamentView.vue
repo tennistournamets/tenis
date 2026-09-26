@@ -47,6 +47,7 @@ import { useHeaderTitle } from '../lib/headerTitle'
 import { onTabKeydown as onSurfaceTabKeydown } from '../lib/tabNavigation'
 import { statusBadgeClass } from '../lib/tournamentStatus'
 import { errorMessage } from '../lib/errorMessages'
+import { usePageAlerts } from '../lib/pageAlerts'
 import { bracketPlan, groupCountOptions, groupPlan, roundRobinPlan } from '../lib/formatPlan'
 
 const props = defineProps({
@@ -1209,13 +1210,19 @@ function readHashTab() {
 }
 
 const activeTab = ref(readHashTab())
+const pageErrorEl = ref(null)
+// Without a loaded tournament errorText is the full-page error, not a banner.
+onBeforeUnmount(usePageAlerts({ errorText, noticeText, activeTab, alertEl: pageErrorEl, keepError: () => !tournament.value }))
 
 function setTab(tab) {
   if (!TABS.includes(tab) || !isTabEnabled(tab)) {
     return
   }
   activeTab.value = tab
-  history.replaceState(null, '', `#${tab}`)
+  // Keep Vue Router's history.state (back/current/position); replacing it with null
+  // triggers "history.state seems to have been manually replaced".
+  const url = `${window.location.pathname}${window.location.search}#${tab}`
+  history.replaceState({ ...(history.state || {}), current: url }, '', url)
 }
 
 function syncTabFromHash() {
@@ -1411,11 +1418,13 @@ onBeforeUnmount(() => {
         {{ t('sync.unavailable') }}
         <button class="btn btn--secondary btn--sm" type="button" @click="retryLoad">{{ t('sync.retry') }}</button>
       </div>
-      <div v-if="errorText" class="alert alert--error admin-page-alert" role="alert">
-        {{ errorText }}
+      <div v-if="errorText" ref="pageErrorEl" class="alert alert--error admin-page-alert" role="alert">
+        <span>{{ errorText }}</span>
+        <button type="button" class="admin-page-alert__close" :aria-label="t('actions.close')" @click="errorText = ''">×</button>
       </div>
       <div v-if="noticeText" class="alert alert--info admin-page-alert" role="status">
-        {{ noticeText }}
+        <span>{{ noticeText }}</span>
+        <button type="button" class="admin-page-alert__close" :aria-label="t('actions.close')" @click="noticeText = ''">×</button>
       </div>
 
       <section class="card card--elevated admin-tournament-overview stack stack--sm" aria-labelledby="adm-tournament-title">
