@@ -48,6 +48,7 @@ import { onTabKeydown as onSurfaceTabKeydown } from '../lib/tabNavigation'
 import { statusBadgeClass } from '../lib/tournamentStatus'
 import { errorMessage } from '../lib/errorMessages'
 import { usePageAlerts } from '../lib/pageAlerts'
+import { pluralParams } from '../lib/plural'
 import { bracketPlan, groupCountOptions, groupPlan, roundRobinPlan } from '../lib/formatPlan'
 
 const props = defineProps({
@@ -57,7 +58,7 @@ const props = defineProps({
   },
 })
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 // The fallback keeps isolated component previews functional; routed product
 // pages always receive the real Vue Router instances.
 const route = useRoute() || { query: {}, hash: '' }
@@ -620,20 +621,20 @@ watch(groupOptions, (options) => {
 }, { immediate: true })
 const groupPlanText = computed(() => {
   const plan = groupPlan(approvedEntries.value.length, groupCount.value, tournament.value?.format_config?.advance_per_group)
-  return t('admin.groupPlan', {
+  return t('admin.groupPlan', pluralParams({
     groups: plan.groups,
     size: plan.minSize === plan.maxSize ? plan.minSize : `${plan.minSize}–${plan.maxSize}`,
     matches: plan.matches,
     advance: plan.advance,
     qualifiers: plan.qualifiers,
-  })
+  }, t, locale.value))
 })
 const bracketPlanBlocked = computed(() => isDoubleElim.value && !hasBracket.value && !bracketPlan(approvedEntries.value.length, 'double_elimination').valid)
 const bracketPlanText = computed(() => {
   const plan = bracketPlan(approvedEntries.value.length, tournamentFormat.value)
   if (plan.n < 2) return t('nextStep.entriesTooFew')
-  if (isDoubleElim.value) return t('admin.bracketPlanDE', plan)
-  return t(plan.byes ? 'admin.bracketPlanByes' : 'admin.bracketPlanSE', plan)
+  if (isDoubleElim.value) return t('admin.bracketPlanDE', pluralParams(plan, t, locale.value))
+  return t(plan.byes ? 'admin.bracketPlanByes' : 'admin.bracketPlanSE', pluralParams(plan, t, locale.value))
 })
 const slotsEditable = computed(() => canManageTournament.value && (arrangeMode.value || bracketEditing.value)
   && !actionLoading.value && !isTournamentActive.value && !isTournamentFinished.value)
@@ -2068,7 +2069,7 @@ onBeforeUnmount(() => {
         <template v-if="isRoundRobin">
           <section v-if="canManageTournament && !isTournamentActive" class="card stack stack--sm">
             <h2 class="section-title">{{ t('standings.matchesTitle') }}</h2>
-            <p class="muted">{{ t('standings.rrPlan', rrPlan) }}</p>
+            <p class="muted">{{ t('standings.rrPlan', pluralParams(rrPlan, t, locale)) }}</p>
             <p v-if="hasBracket" class="muted">{{ t('standings.rrRegenerateWarn') }}</p>
             <div class="inline-actions">
               <button
