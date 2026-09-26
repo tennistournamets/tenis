@@ -109,6 +109,8 @@ export const scheduleMessages = {
       invalidCourts: 'Названия кортов должны быть непустыми, уникальными и не длиннее 60 символов.',
       invalidConfig: 'Проверьте минимальный отдых и часовой пояс.',
       queueLocked: 'Место в очереди не изменить: матч идёт в LIVE или уже завершён.',
+      matchFinished: 'Матч уже сыгран: его назначение не меняется.',
+      matchLive: 'Матч идёт в LIVE: его назначение не меняется до окончания.',
     },
   },
   en: {
@@ -221,6 +223,8 @@ export const scheduleMessages = {
       invalidCourts: 'Court names must be non-empty, unique and at most 60 characters.',
       invalidConfig: 'Check the minimum rest and the time zone.',
       queueLocked: 'The queue place cannot change: the match is live or already finished.',
+      matchFinished: 'The match has been played: its assignment no longer changes.',
+      matchLive: 'The match is live: its assignment cannot change until it ends.',
     },
   },
   lt: {
@@ -333,6 +337,8 @@ export const scheduleMessages = {
       invalidCourts: 'Aikštelių pavadinimai turi būti netušti, unikalūs ir ne ilgesni nei 60 simbolių.',
       invalidConfig: 'Patikrinkite minimalų poilsį ir laiko juostą.',
       queueLocked: 'Vietos eilėje keisti negalima: vyksta LIVE arba rungtynės baigtos.',
+      matchFinished: 'Rungtynės sužaistos: jų priskyrimas nebesikeičia.',
+      matchLive: 'Rungtynės vyksta LIVE: priskyrimo keisti negalima, kol jos nesibaigs.',
     },
   },
 }

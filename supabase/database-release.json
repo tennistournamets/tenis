@@ -99,6 +99,11 @@
       "sha256": "b7494ce4e09380b909bb976ef08d6cfdd712de59d02b24d584b3c2cbef66d046",
       "tenisAppliedVersion": null,
       "tenisNote": "Not applied to TENIS yet; apply via psql (session pooler) like the previous forward steps."
+    },
+    {
+      "path": "supabase/migrations/20260926123704_qa_round2_fixes.sql",
+      "sha256": "3b516095af7830fd4c75e7fa06678a52de942552db9d39a9479cf316c21dbde1",
+      "tenisNote": "Not applied to TENIS yet; apply via psql (session pooler) like the previous forward steps."
     }
   ],
   "baseline": {

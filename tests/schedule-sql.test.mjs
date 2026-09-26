@@ -136,9 +136,9 @@ test('finished and live matches cannot be moved; deleting matches removes their 
   await asActor(ctx, 'owner', "update tournaments set status='in_progress' where id=$1", [t.id])
   const live = (await asActor(ctx, 'counter', 'select (start_live_match($1,$2)).status s', [semis[0].id, semis[0].score_revision])).rows[0].s
   assert.equal(live, 'active')
-  await assert.rejects(setSchedule(semis[0], { court: courts[1].id, at: T2, kind: 'fixed' }), /schedule\.conflict/)
+  await assert.rejects(setSchedule(semis[0], { court: courts[1].id, at: T2, kind: 'fixed' }), /schedule\.matchLive/)
   await ctx.db.query("update matches set status='finished' where id=$1", [semis[1].id])
-  await assert.rejects(setSchedule(semis[1], { court: courts[1].id, at: T2, kind: 'fixed' }), /schedule\.conflict/)
+  await assert.rejects(setSchedule(semis[1], { court: courts[1].id, at: T2, kind: 'fixed' }), /schedule\.matchFinished/)
   assert.equal((await rows(t)).length, 1)
   await asActor(ctx, 'owner', 'delete from matches where tournament_id=$1', [t.id])
   assert.equal((await rows(t)).length, 0)
@@ -242,7 +242,7 @@ test('placing in a queue refuses what the server cannot move and never half-appl
   let before = await snapshot(ctx)
   await assert.rejects(place(ms[2], a, [ms[2].id, ms[0].id, ms[1].id]), /schedule\.queueLocked/)
   assert.deepEqual(await snapshot(ctx), before, 'the column is not left half-renumbered')
-  await assert.rejects(place(ms[0], a, [ms[1].id, ms[0].id, ms[2].id]), /schedule\.conflict/)
+  await assert.rejects(place(ms[0], a, [ms[1].id, ms[0].id, ms[2].id]), /schedule\.matchLive/)
   // A reorder that leaves the live match where it is stays allowed.
   await place(ms[1], a, [ms[0].id, ms[1].id, ms[2].id])
   assert.deepEqual(await queueOf(t, a), [[ms[0].id, 1], [ms[1].id, 2], [ms[2].id, 3]])
