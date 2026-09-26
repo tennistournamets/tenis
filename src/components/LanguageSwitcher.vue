@@ -1,8 +1,13 @@
 <script setup>
 import { nextTick, onMounted, onUnmounted, ref, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRoute, useRouter } from 'vue-router'
+import { landingPath, storeLocale } from '../lib/localeRoute'
+import { setAppLocale } from '../i18n'
 
 const { locale } = useI18n()
+const route = useRoute()
+const router = useRouter()
 const open = ref(false)
 const root = ref(null)
 const trigger = ref(null)
@@ -16,15 +21,13 @@ const locales = [
 
 const currentLocale = () => locales.find((l) => l.code === locale.value) || locales[0]
 
-function setLocale(code) {
-  locale.value = code
+async function setLocale(code) {
+  await setAppLocale(code)
   open.value = false
   trigger.value?.focus()
-  try {
-    localStorage.setItem('champ_locale', code)
-  } catch {
-    /* ignore */
-  }
+  storeLocale(code)
+  // The landing has one URL per language; elsewhere the address stays the same.
+  if (route.name === 'home') router.replace({ path: landingPath(code), query: route.query, hash: route.hash })
 }
 
 async function show(index = locales.findIndex(item => item.code === locale.value)) {

@@ -104,6 +104,12 @@
       "path": "supabase/migrations/20260926123704_qa_round2_fixes.sql",
       "sha256": "3b516095af7830fd4c75e7fa06678a52de942552db9d39a9479cf316c21dbde1",
       "tenisNote": "Applied 2026-09-26 via psql (session pooler, one transaction per file) after logical backup; no migration history entry. Catalog verified identical to the local chain."
+    },
+    {
+      "path": "supabase/migrations/20260926200333_participant_notifications.sql",
+      "sha256": "dee9624d901fe544ba94bb61afa2add9efb569d8ef599b451a673c80247350d6",
+      "tenisAppliedVersion": null,
+      "tenisNote": "Not applied to TENIS yet (needs confirmation, backup first)."
     }
   ],
   "baseline": {

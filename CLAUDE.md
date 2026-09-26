@@ -15,7 +15,7 @@ Web-application for organizing tournaments across multiple sports with live scor
 - **Frontend:** Vue 3 (Composition API, `<script setup>`) + Vue Router 4 + Pinia 3 — plain **JavaScript** (no TypeScript)
 - **Backend:** Supabase (PostgreSQL, Auth, Realtime)
 - **Auth:** Google OAuth via Supabase (tournament owners); super-admin via `platform_admins`
-- **i18n:** Vue I18n (ru/en/lt), default locale `ru`, stored in `localStorage` key `champ_locale`
+- **i18n:** Vue I18n (ru/en/lt), default locale `lt` (`DEFAULT_LOCALE` in `src/lib/localeRoute.js`), stored in `localStorage` key `champ_locale`
 - **Build:** Vite 7
 - **Styling:** Custom vanilla CSS with design tokens (no Tailwind/SCSS), dark theme support
 
@@ -38,11 +38,17 @@ src/
     LiveScoringModal.vue      # Point-by-point tennis scoring input (admin)
     RegistrationForm.vue      # Public registration form (sport-aware labels)
     LanguageSwitcher.vue      # RU/EN/LT locale selector
+    MadeWithBracketa.vue      # "Made with Bracketa" footer on public pages (growth link with utm)
+    EmbedCodeModal.vue        # "Website code" for club sites (snippet from lib/embedCode.js + public/embed.js)
+    ShareTournamentModal.vue  # WhatsApp/Telegram/Viber/email share, opened after create (?created=1) and after start
   i18n/
-    index.js                  # Vue I18n config
-    messages.js               # All translation strings (ru/en/lt)
+    index.js                  # Vue I18n config; loads only the active locale (setAppLocale / loadLocaleMessages)
+    messages.js               # All translation strings (ru/en/lt) — source of truth; the build splits it per locale
   lib/
     supabase.js               # Supabase client init
+    seo.js                    # Head tags, OG, sitemap/robots builders (shared by api/, prerender and client; plain ESM)
+    localeRoute.js            # DEFAULT_LOCALE (lt), landing language URLs (/ lt, /en, /ru) and the redirect rule for return visits
+    analytics.js              # Umami page views + funnel events (off without VITE_UMAMI_WEBSITE_ID; no PII)
     sportConfig.js            # Registry: sport -> capabilities (scoringFamily, forcedCategory, supports*)
     scoringEngines.js         # Registry: family (sets|goals) -> state/format helpers
     useTennisScoring.js       # Tennis scoring composable (sets family; reused by padel)
@@ -66,6 +72,11 @@ src/
   App.vue                     # Root component
   main.js                     # App entry point
   styles.css                  # Global styles
+api/                          # Vercel functions: preview.js (OG tags for messenger bots), og.js (per-tournament PNG via @vercel/og; _og-card.js layout, _fonts/), robots.js, sitemap.js, notifications.js (email sender; _notifier.js, _email.js)
+content/blog/<lang>/*.md      # Blog articles (front matter: title, description, key, date); every key in all 3 languages
+public/embed.js               # Club-site loader: iframe + auto height (postMessage, origin-checked)
+scripts/vite-locale-messages.js  # Vite plugin: virtual:bracketa-locale/<code> = one locale as JSON chunk
+scripts/prerender.mjs         # Post-build: Vue SSR of the landing -> dist/index.html (lt), en.html, ru.html + dist/app.html shell
 supabase/
   schema.sql                  # CANONICAL DB state (tables, RLS, functions, triggers). Reference + test oracle; NOT an install/upgrade procedure.
   migrations/                 # ACTIVE: baseline for a new DB + forward migrations (order and SHA-256 in database-release.json)
@@ -79,8 +90,12 @@ supabase/
 
 | Path | View | Auth |
 |------|------|------|
-| `/` | HomeView | No (redirects to `/admin/tournaments` if logged in) |
+| `/` (lt), `/en`, `/ru` | HomeView (one landing URL per language, route `/:lang(ru|en)?`) | No (redirects to `/admin/tournaments` if logged in) |
 | `/tournaments/:slug` | PublicTournamentView | No |
+| `/embed/:slug` | PublicTournamentView `embed` mode (club-site widget, noindex) | No |
+| `/tournaments/:slug/poster` | TournamentPosterView (A4 print, QR with utm_source=poster) | No |
+| `/blog/…`, `/ru/blog/…`, `/en/blog/…` | static pages from `content/blog/<lang>/*.md` (scripts/blog.mjs), not the SPA | No |
+| anything else | NotFoundView (HTTP 404 on Vercel via `dist/404.html`) | No |
 | `/admin/tournaments` | AdminTournamentListView | Yes |
 | `/admin/tournaments/new` | AdminTournamentCreateView | Yes |
 | `/admin/tournaments/:id` | AdminTournamentView | Yes |
@@ -106,6 +121,7 @@ supabase/
 - **match_sets** - per-set game scores (tennis/padel only)
 - **bracket_versions** - bracket snapshots for undo
 - **live_scores** - real-time point-by-point scoring state (JSON state/history/revision)
+- **notification_outbox** - participant emails queued by triggers on `entries` (received/waitlisted/approved/rejected) and by `enqueue_match_reminders()`; no addresses stored; closed to API roles. `entries.notify_locale` comes from the `x-bracketa-locale` request header (RegistrationForm sets it)
 
 ### Key PL/pgSQL Functions
 
@@ -131,6 +147,7 @@ supabase/
 - `add_tournament_admin_by_email()`, `remove_tournament_admin()` - co-organizer management
 - `is_tournament_admin()`, `can_live_score()`, `is_platform_admin()` - access checks
 - `is_feature_enabled(key)` / `set_feature_flag(key, enabled, description)` - feature flags; `create_tournament()` rejects a sport whose `sport.<x>` flag is off
+- `claim_notifications(limit)`, `complete_notification(id, ok, error)`, `notifications_due()` - email sender (service_role only; `api/notifications.js`, triggered by pg_cron — setup in docs/GROWTH.md)
 
 ### Security
 
@@ -198,6 +215,8 @@ npm install
 npm run dev      # http://localhost:5173
 npm run build    # Production build to dist/
 ```
+
+Growth/SEO setup (analytics id, domain, `SITE_URL`, Search Console) is in `docs/GROWTH.md`. `vercel.json` routes messenger crawler user agents on `/tournaments/:slug` to `api/preview`; keep that rewrite before the SPA fallback. `npm run build` also prerenders the landing (`scripts/prerender.mjs`): landing code must not touch `window`/`document` at import or setup beyond what `scripts/prerender-env.mjs` stubs, and the SPA shell is `dist/app.html`, served by `vercel.json` only for `/admin…`, `/tournaments/:slug`, `/embed/:slug` — a new top-level route needs a rewrite there, otherwise Vercel answers 404. Translations: keep `messages.js` plain data (no functions); set the language through `setAppLocale()` so its chunk is loaded first. Icons/preview images are re-rendered with `npm run icons` / `npm run og:image` (Google Chrome).
 
 DB changes follow `docs/RELEASE.md`: create a migration with `npx supabase migration new <name>` (redirect stdin from `/dev/null` in scripts, the CLI reads it), append the same SQL to `supabase/schema.sql` (canonical state), register the file with its SHA-256 in `supabase/database-release.json` (`forwardMigrations`), and keep `npm run test:sql` green in the `schema`, `fresh` and `upgrade` modes (`TENIS_TEST_INSTALL_MODE`). Every forward migration must be replayable (tests re-apply the whole chain). Never re-apply `schema.sql` to a working database. The free-tier project auto-pauses — resume it in the dashboard if connections fail.
 

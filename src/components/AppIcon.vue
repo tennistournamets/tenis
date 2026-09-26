@@ -35,6 +35,11 @@ const PATHS = {
     '<path d="M7.6 19.6 10 13"/>',
     '<path d="M16.4 19.6 14 13"/>',
   ],
+  code: [
+    '<path d="m8 8-4 4 4 4"/>',
+    '<path d="m16 8 4 4-4 4"/>',
+    '<path d="m13.5 5-3 14"/>',
+  ],
   share: [
     '<circle cx="18" cy="5" r="3"/>',
     '<circle cx="6" cy="12" r="3"/>',

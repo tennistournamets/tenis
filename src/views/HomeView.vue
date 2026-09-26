@@ -1,6 +1,7 @@
 <script setup>
-import { defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { RouterLink } from 'vue-router'
 
 import '../components/landing/cinematic.css'
 
@@ -12,8 +13,9 @@ import { useNarrowLayout } from '../lib/useNarrowLayout'
 import { tilt } from '../lib/tilt'
 import { useReveal } from '../lib/useReveal'
 import { useAuthStore } from '../stores/auth'
+import { DEFAULT_LOCALE, landingPath } from '../lib/localeRoute'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const activeStep = ref(1)
 const compact = useNarrowLayout()
 const { enabled: motionEnabled, reason: motionReason, failed: sceneFailed, toggle: toggleMotion } = useLandingMotion()
@@ -106,6 +108,14 @@ const LandingScene3D = defineAsyncComponent({
 const sports = ['tennis', 'padel', 'football']
 const formats = ['knockout', 'league', 'groups', 'double']
 const steps = ['step1', 'step2', 'step3']
+// Static articles (scripts/blog.mjs): a plain link, the blog is not part of the app.
+const blogHref = computed(() => (locale.value === DEFAULT_LOCALE ? '/blog' : `/${locale.value}/blog`))
+// Plain links to every language version: crawlers follow them, people can switch too.
+const languages = [
+  { code: 'ru', name: 'Русский' },
+  { code: 'en', name: 'English' },
+  { code: 'lt', name: 'Lietuvių' },
+]
 
 const features = [
   { key: 'liveScore', path: 'M13 2 4 14h7l-1 8 10-13h-7l1-7' },
@@ -231,6 +241,6 @@ function scrollTo(id) {
       <div v-if="!compact" class="cta-stage" data-stage="trophy" aria-hidden="true"><LandingStill kind="cup" /></div>
       <div class="landing-cta__inner reveal"><p class="landing-eyebrow">{{ t('home.cinematic.closingEyebrow') }}</p><h2 class="landing-cta__title">{{ t('home.cinematic.closingTitle') }}</h2><p class="landing-cta__subtitle">{{ t('home.cinematic.closingText') }}</p><button class="cinema-button" :disabled="signingIn" :aria-busy="signingIn" aria-describedby="closing-signin-note" @click="goRegister">{{ t(signingIn ? 'home.cinematic.signingIn' : 'home.cinematic.cta') }}<span aria-hidden="true">↗</span></button><p id="closing-signin-note" class="landing-hero__note">{{ t('home.cinematic.note') }}</p><p v-if="signInError" class="cinema-error" role="alert">{{ signInError }}</p></div>
     </section>
-    <footer class="landing-footer"><a class="footer-brand" href="#top" @click.prevent="scrollTo('top')">Bracketa<span>.</span></a><span>{{ t('home.cinematic.footer') }}</span><span class="landing-footer__copy">&copy; {{ new Date().getFullYear() }} Bracketa</span></footer>
+    <footer class="landing-footer"><a class="footer-brand" href="#top" @click.prevent="scrollTo('top')">Bracketa<span>.</span></a><span>{{ t('home.cinematic.footer') }}</span><span class="landing-footer__copy">&copy; {{ new Date().getFullYear() }} Bracketa</span><a class="landing-footer__blog" :href="blogHref">{{ t('app.blog') }}</a><nav class="landing-footer__langs" aria-label="Language / Язык / Kalba"><RouterLink v-for="item in languages" :key="item.code" :to="landingPath(item.code)" :hreflang="item.code" :lang="item.code" :aria-current="locale === item.code ? 'page' : undefined">{{ item.name }}</RouterLink></nav></footer>
   </div>
 </template>

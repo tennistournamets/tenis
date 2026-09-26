@@ -8,9 +8,13 @@ import LanguageSwitcher from './components/LanguageSwitcher.vue'
 import ThemeToggle from './components/ThemeToggle.vue'
 import { confirmLeaveForms, withApprovedDeparture } from './lib/unsavedChanges'
 import { headerTitle } from './lib/headerTitle'
+import { applyLandingHead, clearLandingHead } from './lib/seo'
+import { siteOrigin } from './lib/siteOrigin'
+import { DEFAULT_LOCALE, isLocale } from './lib/localeRoute'
 import { useOnlineStatus } from './lib/useOnlineStatus'
 import { useAuthStore } from './stores/auth'
 import BrandLogo from './components/BrandLogo.vue'
+import MadeWithBracketa from './components/MadeWithBracketa.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -25,7 +29,7 @@ const profileId = useId()
 const mainContent = ref(null)
 
 watchEffect(() => {
-  document.documentElement.lang = ['ru', 'en', 'lt'].includes(locale.value) ? locale.value : 'ru'
+  document.documentElement.lang = isLocale(locale.value) ? locale.value : DEFAULT_LOCALE
   const pages = {
     'admin-tournaments': 'admin.tournamentsListTitle',
     'admin-tournament-new': 'admin.createTournament',
@@ -34,6 +38,12 @@ watchEffect(() => {
     'admin-tournament': 'a11y.manageTournament',
     'public-tournament': 'a11y.tournamentPage',
   }
+  // The landing head matches the prerendered HTML of its language (title, canonical, hreflang).
+  if (route.name === 'home') {
+    applyLandingHead(document, locale.value, siteOrigin)
+    return
+  }
+  clearLandingHead(document)
   const namedTournament = ['admin-tournament', 'public-tournament'].includes(route.name) && headerTitle.value
   const title = namedTournament || (pages[route.name] ? t(pages[route.name]) : '')
   document.title = title ? `${title} — ${t('app.title')}` : t('app.title')
@@ -71,6 +81,12 @@ const layout = computed(() => {
   }
   if (route.name === 'public-tournament') {
     return 'public'
+  }
+  if (route.name === 'embed-tournament') {
+    return 'embed'
+  }
+  if (route.name === 'tournament-poster') {
+    return 'print'
   }
   return 'default'
 })
@@ -200,11 +216,13 @@ function goToPlatform() {
       class="app-main"
       :class="{
         'app-main--wide': layout === 'admin' || layout === 'public',
-        'app-main--flush': layout === 'login',
+        'app-main--flush': layout === 'login' || layout === 'print',
+        'app-main--embed': layout === 'embed',
       }"
     >
       <RouterView />
     </main>
+    <MadeWithBracketa v-if="layout === 'public'" />
     <ConfirmDialog />
   </div>
 </template>

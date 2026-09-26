@@ -3,6 +3,7 @@ import { computed, onUnmounted, ref, useId, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { copyTournamentLink, tournamentShareUrl } from '../lib/shareLink'
 import AppIcon from './AppIcon.vue'
+import { track } from '../lib/analytics'
 
 // `compact` renders icon-only buttons with tooltips (tournament header); the label stays for screen readers.
 const props = defineProps({
@@ -33,6 +34,7 @@ async function copy() {
   status.value = 'pending'
   try {
     await copyTournamentLink(props.slug)
+    track('share_link_copied')
     if (current !== request) return
     status.value = 'copied'
     timer = setTimeout(() => { status.value = 'idle' }, 2000)

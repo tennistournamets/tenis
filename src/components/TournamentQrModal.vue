@@ -22,6 +22,7 @@ const { t } = useI18n()
 const canvasEl = ref(null)
 
 const url = tournamentShareUrl(props.slug)
+const posterHref = `/tournaments/${encodeURIComponent(props.slug)}/poster`
 
 // High error correction so the code scans from posters/screens even when partly obscured.
 const QR_OPTS = {
@@ -61,6 +62,7 @@ async function downloadPng() {
       <p class="qr-modal__hint muted">{{ t('share.qrHint') }}</p>
 
       <div class="qr-modal__actions">
+        <a class="btn btn--outline btn--sm" :href="posterHref" target="_blank" rel="noopener">{{ t('poster.open') }}</a>
         <CopyTournamentLink :slug="slug" :name="name" compact />
         <span class="tooltip-wrapper" :data-tooltip="t('share.qrDownload')">
           <button class="btn btn--outline btn--sm btn--icon" type="button" :aria-label="t('share.qrDownload')" @click="downloadPng">

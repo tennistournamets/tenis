@@ -1,4 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Onest:wght@500;600;700;800&family=Golos+Text:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap');
 
 /* Bracketa design system — light theme (primary) */
 :root {
@@ -252,6 +251,11 @@ summary:focus-visible,
 
 .app-main--wide {
   max-width: 1400px;
+}
+
+.app-main--embed {
+  max-width: none;
+  padding: var(--space-2);
 }
 
 .app-main--flush {

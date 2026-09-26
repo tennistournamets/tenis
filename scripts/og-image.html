@@ -1,0 +1,85 @@
+<!doctype html>
+<!-- Source of public/og-image.png (link-preview image, 1200x630). Re-render: npm run og:image -->
+<html>
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Onest:wght@600;800&family=JetBrains+Mono:wght@600;700&display=block" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  html, body { width: 1200px; height: 630px; overflow: hidden; }
+  body {
+    position: relative;
+    background: #101512;
+    color: #F4F6F2;
+    font-family: 'Onest', system-ui, sans-serif;
+  }
+  .glow {
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(600px 420px at 88% 18%, rgba(198, 242, 78, 0.16), transparent 70%),
+      radial-gradient(700px 500px at 0% 100%, rgba(15, 123, 77, 0.45), transparent 70%);
+  }
+  .left { position: absolute; left: 80px; top: 0; bottom: 0; width: 520px; display: flex; flex-direction: column; justify-content: center; }
+  .brand { display: flex; align-items: center; gap: 20px; }
+  .brand h1 { font-size: 84px; font-weight: 800; letter-spacing: -0.045em; line-height: 1; }
+  .tag { margin-top: 36px; display: flex; gap: 12px; flex-wrap: wrap; }
+  .tag span {
+    padding: 10px 20px; border-radius: 999px; font-size: 26px; font-weight: 600;
+    background: rgba(255, 255, 255, 0.07); border: 1px solid rgba(255, 255, 255, 0.12);
+  }
+  .bracket { position: absolute; right: 64px; top: 50%; transform: translateY(-50%); }
+  .card {
+    position: absolute; width: 250px; border-radius: 16px; overflow: hidden;
+    background: #1B2320; border: 1px solid rgba(255, 255, 255, 0.1);
+    font-family: 'JetBrains Mono', monospace; font-size: 22px; font-weight: 600;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+  }
+  .row { display: flex; justify-content: space-between; align-items: center; height: 52px; padding: 0 18px; }
+  .row + .row { border-top: 1px solid rgba(255, 255, 255, 0.08); }
+  .row b { font-family: 'Onest', sans-serif; font-weight: 600; font-size: 22px; color: #DCE3DE; }
+  .row.win b { color: #FFFFFF; }
+  .row.win i { color: #C6F24E; }
+  .row i { font-style: normal; color: #8C9A92; letter-spacing: 0.08em; }
+  .card.live { border-color: rgba(255, 90, 72, 0.7); box-shadow: 0 0 0 4px rgba(255, 90, 72, 0.14), 0 12px 32px rgba(0, 0, 0, 0.35); }
+  .chip {
+    position: absolute; padding: 6px 14px; border-radius: 999px; background: #FF5A48; color: #fff;
+    font-family: 'Onest', sans-serif; font-weight: 800; font-size: 18px; letter-spacing: 0.08em;
+  }
+  .chip::before { content: ''; display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: #fff; margin-right: 8px; vertical-align: 2px; }
+  svg.lines { position: absolute; left: 0; top: 0; overflow: visible; }
+</style>
+</head>
+<body>
+  <div class="glow"></div>
+  <div class="left">
+    <div class="brand">
+      <svg width="84" height="84" viewBox="0 0 28 28" fill="none">
+        <rect width="28" height="28" rx="8" fill="#0F7B4D"/>
+        <path d="M11 8H9.5A1.5 1.5 0 0 0 8 9.5v9A1.5 1.5 0 0 0 9.5 20H11" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+        <path d="M17 8h1.5A1.5 1.5 0 0 1 20 9.5v9a1.5 1.5 0 0 1-1.5 1.5H17" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+        <circle cx="14" cy="14" r="2.2" fill="#C6F24E"/>
+      </svg>
+      <h1>Bracketa</h1>
+    </div>
+    <div class="tag"><span>Tennis</span><span>Padel</span><span>Football</span></div>
+  </div>
+
+  <div class="bracket" style="width:540px;height:480px">
+    <svg class="lines" width="540" height="480">
+      <g stroke="rgba(255,255,255,0.22)" stroke-width="2" fill="none">
+        <path d="M250 53 H270 V113 H290"/>
+        <path d="M250 173 H270 V113"/>
+        <path d="M250 303 H270 V363 H290"/>
+        <path d="M250 423 H270 V363"/>
+      </g>
+    </svg>
+    <div class="card" style="left:0;top:0"><div class="row win"><b>Kowalski</b><i>6 6</i></div><div class="row"><b>Petraitis</b><i>3 4</i></div></div>
+    <div class="card" style="left:0;top:120px"><div class="row"><b>Ivanov</b><i>4 5</i></div><div class="row win"><b>García</b><i>6 7</i></div></div>
+    <div class="card" style="left:0;top:250px"><div class="row win"><b>Müller</b><i>7 6</i></div><div class="row"><b>Silva</b><i>5 2</i></div></div>
+    <div class="card" style="left:0;top:370px"><div class="row"><b>Novak</b><i>2 6 3</i></div><div class="row win"><b>Jonaitis</b><i>6 3 6</i></div></div>
+    <div class="card live" style="left:290px;top:60px"><div class="row win"><b>Kowalski</b><i>6 3 40</i></div><div class="row"><b>García</b><i>4 5 30</i></div></div>
+    <div class="chip" style="left:410px;top:20px">LIVE</div>
+    <div class="card" style="left:290px;top:310px"><div class="row"><b>Müller</b><i>–</i></div><div class="row"><b>Jonaitis</b><i>–</i></div></div>
+  </div>
+</body>
+</html>
