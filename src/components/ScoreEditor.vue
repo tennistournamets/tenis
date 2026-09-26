@@ -204,7 +204,7 @@ async function save(match) {
     p_match_id: match.id,
     p_sets: payload,
     p_expected_revision: drafts[match.id]?.revision,
-  }, t)
+  }, t, { matches: props.matches })
 
   rows.forEach((row) => {
     row.saving = false

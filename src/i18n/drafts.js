@@ -16,6 +16,9 @@ export const draftMessages = {
     review: 'Я проверил новые условия',
     restored: 'Черновик из этой вкладки восстановлен.',
     discardStored: 'Очистить черновик',
+    bracketResultsLocked: 'Турнир начат или завершён, и в сетке уже есть результаты: пересборка стёрла бы их.',
+    bracketSlotLocked: 'Переставлять участников можно только в первом круге — в матчах, куда никто не выходит из других матчей.',
+    bracketLayoutInvalid: 'Расстановка должна сохранить всех участников по одному разу, и в каждом матче первого круга должен остаться хотя бы один участник.',
   },
   en: {
     matchRemoved: 'This match was deleted or the bracket was rebuilt. Your input is still visible; it cannot be saved to the old match.',
@@ -33,6 +36,9 @@ export const draftMessages = {
     registrationClosed: 'Registration is closed. Your draft is preserved in this form.', review: 'I reviewed the new conditions',
     restored: 'Your draft from this tab was restored.',
     discardStored: 'Clear draft',
+    bracketResultsLocked: 'The tournament has started or finished and the bracket has results: rebuilding would erase them.',
+    bracketSlotLocked: 'Players can be moved only in the first round — in matches no other match feeds.',
+    bracketLayoutInvalid: 'The layout must keep every player exactly once, and every first-round match needs at least one player.',
   },
   lt: {
     matchRemoved: 'Rungtynės pašalintos arba tinklelis sukurtas iš naujo. Įvestas rezultatas liko matomas; senoms rungtynėms jo išsaugoti negalima.',
@@ -50,5 +56,8 @@ export const draftMessages = {
     registrationClosed: 'Registracija uždaryta. Įvestis išsaugota šioje formoje.', review: 'Peržiūrėjau naujas sąlygas',
     restored: 'Atkurtas šio skirtuko juodraštis.',
     discardStored: 'Išvalyti juodraštį',
+    bracketResultsLocked: 'Turnyras prasidėjo arba baigėsi, o tinklelyje jau yra rezultatų: perkūrimas juos ištrintų.',
+    bracketSlotLocked: 'Dalyvius galima perkelti tik pirmajame rate — rungtynėse, į kurias niekas nepatenka iš kitų rungtynių.',
+    bracketLayoutInvalid: 'Išdėstyme kiekvienas dalyvis turi likti po vieną kartą, o kiekvienose pirmojo rato rungtynėse turi būti bent vienas dalyvis.',
   },
 }

@@ -21,5 +21,8 @@ test('groups split the field evenly and count their all-play-all matches', () =>
 test('brackets round up to a power of two; double elimination needs one exactly', () => {
   assert.deepEqual(bracketPlan(16, 'double_elimination'), { n: 16, size: 16, rounds: 4, byes: 0, upper: 15, lower: 14, final: 1, valid: true })
   assert.equal(bracketPlan(12, 'double_elimination').valid, false)
+  // Not a power of two: no bracket is built, so no match counts for the next size up.
+  assert.deepEqual([6, 1].map(n => { const p = bracketPlan(n, 'double_elimination'); return [p.valid, p.upper, p.lower, p.final] }), [[false, 0, 0, 0], [false, 0, 0, 0]])
+  assert.equal(bracketPlan(2, 'double_elimination').valid, true)
   assert.deepEqual(bracketPlan(12), { n: 12, size: 16, rounds: 4, byes: 4, matches: 11, valid: true })
 })

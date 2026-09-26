@@ -33,7 +33,9 @@ export function bracketPlan(n, format = 'single_elimination') {
   const size = count < 2 ? 0 : 2 ** Math.ceil(Math.log2(count))
   const rounds = size ? Math.log2(size) : 0
   if (format === 'double_elimination') {
-    return { n: count, size, rounds, byes: size - count, upper: size ? size - 1 : 0, lower: size > 2 ? size - 2 : 0, final: size ? 1 : 0, valid: isPowerOfTwo(count) }
+    // No byes in v1: other counts produce no bracket, so there is nothing to count.
+    const valid = count >= 2 && isPowerOfTwo(count)
+    return { n: count, size, rounds, byes: size - count, upper: valid ? size - 1 : 0, lower: valid && size > 2 ? size - 2 : 0, final: valid ? 1 : 0, valid }
   }
   return { n: count, size, rounds, byes: size - count, matches: count ? count - 1 : 0, valid: count >= 2 }
 }

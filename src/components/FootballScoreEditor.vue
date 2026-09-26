@@ -93,7 +93,7 @@ async function save(m) {
     p_a_pens: f.pa === '' ? null : Number(f.pa),
     p_b_pens: f.pb === '' ? null : Number(f.pb),
   }
-  const { error, cancelled } = await saveMatchResult('update_football_result', payload, t)
+  const { error, cancelled } = await saveMatchResult('update_football_result', payload, t, { matches: props.matches })
   savingId.value = ''
   if (cancelled) return
   if (error) {
