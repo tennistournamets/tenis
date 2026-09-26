@@ -2571,6 +2571,34 @@ textarea.input:focus {
     touch-action: pan-y;
     cursor: default;
   }
+  /* On phones the toolbar sits in the canvas' bottom corner instead of over the
+     section heading. */
+  .infinite-canvas:not(.infinite-canvas--fullscreen) {
+    position: relative;
+  }
+  .infinite-canvas:not(.infinite-canvas--fullscreen) .infinite-canvas__toolbar {
+    top: auto;
+    bottom: var(--space-2);
+    right: var(--space-2);
+  }
+  .infinite-canvas:not(.infinite-canvas--fullscreen) .ic-btn {
+    width: 40px;
+    height: 40px;
+  }
+}
+
+/* Fallback when the Fullscreen API is refused: a fixed overlay over the page. */
+.infinite-canvas--pseudo-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  min-height: 0;
+  height: 100vh;
+  height: 100dvh;
+}
+html.ic-pseudo-fullscreen-open,
+html.ic-pseudo-fullscreen-open body {
+  overflow: hidden;
 }
 
 .infinite-canvas__content {
