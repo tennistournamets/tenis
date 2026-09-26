@@ -23,6 +23,7 @@ const formats = computed(() => getSportConfig(props.sport).allowedFormats)
       type="button"
       class="picker-card"
       :class="{ 'picker-card--active': modelValue === f }"
+      :aria-pressed="modelValue === f"
       @click="emit('update:modelValue', f)"
     >
       <span class="picker-card__icon"><AppIcon :name="f" :size="28" /></span>

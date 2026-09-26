@@ -4,12 +4,13 @@
  * Модель — та же строка, что у <input type="datetime-local"> («yyyy-MM-ddTHH:mm», локальное время),
  * поэтому конвертеры в registrationRules.js и MatchScheduleModal остаются без изменений.
  */
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { VueDatePicker } from '@vuepic/vue-datepicker'
 import '@vuepic/vue-datepicker/dist/main.css'
 import { enUS, lt, ru } from 'date-fns/locale'
 import { theme } from '../lib/theme'
+import { formatDateTimeText, parseDateTimeText } from '../lib/dateTimeText'
 
 // v14 ожидает объект локали date-fns, а не код языка.
 const DP_LOCALES = { ru, en: enUS, lt }
@@ -28,9 +29,15 @@ const emit = defineEmits(['update:modelValue'])
 const { t, locale } = useI18n()
 
 const root = ref(null)
+// The picker's `teleport` prop accepts a boolean or a selector (an element triggers a
+// Vue prop warning), so the host dialog is marked and addressed by selector.
 const teleportTarget = ref(false)
 onMounted(() => {
-  if (props.teleportToDialog) teleportTarget.value = root.value?.closest('dialog') || false
+  if (!props.teleportToDialog) return
+  const dialog = root.value?.closest('dialog')
+  if (!dialog) return
+  if (!dialog.dataset.dtTeleport) dialog.dataset.dtTeleport = props.id
+  teleportTarget.value = `dialog[data-dt-teleport="${dialog.dataset.dtTeleport}"]`
 })
 
 const pad = (n) => String(n).padStart(2, '0')
@@ -50,10 +57,46 @@ function onUpdate(value) {
 }
 
 const DISPLAY = 'dd.MM.yyyy HH:mm'
-const display = computed(() => {
-  const d = date.value
-  return d ? `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}` : ''
+const display = computed(() => (date.value ? formatDateTimeText(props.modelValue) : ''))
+
+// Typing is handled here, not by the picker's text-input mode: that mode parsed every
+// partial keystroke ("1" -> the 1st of this month at the current time) and overwrote
+// the field mid-typing. The text is committed only once it is a complete date and time.
+// The picker's own input handlers are deliberately not wired to the element below.
+const editing = ref(false)
+const typed = ref('')
+const shown = computed(() => (editing.value ? typed.value : display.value))
+// A pick in the calendar (or "Now"/clear) while the input has focus replaces the text.
+watch(() => props.modelValue, () => {
+  if (editing.value && parseDateTimeText(typed.value) !== (props.modelValue || '')) typed.value = display.value
 })
+function tooEarly(model) {
+  const floor = min.value
+  return Boolean(model && floor && parseLocal(model) < new Date(floor.getFullYear(), floor.getMonth(), floor.getDate()))
+}
+function onFocus() {
+  editing.value = true
+  typed.value = display.value
+}
+function onTyped(event) {
+  editing.value = true
+  typed.value = event.target.value
+  const parsed = parseDateTimeText(typed.value)
+  if (parsed && !tooEarly(parsed) && parsed !== props.modelValue) emit('update:modelValue', parsed)
+}
+function commitTyped() {
+  if (!editing.value) return
+  const parsed = parseDateTimeText(typed.value)
+  if (parsed === '') { if (props.modelValue) emit('update:modelValue', '') }
+  else if (parsed && !tooEarly(parsed) && parsed !== props.modelValue) emit('update:modelValue', parsed)
+  // Incomplete text never replaces the stored value: the field shows that value again.
+  editing.value = false
+}
+function onEnter(event, isMenuOpen, toggleMenu) {
+  event.preventDefault()
+  commitTyped()
+  if (isMenuOpen) toggleMenu()
+}
 const isDark = computed(() => theme.value === 'dark')
 const dpLocale = computed(() => DP_LOCALES[locale.value] || ru)
 const min = computed(() => (typeof props.minDate === 'string' ? parseLocal(props.minDate) || undefined : props.minDate))
@@ -66,7 +109,7 @@ const min = computed(() => (typeof props.minDate === 'string' ? parseLocal(props
       :dark="isDark"
       :locale="dpLocale"
       :formats="{ input: DISPLAY }"
-      :text-input="{ format: DISPLAY, enterSubmit: true, tabSubmit: true, applyOnBlur: true }"
+      :text-input="{ format: DISPLAY, openMenu: 'open' }"
       :time-config="{ is24: true, minutesIncrement: 5, minutesGridIncrement: 5, timePickerInline: true }"
       :min-date="min"
       :disabled="disabled"
@@ -79,7 +122,7 @@ const min = computed(() => (typeof props.minDate === 'string' ? parseLocal(props
       :aria-labels="{ clearInput: t('actions.clear'), calendarIcon: t('actions.pickDateTime') }"
       @update:model-value="onUpdate"
     >
-      <template #dp-input="{ onInput, onEnter, onTab, onBlur, onKeypress, onPaste, isMenuOpen, toggleMenu, onClear }">
+      <template #dp-input="{ isMenuOpen, toggleMenu, onClear }">
         <div class="dt-field__control" :class="{ 'dt-field__control--open': isMenuOpen }">
           <input
             :id="id"
@@ -87,23 +130,21 @@ const min = computed(() => (typeof props.minDate === 'string' ? parseLocal(props
             type="text"
             inputmode="numeric"
             autocomplete="off"
-            :value="display"
+            :value="shown"
             :placeholder="t('actions.pickDateTime')"
             :disabled="disabled"
             :required="required"
             :aria-describedby="ariaDescribedby"
             :aria-expanded="isMenuOpen"
             aria-haspopup="dialog"
-            @input="onInput"
-            @keydown.enter="onEnter"
-            @keydown.tab="onTab"
-            @keypress="onKeypress"
-            @paste="onPaste"
-            @blur="onBlur"
+            @focus="onFocus"
+            @input="onTyped"
+            @keydown.enter="onEnter($event, isMenuOpen, toggleMenu)"
+            @blur="commitTyped"
             @click="toggleMenu"
           />
           <button
-            v-if="display && !disabled"
+            v-if="shown && !disabled"
             type="button"
             class="dt-field__btn dt-field__btn--clear"
             :aria-label="t('actions.clear')"

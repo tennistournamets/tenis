@@ -1,4 +1,6 @@
 // ITF Rules of Tennis 2026, rules 5–7/10 and Appendix VI.
+import { errorMessage } from './errorMessages.js'
+
 export const DEFAULT_TENNIS_RULES = Object.freeze({
   game_rule: 'advantage', set_rule: 'standard', short_tiebreak_at: 4,
   short_tiebreak_to: 7, final_set_rule: 'same', changeover: 'every_six',
@@ -151,15 +153,10 @@ export function liveRuleHint(state, t) {
   return ''
 }
 
+// Accepts a message or an error object; the mapping itself lives in errorMessages.js.
 export function scoringError(message, t) {
-  if (typeof message !== 'string' || !message) return t('scoringFlow.unavailable')
-  if (message.startsWith('drafts.') || message.startsWith('tennisRules.') || message.startsWith('scoringFlow.') || message.startsWith('lifecycle.')) return t(message)
-  if (/Invalid set or tiebreak/.test(message)) return t('tennisRules.invalidScore')
-  if (/Scoring rules are locked/.test(message)) return t('tennisRules.locked')
-  if (/Only the final entered set/.test(message)) return t('tennisRules.partialLast')
-  if (/No further sets/.test(message)) return t('tennisRules.matchOver')
-  if (/Set indices/.test(message)) return t('tennisRules.setOrder')
-  return message
+  const empty = !(typeof message === 'string' ? message : message?.message)
+  return errorMessage(message, t, empty ? 'scoringFlow.unavailable' : 'errors.generic')
 }
 
 // Sets each side has clearly won in the typed rows, and how many a win needs.

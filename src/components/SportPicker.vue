@@ -25,6 +25,7 @@ onMounted(() => { flags.load().catch(() => {}) })
       type="button"
       class="picker-card"
       :class="{ 'picker-card--active': modelValue === s }"
+      :aria-pressed="modelValue === s"
       @click="emit('update:modelValue', s)"
     >
       <span class="picker-card__icon"><AppIcon :name="s" :size="28" /></span>

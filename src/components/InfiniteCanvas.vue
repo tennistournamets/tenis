@@ -1,6 +1,7 @@
 <script setup>
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { fitTransform, wheelIntent } from '../lib/canvasView'
 
 const { t } = useI18n()
 
@@ -12,8 +13,12 @@ const translateX = ref(0)
 const translateY = ref(0)
 const isPanning = ref(false)
 const isFullscreen = ref(false)
+// Fallback when the Fullscreen API is refused (embedded browsers, iOS): fixed overlay.
+const pseudoFullscreen = ref(false)
 const spaceHeld = ref(false)
 const autoFit = ref(true)
+// 'readable' keeps cards legible on phones (pan to see the rest); 'all' shows everything.
+const fitMode = ref('readable')
 
 const MIN_SCALE = 0.1
 const MAX_SCALE = 3
@@ -26,9 +31,19 @@ const transformStyle = () => {
 }
 
 /* ── Zoom ── */
+// Plain wheel scrolls the page (the canvas sits inside a long page); Ctrl/⌘ + wheel
+// and trackpad pinch (reported as ctrlKey) zoom. In fullscreen the wheel pans.
 function onWheel(e) {
+  const intent = wheelIntent(e, isFullscreen.value)
+  if (intent === 'scroll') return
   e.preventDefault()
   autoFit.value = false
+  if (intent === 'pan') {
+    translateX.value -= e.shiftKey && !e.deltaX ? e.deltaY : e.deltaX
+    translateY.value -= e.shiftKey && !e.deltaX ? 0 : e.deltaY
+    emitTransform()
+    return
+  }
   const rect = containerRef.value.getBoundingClientRect()
   const cursorX = e.clientX - rect.left
   const cursorY = e.clientY - rect.top
@@ -69,30 +84,30 @@ function zoomToCenter(factor) {
   emitTransform()
 }
 
-function fitToView() {
+// Called by the boards after data changes (keeps the current fit mode) and by the
+// toolbar's "fit" button (mode 'all').
+function fitToView(mode = fitMode.value) {
   const container = containerRef.value
   const content = contentRef.value
   if (!container || !content) return
 
   const cRect = container.getBoundingClientRect()
-  const contentW = content.scrollWidth
-  const contentH = content.scrollHeight
-
-  if (!contentW || !contentH) return
-
-  const padding = 40
-  const scaleX = (cRect.width - padding * 2) / contentW
-  const scaleY = (cRect.height - padding * 2) / contentH
-  // Fit shrinks to show everything but never upscales past 100%
-  const newScale = Math.max(Math.min(scaleX, scaleY, 1), MIN_SCALE)
-
-  scale.value = newScale
-  translateX.value = (cRect.width - contentW * newScale) / 2
-  translateY.value = (cRect.height - contentH * newScale) / 2
+  const next = fitTransform({ width: cRect.width, height: cRect.height },
+    { width: content.scrollWidth, height: content.scrollHeight }, { mode: typeof mode === 'string' ? mode : fitMode.value, minScale: MIN_SCALE })
+  if (!next) return
+  scale.value = next.scale
+  translateX.value = next.translateX
+  translateY.value = next.translateY
   autoFit.value = true
   emitTransform()
 }
 
+function fitAll() {
+  fitMode.value = 'all'
+  fitToView('all')
+}
+
+// "Reset zoom": 100 % from the top-left corner (not the same as "fit").
 function resetView() {
   scale.value = 1
   translateX.value = 0
@@ -229,6 +244,7 @@ function onTouchEnd(e) {
 
 /* ── Keyboard ── */
 function onKeyDown(e) {
+  if (e.key === 'Escape' && pseudoFullscreen.value) { setPseudoFullscreen(false); return }
   if (e.code === 'Space' && !e.repeat) {
     spaceHeld.value = true
   }
@@ -245,15 +261,29 @@ function toggleFullscreen() {
   const el = containerRef.value
   if (!el) return
 
+  if (pseudoFullscreen.value) { setPseudoFullscreen(false); return }
   if (document.fullscreenElement || document.webkitFullscreenElement) {
-    ;(document.exitFullscreen || document.webkitExitFullscreen).call(document)
-  } else {
-    ;(el.requestFullscreen || el.webkitRequestFullscreen).call(el)
+    Promise.resolve((document.exitFullscreen || document.webkitExitFullscreen)?.call(document)).catch(() => {})
+    return
   }
+  const request = el.requestFullscreen || el.webkitRequestFullscreen
+  // The request is refused without user permission (e.g. embedded browsers); never
+  // leave that as an unhandled rejection — fall back to a fixed full-window overlay.
+  let pending
+  try { pending = request?.call(el) } catch { pending = Promise.reject(new Error('fullscreen unavailable')) }
+  if (!request) pending = Promise.reject(new Error('fullscreen unavailable'))
+  Promise.resolve(pending).catch(() => setPseudoFullscreen(true))
+}
+
+function setPseudoFullscreen(on) {
+  pseudoFullscreen.value = on
+  isFullscreen.value = on
+  document.documentElement.classList.toggle('ic-pseudo-fullscreen-open', on)
+  requestAnimationFrame(() => fitToView())
 }
 
 function onFullscreenChange() {
-  isFullscreen.value = !!(document.fullscreenElement || document.webkitFullscreenElement)
+  isFullscreen.value = pseudoFullscreen.value || !!(document.fullscreenElement || document.webkitFullscreenElement)
 }
 
 /* ── Emit ── */
@@ -292,6 +322,7 @@ onBeforeUnmount(() => {
   document.removeEventListener('webkitfullscreenchange', onFullscreenChange)
   resizeObserver?.disconnect()
   cancelAnimationFrame(resizeFrame)
+  if (pseudoFullscreen.value) document.documentElement.classList.remove('ic-pseudo-fullscreen-open')
 })
 
 defineExpose({ fitToView, resetView, scale, translateX, translateY })
@@ -304,8 +335,9 @@ defineExpose({ fitToView, resetView, scale, translateX, translateY })
     :class="{
       'infinite-canvas--panning': isPanning || spaceHeld,
       'infinite-canvas--fullscreen': isFullscreen,
+      'infinite-canvas--pseudo-fullscreen': pseudoFullscreen,
     }"
-    @wheel.prevent="onWheel"
+    @wheel="onWheel"
     @pointerdown="onPointerDown"
     @pointermove="onPointerMove"
     @pointerup="onPointerUp"
@@ -323,13 +355,19 @@ defineExpose({ fitToView, resetView, scale, translateX, translateY })
     </div>
 
     <div class="infinite-canvas__toolbar">
-      <button type="button" class="ic-btn" :title="t('bracket.fitView')" :aria-label="t('bracket.fitView')" @click="fitToView">
+      <button type="button" class="ic-btn" :title="t('bracket.zoomOut')" :aria-label="t('bracket.zoomOut')" @click="zoomOut">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 8h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </button>
+      <span class="ic-zoom-label" aria-live="polite">{{ Math.round(scale * 100) }}%</span>
+      <button type="button" class="ic-btn" :title="t('bracket.zoomIn')" :aria-label="t('bracket.zoomIn')" @click="zoomIn">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 8h10M8 3v10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </button>
+      <button type="button" class="ic-btn" :title="t('bracket.fitView')" :aria-label="t('bracket.fitView')" @click="fitAll">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="4.5" stroke="currentColor" stroke-width="1.5"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="8" r="1" fill="currentColor"/></svg>
       </button>
-      <button type="button" class="ic-btn recenter" :title="t('bracket.resetView')" :aria-label="t('bracket.resetView')" @click="fitToView">
+      <button type="button" class="ic-btn recenter" :title="t('bracket.resetView')" :aria-label="t('bracket.resetView')" @click="resetView">
         <svg style="position: relative; top: 4px;" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 8a6 6 0 1111.5-2.5M14 2v4h-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
-      <span class="ic-zoom-label">{{ Math.round(scale * 100) }}%</span>
       <button type="button" class="ic-btn" :title="t('bracket.fullscreen')" :aria-label="t('bracket.fullscreen')" @click="toggleFullscreen">
         <svg v-if="!isFullscreen" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 10v4h4M14 6V2h-4M2 6V2h4M14 10v4h-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
         <svg v-else width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6 14v-4H2M10 2v4h4M6 2v4H2M10 14v-4h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>

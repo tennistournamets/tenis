@@ -14,7 +14,7 @@ test('server codes map to translations and unknown messages fall back to the gen
   assert.equal(registrationError('drafts.conflict', t), 'drafts.conflict')
   assert.equal(registrationError('', t, 'registrationForm.error'), 'registrationForm.error')
   assert.equal(registrationError(undefined, t), 'errors.generic')
-  assert.equal(registrationError('Registration already exists for this contact', t), 'Registration already exists for this contact')
+  assert.equal(registrationError('Registration already exists for this contact', t), 'admin.addEntryDuplicateContact')
 })
 
 test('display state follows the server reason and closes locally once the deadline is reached', () => {

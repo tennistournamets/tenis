@@ -635,8 +635,8 @@ onBeforeUnmount(() => { clearTimeout(conflictsTimer); conflictsVersion += 1 })
 .sb-item__round { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
 .sb-item__teams { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; min-width: 0; }
 .sb-item__team { font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
-.sb-item__team.is-tbd { font-weight: 500; color: var(--disabled); }
-.sb-item__vs { font-size: 0.72rem; font-weight: 600; text-transform: uppercase; color: var(--disabled); }
+.sb-item__team.is-tbd { font-weight: 500; color: var(--muted); }
+.sb-item__vs { font-size: 0.72rem; font-weight: 600; text-transform: uppercase; color: var(--muted); }
 .sb-item__flags { display: flex; gap: 6px; flex: none; }
 .sb-item__flags:empty { display: none; }
 .sb-tag {

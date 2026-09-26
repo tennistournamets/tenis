@@ -25,8 +25,13 @@ export async function confirmDiscard(t, dirty, busy = false) {
 }
 export async function confirmLeaveForms(t) {
   if (approvedDeparture) return true
-  // Do not interrupt a score-correction confirmation or an in-flight save.
-  if (hasPendingSave() || confirmState.open) return false
+  // Do not interrupt a score-correction confirmation.
+  if (confirmState.open) return false
+  // An in-flight save used to block navigation silently; a stalled request would
+  // then trap the user on the page. Ask instead — the request itself keeps running.
+  if (hasPendingSave()) {
+    return confirmDialog(t('drafts.leaveSaving'), { danger: true, confirmLabel: t('drafts.leaveAnyway') })
+  }
   const changed = [...forms.values()].filter(form => form.dirty())
   const confirmed = await confirmDiscard(t, changed.length > 0)
   if (confirmed) changed.forEach(form => form.discard?.())

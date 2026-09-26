@@ -21,6 +21,9 @@ import { hasRegistrationRules, pickRegistrationDraft, registrationDraftFields, r
 import { CREATE_VISIBILITY_MODES } from '../lib/access'
 import { DEFAULT_TENNIS_RULES, tennisRulesSummary } from '../lib/tennisRules'
 import VenueFields from '../components/admin/VenueFields.vue'
+import { restoreDraftFields, deadlineInPast } from '../lib/wizardDraft'
+import { errorMessage } from '../lib/errorMessages'
+import { confirmDialog } from '../lib/confirmDialog'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -107,14 +110,13 @@ watch(() => flags.enabledSports, (enabled) => {
   if (!enabled.includes(form.sport)) form.sport = enabled[0]
 })
 
-// Keep format valid for the chosen sport; apply forced category.
+// Keep format valid for the chosen sport. A forced category (padel doubles, football
+// singles) is applied through effectiveCategory only, so looking at padel and going
+// back to tennis keeps the organizer's own choice.
 watch(() => form.sport, (sport) => {
   const c = getSportConfig(sport)
   if (!c.allowedFormats.includes(form.format)) {
     form.format = c.allowedFormats[0]
-  }
-  if (c.forcedCategory) {
-    form.category = c.forcedCategory
   }
 })
 
@@ -177,6 +179,8 @@ async function nextStep() {
       await showCreateError(formError)
       return
     }
+    // Same warning as in the tournament settings: intake would close right away.
+    if (deadlineInPast(form.registration_deadline) && !(await confirmDialog(t('registrationRules.deadlinePastConfirm')))) return
   }
   step.value += 1
 }
@@ -264,11 +268,14 @@ async function createTournament() {
 
     if (error) {
       if (error.code === '23505') {
-        slugError.value = t('mobile.slugTaken')
+        // The slug field lives on step 3; showing the error on the final step left it invisible.
         saving.value = false
+        step.value = 3
+        await nextTick()
+        slugError.value = t('mobile.slugTaken')
         await showCreateError(slugInput)
       } else {
-        errorText.value = t('mobile.createFailed')
+        errorText.value = errorMessage(error, t, 'mobile.createFailed')
         await showCreateError(formError)
       }
       return
@@ -296,8 +303,8 @@ async function createTournament() {
     if (form.is_public && form.generate_qr) query.qr = '1'
     if (rulesFailed) query.regfail = '1'
     await router.replace({ name: 'admin-tournament', params: { id: newId }, query: Object.keys(query).length ? query : undefined })
-  } catch {
-    errorText.value = t('mobile.createFailed')
+  } catch (error) {
+    errorText.value = errorMessage(error, t, 'mobile.createFailed')
     await showCreateError(formError)
   } finally {
     saving.value = false
@@ -329,17 +336,7 @@ onMounted(async () => {
   draftKey.value = userDraftKey('create-tournament', auth.user?.id)
   const stored = readSessionDraft(draftKey.value)
   if (stored?.form && Number.isInteger(stored.step) && stored.step >= 1 && stored.step <= TOTAL_STEPS) {
-    const restored = {}
-    for (const [key, fallback] of Object.entries(initialForm)) {
-      const value = stored.form[key]
-      if (value === undefined) continue
-      if (fallback && typeof fallback === 'object') {
-        if (value && typeof value === 'object' && !Array.isArray(value)) restored[key] = cloneForm(value)
-      } else if (typeof value === typeof fallback) {
-        restored[key] = value
-      }
-    }
-    Object.assign(form, restored)
+    Object.assign(form, restoreDraftFields(initialForm, stored.form))
     if (!SPORTS.includes(form.sport)) form.sport = initialForm.sport
     if (flags.loaded && flags.enabledSports.length && !flags.enabledSports.includes(form.sport)) form.sport = initialForm.sport
     if (!getSportConfig(form.sport).allowedFormats.includes(form.format)) form.format = initialForm.format

@@ -1,6 +1,6 @@
 // Access helpers: visibility modes, role capabilities shown to organizers and
 // error codes raised by the admin-management RPCs.
-import { scheduleError } from './schedule.js'
+import { errorMessage } from './errorMessages.js'
 
 export const VISIBILITY_MODES = ['public', 'link', 'private', 'password']
 /** Modes a brand-new tournament can start in; a password is set afterwards in the settings. */
@@ -14,8 +14,7 @@ export function visibilityOf(tournament) {
 }
 
 export function accessError(message, t, fallbackKey = 'errors.generic') {
-  if (typeof message === 'string' && message.startsWith('access.')) return t(`access.errors.${message.slice('access.'.length)}`)
-  return scheduleError(message, t, fallbackKey)
+  return errorMessage(message, t, fallbackKey)
 }
 
 /** What each role may do; the server enforces the same split (is_tournament_admin vs can_live_score). */

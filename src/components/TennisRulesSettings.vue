@@ -45,7 +45,7 @@ const advancedOpen = ref(chosenPreset.value === '')
 
     <div class="form-field">
       <label :for="`${idPrefix}-preset`">{{ t('tennisRules.preset') }}</label>
-      <select :id="`${idPrefix}-preset`" class="input" :value="chosenPreset" @change="preset($event.target.value)">
+      <select :disabled="disabled" :id="`${idPrefix}-preset`" class="input" :value="chosenPreset" @change="preset($event.target.value)">
         <option value="" disabled>{{ t('tennisRules.custom') }}</option>
         <option v-for="name in Object.keys(presets)" :key="name" :value="name">{{ t(`tennisRules.preset_${name}`) }}</option>
       </select>
@@ -61,40 +61,40 @@ const advancedOpen = ref(chosenPreset.value === '')
       <div class="tennis-rules__grid">
         <div class="form-field">
           <label :for="`${idPrefix}-game`">{{ t('tennisRules.game') }}</label>
-          <select :id="`${idPrefix}-game`" class="input" :value="rules.game_rule" @change="update('game_rule', $event.target.value)">
+          <select :disabled="disabled" :id="`${idPrefix}-game`" class="input" :value="rules.game_rule" @change="update('game_rule', $event.target.value)">
             <option v-for="value in ['advantage', 'no_ad']" :key="value" :value="value">{{ t(`tennisRules.game_${value}`) }}</option>
           </select>
         </div>
         <div class="form-field">
           <label :for="`${idPrefix}-set`">{{ t('tennisRules.set') }}</label>
-          <select :id="`${idPrefix}-set`" class="input" :value="rules.set_rule" @change="update('set_rule', $event.target.value)">
+          <select :disabled="disabled" :id="`${idPrefix}-set`" class="input" :value="rules.set_rule" @change="update('set_rule', $event.target.value)">
             <option v-for="value in ['standard', 'advantage', 'short']" :key="value" :value="value">{{ t(`tennisRules.set_${value}`) }}</option>
           </select>
         </div>
         <template v-if="rules.set_rule === 'short'">
           <div class="form-field">
             <label :for="`${idPrefix}-short-at`">{{ t('tennisRules.shortAt') }}</label>
-            <select :id="`${idPrefix}-short-at`" class="input" :value="rules.short_tiebreak_at" @change="update('short_tiebreak_at', Number($event.target.value))">
+            <select :disabled="disabled" :id="`${idPrefix}-short-at`" class="input" :value="rules.short_tiebreak_at" @change="update('short_tiebreak_at', Number($event.target.value))">
               <option :value="4">4:4</option><option :value="3">3:3</option>
             </select>
           </div>
           <div class="form-field">
             <label :for="`${idPrefix}-short-to`">{{ t('tennisRules.shortTo') }}</label>
-            <select :id="`${idPrefix}-short-to`" class="input" :value="rules.short_tiebreak_to" @change="update('short_tiebreak_to', Number($event.target.value))">
+            <select :disabled="disabled" :id="`${idPrefix}-short-to`" class="input" :value="rules.short_tiebreak_to" @change="update('short_tiebreak_to', Number($event.target.value))">
               <option :value="7">{{ t('tennisRules.to7') }}</option><option :value="5">{{ t('tennisRules.to5') }}</option>
             </select>
           </div>
         </template>
         <div class="form-field tennis-rules__wide">
           <label :for="`${idPrefix}-final`">{{ t('tennisRules.final') }}</label>
-          <select :id="`${idPrefix}-final`" class="input" :value="rules.final_set_rule" @change="update('final_set_rule', $event.target.value)">
+          <select :disabled="disabled" :id="`${idPrefix}-final`" class="input" :value="rules.final_set_rule" @change="update('final_set_rule', $event.target.value)">
             <option v-for="value in ['same', 'standard', 'advantage', 'tiebreak_10', 'match_tiebreak_7', 'match_tiebreak_10']" :key="value" :value="value">{{ t(`tennisRules.final_${value}`) }}</option>
           </select>
           <p class="tennis-rules__hint muted">{{ t('tennisRules.finalHint') }}</p>
         </div>
         <div v-if="usesLongTiebreak(modelValue)" class="form-field tennis-rules__wide">
           <label :for="`${idPrefix}-changeover`">{{ t('tennisRules.changeover') }}</label>
-          <select :id="`${idPrefix}-changeover`" class="input" :value="rules.changeover" @change="update('changeover', $event.target.value)">
+          <select :disabled="disabled" :id="`${idPrefix}-changeover`" class="input" :value="rules.changeover" @change="update('changeover', $event.target.value)">
             <option value="every_six">{{ t('tennisRules.everySix') }}</option>
             <option value="one_then_four">{{ t('tennisRules.oneThenFour') }}</option>
           </select>

@@ -1,7 +1,7 @@
 // Registration conditions: capacity (approved entries take places), deadline
 // and displayed entry fee. The server decides; these helpers mirror its codes
 // and shape the organizer's form.
-import { scoringError } from './tennisRules.js'
+import { errorMessage } from './errorMessages.js'
 import { scoringFamily } from './sportConfig.js'
 
 export const FEE_CURRENCIES = ['EUR', 'USD', 'GBP', 'PLN']
@@ -10,9 +10,7 @@ export const REGISTRATION_DRAFT_KEYS = ['registration_capacity', 'capacity_publi
   'entry_fee_mode', 'entry_fee_amount', 'entry_fee_currency', 'entry_fee_unit', 'waitlist_enabled']
 
 export function registrationError(message, t, fallbackKey = 'errors.generic') {
-  if (typeof message !== 'string' || !message) return t(fallbackKey)
-  if (message.startsWith('registration.')) return t(`registrationRules.errors.${message.slice('registration.'.length)}`)
-  return scoringError(message, t)
+  return errorMessage(message, t, fallbackKey)
 }
 
 /** Client view of the server state; a deadline reached between snapshots closes the form locally. */

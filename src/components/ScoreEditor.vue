@@ -409,8 +409,9 @@ async function save(match) {
 .se-status--live .se-status__dot { background: var(--accent); animation: livePulse 1.5s ease-in-out infinite; }
 .se-card__live { margin-left: auto; min-height: 32px; height: 32px; padding: 0 10px; font-size: 0.8125rem; }
 .se-card__teams-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin: 0; font-weight: 600; }
-.se-card__teams-line .is-tbd { color: var(--disabled); font-weight: 500; }
-.se-card__vs { font-size: 0.72rem; text-transform: uppercase; color: var(--disabled); }
+/* --muted, not --disabled: this is readable information (WCAG AA 4.5:1 in both themes). */
+.se-card__teams-line .is-tbd { color: var(--muted); font-weight: 500; }
+.se-card__vs { font-size: 0.72rem; text-transform: uppercase; color: var(--muted); }
 .se-card__note { margin: -6px 0 0; font-size: 0.8125rem; color: var(--muted); }
 .se-card--compact { gap: 10px; }
 .se-card__error { margin: 0; font-size: 0.875rem; }

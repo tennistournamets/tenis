@@ -8,7 +8,7 @@ Web-application for organizing tournaments across multiple sports with live scor
   - Tennis & padel share the "sets" scoring family (games/sets/tiebreaks). Padel is always doubles.
   - Football uses the "goals" scoring family (single integer per side; draws allowed in round-robin/group stages; penalty shootout breaks knockout ties). A football entry is one team (category `singles`).
 - **Tournament formats (v1):** `single_elimination`, `round_robin`, `groups_playoff`, `double_elimination`.
-- **Create flow:** pick sport → pick format → configure (3-step wizard).
+- **Create flow:** 6-step wizard — sport → format → details (name, slug, venue) → game rules → registration conditions → publication (visibility, QR).
 
 ## Tech Stack
 
@@ -58,8 +58,8 @@ src/
     HomeView.vue              # Landing / Google sign-in
     AdminLayout.vue           # Admin wrapper with nav
     AdminTournamentListView.vue
-    AdminTournamentCreateView.vue  # 3-step create wizard
-    AdminTournamentView.vue   # Main admin page (5 tabs: Entries, Bracket/Stage, Schedule, Scores, Settings) - LARGEST FILE
+    AdminTournamentCreateView.vue  # 6-step create wizard (draft kept in sessionStorage)
+    AdminTournamentView.vue   # Main admin page (6 tabs: Entries, Bracket/Stage, Courts, Schedule, Scores, Settings) - LARGEST FILE
     AdminSettingsView.vue     # User settings
     AdminPlatformView.vue     # Super-admin only: feature flags (sport toggles)
     PublicTournamentView.vue  # Public tournament page (registration + bracket/standings/groups)

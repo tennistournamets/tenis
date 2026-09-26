@@ -50,6 +50,9 @@ import { useNarrowLayout } from '../lib/useNarrowLayout'
 import { useHeaderTitle } from '../lib/headerTitle'
 import { onTabKeydown as onSurfaceTabKeydown } from '../lib/tabNavigation'
 import { statusBadgeClass } from '../lib/tournamentStatus'
+import { errorMessage } from '../lib/errorMessages'
+import { usePageAlerts } from '../lib/pageAlerts'
+import { pluralParams } from '../lib/plural'
 import { bracketPlan, groupCountOptions, groupPlan, roundRobinPlan } from '../lib/formatPlan'
 import { isFedMatch, swapDraftSlots } from '../lib/bracketDisplay'
 import { readDrawMode, writeDrawMode } from '../lib/drawModePreference'
@@ -61,7 +64,7 @@ const props = defineProps({
   },
 })
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 // The fallback keeps isolated component previews functional; routed product
 // pages always receive the real Vue Router instances.
 const route = useRoute() || { query: {}, hash: '' }
@@ -239,9 +242,7 @@ async function moveSeed(entry, delta) {
     if (error) throw error
     await loadAll(true)
   } catch (error) {
-    const message = error?.message || ''
-    errorText.value = message.startsWith('seeding.') ? t(message)
-      : error?.code === 'PGRST202' ? t('seeding.unavailable') : scoringError(message, t)
+    errorText.value = error?.code === 'PGRST202' ? t('seeding.unavailable') : errorMessage(error, t)
   } finally { actionLoading.value = false }
 }
 
@@ -456,7 +457,7 @@ const snapshotRefresh = createSnapshotRefresh({
   },
   onError: error => {
     syncFailed.value = true
-    if (!tournament.value) errorText.value = error.message || t('errors.generic')
+    if (!tournament.value) errorText.value = errorMessage(error, t)
   },
 })
 
@@ -467,6 +468,11 @@ async function loadMatchesAndSets() {
 }
 async function loadTournament() { return loadMatchesAndSets() }
 async function loadEntries() { return loadMatchesAndSets() }
+
+function retryLoad() {
+  if (!tournament.value) errorText.value = ''
+  void loadAll().catch(() => {})
+}
 
 async function loadAll() {
   if (!auth.user || disposed) return
@@ -637,13 +643,13 @@ watch(groupOptions, (options) => {
 }, { immediate: true })
 const groupPlanText = computed(() => {
   const plan = groupPlan(approvedEntries.value.length, groupCount.value, tournament.value?.format_config?.advance_per_group)
-  return t('admin.groupPlan', {
+  return t('admin.groupPlan', pluralParams({
     groups: plan.groups,
     size: plan.minSize === plan.maxSize ? plan.minSize : `${plan.minSize}–${plan.maxSize}`,
     matches: plan.matches,
     advance: plan.advance,
     qualifiers: plan.qualifiers,
-  })
+  }, t, locale.value))
 })
 // Double elimination (v1) needs a power-of-two field; any other count builds nothing.
 const doubleElimCountInvalid = computed(() => isDoubleElim.value && approvedEntries.value.length >= 2 && !bracketPlan(approvedEntries.value.length, 'double_elimination').valid)
@@ -651,8 +657,8 @@ const bracketPlanBlocked = computed(() => doubleElimCountInvalid.value && !hasBr
 const bracketPlanText = computed(() => {
   const plan = bracketPlan(approvedEntries.value.length, tournamentFormat.value)
   if (plan.n < 2) return t('nextStep.entriesTooFew')
-  if (isDoubleElim.value) return plan.valid ? t('admin.bracketPlanDE', plan) : ''
-  return t(plan.byes ? 'admin.bracketPlanByes' : 'admin.bracketPlanSE', plan)
+  if (isDoubleElim.value) return plan.valid ? t('admin.bracketPlanDE', pluralParams(plan, t, locale.value)) : ''
+  return t(plan.byes ? 'admin.bracketPlanByes' : 'admin.bracketPlanSE', pluralParams(plan, t, locale.value))
 })
 const slotsEditable = computed(() => canManageTournament.value && (arrangeMode.value || bracketEditing.value)
   && !actionLoading.value && !isTournamentActive.value && !isTournamentFinished.value)
@@ -934,8 +940,7 @@ async function generateBracket() {
   } catch (error) {
     // A parallel draw (another tab or organizer) may have changed the bracket:
     // show what the server has now instead of a raw constraint error.
-    const message = error?.message || ''
-    errorText.value = /duplicate key|could not obtain lock|deadlock/i.test(message) ? t('drafts.structureConflict') : scoringError(message, t)
+    errorText.value = /duplicate key|could not obtain lock|deadlock/i.test(error?.message ?? '') ? t('drafts.structureConflict') : scoringError(error, t)
     try { await loadAll() } catch { /* Keep the original error. */ }
   } finally { actionLoading.value = false }
 }
@@ -1233,13 +1238,19 @@ function readHashTab() {
 }
 
 const activeTab = ref(readHashTab())
+const pageErrorEl = ref(null)
+// Without a loaded tournament errorText is the full-page error, not a banner.
+onBeforeUnmount(usePageAlerts({ errorText, noticeText, activeTab, alertEl: pageErrorEl, keepError: () => !tournament.value }))
 
 function setTab(tab) {
   if (!TABS.includes(tab) || !isTabEnabled(tab)) {
     return
   }
   activeTab.value = tab
-  history.replaceState(null, '', `#${tab}`)
+  // Keep Vue Router's history.state (back/current/position); replacing it with null
+  // triggers "history.state seems to have been manually replaced".
+  const url = `${window.location.pathname}${window.location.search}#${tab}`
+  history.replaceState({ ...(history.state || {}), current: url }, '', url)
 }
 
 function syncTabFromHash() {
@@ -1424,17 +1435,24 @@ onBeforeUnmount(() => {
       <p class="muted">{{ t('actions.loading') }}</p>
     </section>
 
-    <section v-else-if="errorText && !tournament" class="card">
+    <section v-else-if="errorText && !tournament" class="card stack stack--sm" role="alert">
       <p class="error-text">{{ errorText }}</p>
+      <p class="muted">{{ t('sync.loadFailedHint') }}</p>
+      <div><button class="btn btn--secondary" type="button" @click="retryLoad">{{ t('sync.retry') }}</button></div>
     </section>
 
     <template v-else-if="tournament && !loading">
-      <p v-if="syncFailed" class="alert alert--error" role="status">{{ t('sync.unavailable') }}</p>
-      <div v-if="errorText" class="alert alert--error admin-page-alert" role="alert">
-        {{ errorText }}
+      <div v-if="syncFailed" class="alert alert--error" role="status">
+        {{ t('sync.unavailable') }}
+        <button class="btn btn--secondary btn--sm" type="button" @click="retryLoad">{{ t('sync.retry') }}</button>
+      </div>
+      <div v-if="errorText" ref="pageErrorEl" class="alert alert--error admin-page-alert" role="alert">
+        <span>{{ errorText }}</span>
+        <button type="button" class="admin-page-alert__close" :aria-label="t('actions.close')" @click="errorText = ''">×</button>
       </div>
       <div v-if="noticeText" class="alert alert--info admin-page-alert" role="status">
-        {{ noticeText }}
+        <span>{{ noticeText }}</span>
+        <button type="button" class="admin-page-alert__close" :aria-label="t('actions.close')" @click="noticeText = ''">×</button>
       </div>
 
       <section class="card card--elevated admin-tournament-overview stack stack--sm" aria-labelledby="adm-tournament-title">
@@ -1889,7 +1907,7 @@ onBeforeUnmount(() => {
                       <button
                         class="pair-slot__remove"
                         type="button"
-                        aria-label="Remove"
+                        :aria-label="t('actions.remove')"
                         @click.stop="removeFromSlot(idx, 'A')"
                       >&times;</button>
                     </template>
@@ -1919,7 +1937,7 @@ onBeforeUnmount(() => {
                       <button
                         class="pair-slot__remove"
                         type="button"
-                        aria-label="Remove"
+                        :aria-label="t('actions.remove')"
                         @click.stop="removeFromSlot(idx, 'B')"
                       >&times;</button>
                     </template>
@@ -2006,7 +2024,7 @@ onBeforeUnmount(() => {
                       <button
                         class="pair-slot__remove"
                         type="button"
-                        aria-label="Remove"
+                        :aria-label="t('actions.remove')"
                         @click.stop="removeFromSlot(idx, 'A')"
                       >&times;</button>
                     </template>
@@ -2036,7 +2054,7 @@ onBeforeUnmount(() => {
                       <button
                         class="pair-slot__remove"
                         type="button"
-                        aria-label="Remove"
+                        :aria-label="t('actions.remove')"
                         @click.stop="removeFromSlot(idx, 'B')"
                       >&times;</button>
                     </template>
@@ -2089,7 +2107,7 @@ onBeforeUnmount(() => {
         <template v-if="isRoundRobin">
           <section v-if="canManageTournament && !isTournamentActive" class="card stack stack--sm">
             <h2 class="section-title">{{ t('standings.matchesTitle') }}</h2>
-            <p class="muted">{{ t('standings.rrPlan', rrPlan) }}</p>
+            <p class="muted">{{ t('standings.rrPlan', pluralParams(rrPlan, t, locale)) }}</p>
             <p v-if="hasBracket" class="muted">{{ t('standings.rrRegenerateWarn') }}</p>
             <div class="inline-actions">
               <button
