@@ -64,6 +64,8 @@ const form = reactive({
   visibility: 'link',
   generate_qr: false,
   doubles_pairing_random: false,
+  // Groups + playoff: how many leave each group; checked against the group sizes when groups are drawn.
+  advance_per_group: 2,
   ...registrationDraftFields({}),
 })
 // is_public stays derived for the QR gate and the preview badge.
@@ -238,7 +240,7 @@ async function createTournament() {
         category === 'doubles' && cfg.value.supportsDoublesPairing
           ? (form.doubles_pairing_random ? 'pick_random' : 'pre_agreed')
           : null,
-      p_format_config: {},
+      p_format_config: form.format === 'groups_playoff' ? { advance_per_group: Number(form.advance_per_group) || 2 } : {},
       p_scoring_config: form.sport === 'tennis'
         ? { ...form.scoring_config, gender: form.gender }
         : cfg.value.supportsSetFormat ? { tiebreak_to: Number(form.tiebreak_to), gender: form.gender } : { gender: form.gender },
@@ -394,6 +396,13 @@ onMounted(async () => {
         <p class="muted">{{ t('admin.wizardFormatHint') }}</p>
       </div>
       <FormatPicker v-model="form.format" :sport="form.sport" />
+      <div v-if="form.format === 'groups_playoff'" class="form-field form-field--narrow">
+        <label for="create-advance">{{ t('groupsFlow.advance') }}</label>
+        <select id="create-advance" v-model.number="form.advance_per_group" class="input" aria-describedby="create-advance-hint">
+          <option v-for="n in [1, 2, 3, 4]" :key="n" :value="n">{{ n }}</option>
+        </select>
+        <p id="create-advance-hint" class="field-hint">{{ t('groupsFlow.advanceHint') }}</p>
+      </div>
     </div>
 
     <!-- Steps 3–6: настройки как продолжение степпера + живое превью -->

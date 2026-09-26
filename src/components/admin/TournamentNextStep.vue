@@ -11,19 +11,51 @@ const props = defineProps({
   approvedCount: { type: Number, default: 0 },
   pendingCount: { type: Number, default: 0 },
   matchesCount: { type: Number, default: 0 },
+  // Approved entries without a match / matched entries no longer approved.
+  rosterMissing: { type: Number, default: 0 },
+  rosterExtra: { type: Number, default: 0 },
+  // Groups + playoff while running: the group stage leads to "Start playoff".
+  groupMatchesTotal: { type: Number, default: 0 },
+  groupMatchesDone: { type: Number, default: 0 },
+  hasPlayoff: Boolean,
   busy: Boolean,
 })
-const emit = defineEmits(['go', 'close-registration', 'start'])
+const emit = defineEmits(['go', 'close-registration', 'start', 'start-playoff'])
 const { t } = useI18n()
 
 const PRE_START = ['draft', 'registration_open', 'registration_closed']
-const visible = computed(() => PRE_START.includes(props.status))
+const playoffPhase = computed(() => props.status === 'in_progress' && props.format === 'groups_playoff'
+  && props.groupMatchesTotal > 0 && !props.hasPlayoff)
+const visible = computed(() => PRE_START.includes(props.status) || playoffPhase.value)
 const matchesKey = computed(() => (props.format === 'round_robin' ? 'matches' : props.format === 'groups_playoff' ? 'groups' : 'bracket'))
 const registrationClosed = computed(() => props.status === 'registration_closed')
 
+const rosterStale = computed(() => props.matchesCount > 0 && (props.rosterMissing > 0 || props.rosterExtra > 0))
+
+const playoffSteps = computed(() => {
+  const groupsDone = props.groupMatchesDone >= props.groupMatchesTotal
+  return [
+    {
+      key: 'groupMatches',
+      done: groupsDone,
+      title: t('groupsFlow.stepGroupMatches'),
+      detail: t('groupsFlow.groupProgress', { done: props.groupMatchesDone, total: props.groupMatchesTotal }),
+      action: groupsDone ? null : { label: t('groupsFlow.enterResults'), run: () => emit('go', 'scores') },
+    },
+    {
+      key: 'playoff',
+      done: false,
+      title: t('admin.playoff'),
+      detail: t('groupsFlow.playoffStepHint'),
+      action: { label: t('admin.startPlayoff'), primary: true, disabled: !groupsDone, run: () => emit('start-playoff') },
+    },
+  ]
+})
+
 const steps = computed(() => {
+  if (playoffPhase.value) return playoffSteps.value
   const entriesDone = props.approvedCount >= 2 && props.pendingCount === 0
-  const matchesDone = props.matchesCount > 0
+  const matchesDone = props.matchesCount > 0 && !rosterStale.value
   return [
     {
       key: 'entries',
@@ -50,7 +82,12 @@ const steps = computed(() => {
       done: matchesDone,
       title: t(`nextStep.${matchesKey.value}`),
       detail: matchesDone ? t('nextStep.matchesReady', { n: props.matchesCount }) : t(`nextStep.${matchesKey.value}Hint`),
-      warning: matchesDone && !registrationClosed.value ? t('nextStep.matchesBeforeClose') : '',
+      warning: rosterStale.value
+        ? t('groupsFlow.rosterStale', { details: [
+          props.rosterMissing ? t('groupsFlow.rosterMissing', { n: props.rosterMissing }) : '',
+          props.rosterExtra ? t('groupsFlow.rosterExtra', { n: props.rosterExtra }) : '',
+        ].filter(Boolean).join('; ') })
+        : matchesDone && !registrationClosed.value ? t('nextStep.matchesBeforeClose') : '',
       action: matchesDone ? null : { label: t('nextStep.openBracket'), disabled: props.approvedCount < 2, run: () => emit('go', 'bracket') },
     },
     {
@@ -70,6 +107,7 @@ const steps = computed(() => {
 const current = computed(() => steps.value.find(step => !step.done) || steps.value.at(-1))
 const lead = computed(() => {
   const key = current.value.key
+  if (playoffPhase.value) return t(key === 'playoff' ? 'groupsFlow.lead_playoff' : 'groupsFlow.lead_groupMatches')
   if (key === 'entries') return t(props.approvedCount < 2 && !props.pendingCount ? 'nextStep.lead_entriesFew' : 'nextStep.lead_entries')
   if (key === 'matches') return t(`nextStep.lead_${matchesKey.value}`)
   return t(`nextStep.lead_${key}`)
@@ -82,7 +120,7 @@ const lead = computed(() => {
       <span class="next-step__eyebrow">{{ t('nextStep.label') }}</span>
       <strong>{{ lead }}</strong>
     </p>
-    <ol class="next-step__list">
+    <ol class="next-step__list" :class="{ 'next-step__list--pair': steps.length === 2 }">
       <li
         v-for="(step, index) in steps"
         :key="step.key"
@@ -128,6 +166,7 @@ const lead = computed(() => {
 .next-step__lead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin: 0; font-size: 1rem; color: var(--heading); }
 .next-step__eyebrow { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
 .next-step__list { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 0; padding: 0; list-style: none; }
+.next-step__list--pair { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .next-step__item {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);

@@ -25,7 +25,7 @@ const { t } = useI18n()
           </li>
         </ul>
       </div>
-      <p v-if="confirmState.details" class="alert alert--info confirm-dialog__warning" role="status">{{ confirmState.details.warning }}</p>
+      <p v-if="confirmState.details?.warning" class="alert alert--info confirm-dialog__warning" role="status">{{ confirmState.details.warning }}</p>
       <div class="confirm-dialog__actions">
         <button class="btn btn--ghost" type="button" autofocus @click="settleConfirm(false)">
           {{ t('actions.cancel') }}
