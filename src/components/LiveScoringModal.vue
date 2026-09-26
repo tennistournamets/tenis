@@ -369,14 +369,15 @@ async function stopLive() {
         </button>
       </div>
 
-      <!-- Score rows keep a fixed A/B order — only the tap zones follow court ends. -->
-      <div class="live-board">
-        <div v-for="side in ['a', 'b']" :key="side" class="live-board__row">
+      <!-- Score rows follow the same court order as the tap zones below, so after a
+           change of ends the first row still belongs to the first button. -->
+      <TransitionGroup name="side-swap" tag="div" class="live-board">
+        <div v-for="side in sides" :key="side" class="live-board__row">
           <strong class="live-board__name">{{ teamName(side) }}</strong>
           <span class="live-board__sets">{{ completedSets(side) }} {{ norm && !norm.winner && !norm.isMatchTiebreak ? norm.games[side] : '' }}</span>
           <span class="live-board__points">{{ pointLabel(state, side) }}</span>
         </div>
-      </div>
+      </TransitionGroup>
 
       <p v-if="!state" class="muted">{{ tennisRulesSummary(scoringConfig, t) }}</p>
       <div v-if="liveRuleHint(state, t)" class="alert alert--info" role="status">{{ liveRuleHint(state, t) }}</div>
