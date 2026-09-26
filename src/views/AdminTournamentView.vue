@@ -17,12 +17,16 @@ import LiveScoringModal from '../components/LiveScoringModal.vue'
 import TournamentQrModal from '../components/TournamentQrModal.vue'
 import ScoreEditor from '../components/ScoreEditor.vue'
 import ManualEntryForm from '../components/admin/ManualEntryForm.vue'
+import EntryContact from '../components/admin/EntryContact.vue'
+import { loadEntryContacts } from '../lib/entryContacts'
 import TournamentSettingsForm from '../components/admin/TournamentSettingsForm.vue'
 import ScheduleBoard from '../components/admin/ScheduleBoard.vue'
 import CourtsEditor from '../components/admin/CourtsEditor.vue'
 import MatchScheduleModal from '../components/admin/MatchScheduleModal.vue'
 import AccessMatrix from '../components/admin/AccessMatrix.vue'
 import TournamentNextStep from '../components/admin/TournamentNextStep.vue'
+import TournamentChampion from '../components/TournamentChampion.vue'
+import { finishConfirmation } from '../lib/tournamentChampion'
 import KebabMenu from '../components/KebabMenu.vue'
 import InfoTip from '../components/InfoTip.vue'
 import AppModal from '../components/AppModal.vue'
@@ -283,6 +287,17 @@ const canEditFinalScores = computed(() => scoreAccess.value.final)
 const regState = computed(() => registrationDisplayState(registration.value, Date.now(), tournament.value))
 const showDeadlineHint = computed(() => canManageTournament.value && regState.value.deadlinePassed && tournament.value?.status === 'registration_open')
 const waitlistSeatFree = computed(() => Boolean(registration.value?.capacity) && !registration.value.is_full && waitlistedEntries.value.length > 0)
+// Applicants' contacts: owners and editors only, re-read when the entry list changes.
+const entryContacts = ref({})
+let entryContactsRead = 0
+watch(() => (canManageTournament.value ? entries.value.map(e => e.id).join(',') : ''), async key => {
+  const read = ++entryContactsRead
+  if (!key) { entryContacts.value = {}; return }
+  try {
+    const contacts = await loadEntryContacts(supabase, props.id)
+    if (read === entryContactsRead) entryContacts.value = contacts
+  } catch { /* Contacts are an aid; the lists work without them. */ }
+})
 const scheduleIndex = computed(() => indexSchedule(schedule.value))
 const scheduleDraftCount = computed(() => draftDiff(schedule.value).count)
 // Organizers see their draft everywhere in the admin page; changed rows are marked.
@@ -333,7 +348,9 @@ async function finishTournament() {
   actionLoading.value = true
   errorText.value = ''
   try {
-    if (!(await confirmDialog(t('admin.finishTournamentConfirm')))) return
+    // Unplayed matches are listed explicitly before the tournament is closed for good.
+    const finish = finishConfirmation({ format: tournament.value.format, matches: matches.value, label: teamLabel, t })
+    if (!(await confirmDialog(finish.message, finish.options))) return
     const { data, error } = await supabase.rpc('update_tournament_settings', {
       p_tournament_id: props.id, p_patch: { status: 'completed' }, p_expected_revision: revision,
     })
@@ -1083,11 +1100,16 @@ async function addAdmin() {
   actionLoading.value = true
   errorText.value = ''
   try {
-    const { error } = await supabase.rpc('add_tournament_admin_by_email', {
-      p_tournament_id: props.id,
-      p_email: addAdminForm.email,
-      p_role: addAdminForm.role,
-    })
+    const payload = { p_tournament_id: props.id, p_email: addAdminForm.email, p_role: addAdminForm.role }
+    // A person already on the team keeps their role unless the organizer confirms the change.
+    let { error } = await supabase.rpc('add_tournament_admin_by_email', { ...payload, p_only_new: true })
+    if (error?.message?.includes('access.alreadyMember')) {
+      const current = error.details
+      const labels = { email: addAdminForm.email.trim(), current: t(`admin.${current}`), next: t(`admin.${addAdminForm.role}`) }
+      if (current === addAdminForm.role) { errorText.value = t('access.alreadyMemberSame', labels); return }
+      if (!(await confirmDialog(t('access.alreadyMemberConfirm', labels)))) return
+      ;({ error } = await supabase.rpc('add_tournament_admin_by_email', payload))
+    }
     if (error) throw error
     addAdminForm.email = ''
     addAdminForm.role = 'editor'
@@ -1120,14 +1142,16 @@ async function changeAdminRole(admin, role) {
   } finally { actionLoading.value = false }
 }
 
-async function removeAdmin(adminId) {
+async function removeAdmin(admin) {
   if (actionLoading.value) return
   actionLoading.value = true
   errorText.value = ''
   try {
+    const confirmKey = admin.role === 'owner' ? 'access.removeOwnerConfirm' : 'access.removeConfirm'
+    if (!(await confirmDialog(t(confirmKey, { email: admin.email }), { danger: true, confirmLabel: t('actions.remove') }))) return
     const { error } = await supabase.rpc('remove_tournament_admin', {
       p_tournament_id: props.id,
-      p_admin_id: adminId,
+      p_admin_id: admin.id,
     })
     if (error) throw error
     await loadAll()
@@ -1490,6 +1514,17 @@ onBeforeUnmount(() => {
         @start="startTournament"
       />
 
+      <TournamentChampion
+        :format="tournament.format"
+        :status="tournament.status"
+        :matches="matches"
+        :standings="standings"
+        :entries-map="entriesMap"
+        :can-finish="canManageTournament"
+        :busy="actionLoading || settingsSaving"
+        @finish="finishTournament"
+      />
+
       <p v-if="showDeadlineHint" class="alert alert--info" role="status">{{ t('registrationRules.deadlineCloseHint') }}</p>
 
       <div role="tablist" class="tab-group" @keydown="onTabKeydown">
@@ -1623,7 +1658,7 @@ onBeforeUnmount(() => {
             <div v-if="pendingEntries.length" class="entry-list">
               <div v-for="entry in pendingEntries" :key="entry.id" class="participant-item">
                 <span class="entry-avatar">{{ entryInitials(entry) }}</span>
-                <strong class="entry-name">{{ entryLabel(entry) }}</strong>
+                <strong class="entry-name">{{ entryLabel(entry) }}<EntryContact :contact="entryContacts[entry.id]" /></strong>
                 <div class="entry-actions">
                   <button
                     class="entry-icon-btn entry-icon-btn--approve"
@@ -1661,7 +1696,7 @@ onBeforeUnmount(() => {
               <div class="entry-list">
                 <div v-for="(entry, index) in waitlistedEntries" :key="entry.id" class="participant-item">
                   <span class="entry-avatar" :aria-label="String(index + 1)">{{ index + 1 }}</span>
-                  <strong class="entry-name">{{ entryLabel(entry) }}</strong>
+                  <strong class="entry-name">{{ entryLabel(entry) }}<EntryContact :contact="entryContacts[entry.id]" /></strong>
                   <div class="entry-actions">
                     <button
                       class="entry-icon-btn entry-icon-btn--approve"
@@ -1696,7 +1731,7 @@ onBeforeUnmount(() => {
               <div class="entry-list rejected-entries__list">
                 <div v-for="entry in rejectedEntries" :key="entry.id" class="participant-item">
                   <span class="entry-avatar">{{ entryInitials(entry) }}</span>
-                  <strong class="entry-name">{{ entryLabel(entry) }}</strong>
+                  <strong class="entry-name">{{ entryLabel(entry) }}<EntryContact :contact="entryContacts[entry.id]" /></strong>
                   <button class="btn btn--ghost btn--sm" type="button" :disabled="actionLoading" @click="updateEntryStatus(entry.id, 'pending')">
                     {{ t('mobile.restoreEntry') }}
                   </button>
@@ -1740,7 +1775,7 @@ onBeforeUnmount(() => {
                   <span class="entry-avatars" :class="{ 'entry-avatars--pair': memberInitials(entry).length > 1 }" aria-hidden="true">
                     <span v-for="(initials, i) in memberInitials(entry)" :key="i" class="entry-avatar entry-avatar--ok">{{ initials }}</span>
                   </span>
-                  <strong class="entry-name">{{ entryLabel(entry) }}</strong>
+                  <strong class="entry-name">{{ entryLabel(entry) }}<EntryContact :contact="entryContacts[entry.id]" /></strong>
                   <KebabMenu
                     v-if="!isTournamentActive && !isTournamentFinished"
                     :aria-label="t('admin.rowActions', { name: entryLabel(entry) })"
@@ -2314,7 +2349,13 @@ onBeforeUnmount(() => {
         class="tab-panel"
         :class="{ 'tab-panel--active': activeTab === 'scores' }"
       >
-        <section v-if="!canEditScores" class="card empty-state">
+        <section v-if="isTournamentFinished" class="card empty-state">
+          <AppIcon name="trophy" :size="28" class="empty-state__icon" />
+          <h2 class="empty-state__title">{{ t('lifecycle.completedTitle') }}</h2>
+          <p class="empty-state__hint">{{ t('lifecycle.scoresCompletedHint') }}</p>
+          <button class="btn btn--outline btn--sm" type="button" @click="setTab('bracket')">{{ t('lifecycle.openBracket') }}</button>
+        </section>
+        <section v-else-if="!canEditScores" class="card empty-state">
           <AppIcon name="play" :size="28" class="empty-state__icon" />
           <h2 class="empty-state__title">{{ t('admin.scoresBeforeStartTitle') }}</h2>
           <p class="empty-state__hint">{{ startBlockReason || t('admin.scoresLockedTooltip') }}</p>
@@ -2431,7 +2472,7 @@ onBeforeUnmount(() => {
                 class="btn btn--ghost btn--sm"
                 type="button"
                 :disabled="actionLoading"
-                @click="removeAdmin(admin.id)"
+                @click="removeAdmin(admin)"
               >
                 {{ t('actions.remove') }}
               </button>
@@ -2501,7 +2542,7 @@ onBeforeUnmount(() => {
       <LiveScoringModal
         v-if="selectedLiveMatch && canUseLiveScoring"
         :match="matches.find(m => m.id === selectedLiveMatch.id) || selectedLiveMatch"
-        :can-stop-live="canManageTournament"
+        :can-stop-live="scoreAccess.stopLive"
         :live-score="selectedLiveScore"
         :scoring-config="tournament.scoring_config || {}"
         :team-a="teamLabel(selectedLiveMatch.side_a_entry_id)"

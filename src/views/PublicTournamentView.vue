@@ -28,6 +28,7 @@ import { currentPlatform, hasVenue, venueRouteLinks } from '../lib/venue'
 import { effectiveSchedule, timezoneOf } from '../lib/schedule'
 import { clearAccessToken, isAccessExpiredError, readAccessToken, setRobotsMeta, storeAccessToken, visibilityOf } from '../lib/access'
 import { statusBadgeClass } from '../lib/tournamentStatus'
+import TournamentChampion from '../components/TournamentChampion.vue'
 
 const props = defineProps({
   slug: {
@@ -494,6 +495,14 @@ onBeforeUnmount(() => {
           </div>
         </div>
       </section>
+
+      <TournamentChampion
+        :format="tournament.format"
+        :status="tournament.status"
+        :matches="matches"
+        :standings="standings"
+        :entries-map="entriesMap"
+      />
 
       <details v-if="rulesRows.length" class="card pub-rules">
         <summary class="pub-rules__summary">
