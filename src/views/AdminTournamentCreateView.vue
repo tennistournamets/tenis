@@ -22,6 +22,7 @@ import { CREATE_VISIBILITY_MODES } from '../lib/access'
 import { DEFAULT_TENNIS_RULES, tennisRulesSummary } from '../lib/tennisRules'
 import VenueFields from '../components/admin/VenueFields.vue'
 import { restoreDraftFields, deadlineInPast } from '../lib/wizardDraft'
+import { track } from '../lib/analytics'
 import { errorMessage } from '../lib/errorMessages'
 import { confirmDialog } from '../lib/confirmDialog'
 
@@ -284,6 +285,7 @@ async function createTournament() {
     }
 
     if (!newId) throw new Error('Missing tournament ID')
+    track('tournament_created', { sport: form.sport, format: form.format, category, visibility: form.visibility })
     // Conditions are a settings patch on the fresh row (revision 0); a failure
     // is reported on the tournament page instead of blocking the created tournament.
     let rulesFailed = false
@@ -303,6 +305,8 @@ async function createTournament() {
     unregisterDraft()
     const query = {}
     if (form.is_public && form.generate_qr) query.qr = '1'
+    // Registration is open from the start: offer to send the link right away.
+    else if (form.is_public) query.created = '1'
     if (rulesFailed) query.regfail = '1'
     await router.replace({ name: 'admin-tournament', params: { id: newId }, query: Object.keys(query).length ? query : undefined })
   } catch (error) {
@@ -350,7 +354,11 @@ onMounted(async () => {
     draftRestored.value = hasDraftChanges()
   }
   draftReady.value = true
+  track('create_started', { step: step.value })
 })
+
+// Funnel: which wizard step people reach before they leave. Draft restores jump steps and are skipped.
+watch(step, (next, prev) => { if (draftReady.value && next === prev + 1) track('create_step', { step: next }) })
 </script>
 
 <template>

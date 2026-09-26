@@ -15,6 +15,8 @@ import { scoringFamily, getSportConfig } from '../lib/sportConfig'
 import { scoringAccess, matchScoringAction } from '../lib/scoringAccess'
 import LiveScoringModal from '../components/LiveScoringModal.vue'
 import TournamentQrModal from '../components/TournamentQrModal.vue'
+import EmbedCodeModal from '../components/EmbedCodeModal.vue'
+import ShareTournamentModal from '../components/ShareTournamentModal.vue'
 import ScoreEditor from '../components/ScoreEditor.vue'
 import ManualEntryForm from '../components/admin/ManualEntryForm.vue'
 import EntryContact from '../components/admin/EntryContact.vue'
@@ -30,7 +32,7 @@ import { finishConfirmation } from '../lib/tournamentChampion'
 import KebabMenu from '../components/KebabMenu.vue'
 import InfoTip from '../components/InfoTip.vue'
 import AppModal from '../components/AppModal.vue'
-import { accessError, assignableRoles, canEditMembership } from '../lib/access'
+import { accessError, assignableRoles, canEditMembership, visibilityOf } from '../lib/access'
 import { applyScheduleAction, draftDiff, effectiveSchedule, indexSchedule, scheduleError, timezoneOf } from '../lib/schedule'
 import TournamentMatchList from '../components/TournamentMatchList.vue'
 import { scoringError } from '../lib/tennisRules'
@@ -56,6 +58,7 @@ import { pluralParams } from '../lib/plural'
 import { bracketPlan, groupAdvanceWarning, groupCountOptions, groupPlan, roundRobinPlan } from '../lib/formatPlan'
 import { isFedMatch, swapDraftSlots } from '../lib/bracketDisplay'
 import { readDrawMode, writeDrawMode } from '../lib/drawModePreference'
+import { track } from '../lib/analytics'
 import { advanceOptions, advanceToSend, changesField, effectiveAdvance, groupMatchProgress, groupsError, playoffPreviewItems, rosterMismatch } from '../lib/groupsFlow'
 
 const props = defineProps({
@@ -119,6 +122,17 @@ const loading = ref(false)
 const actionLoading = ref(false)
 const errorText = ref('')
 const qrModalOpen = ref(false)
+const embedModalOpen = ref(false)
+// 'created' | 'started': the moments when organizers send the link out.
+const shareMoment = ref(null)
+const sharesPublicly = computed(() => ['public', 'link', 'password'].includes(visibilityOf(tournament.value)))
+function openPoster() {
+  window.open(router.resolve({ name: 'tournament-poster', params: { slug: tournament.value.slug } }).href, '_blank', 'noopener')
+}
+function shareToQr() {
+  shareMoment.value = null
+  qrModalOpen.value = true
+}
 
 const settingsSaving = ref(false)
 function acceptTournament(data) {
@@ -356,6 +370,7 @@ async function startTournament() {
     if (error) throw error
     acceptTournament(data)
     await loadAll(true)
+    if (sharesPublicly.value) shareMoment.value = 'started'
   } catch (error) {
     errorText.value = scoringError(error?.message, t)
     try { await loadTournament() } catch { /* Keep the actionable mutation error. */ }
@@ -967,6 +982,7 @@ async function generateBracket() {
       p_manual_order: null,
     })
     if (error) throw error
+    if (fn === 'generate_bracket') track('draw_generated', { format: tournament.value?.format, mode: drawMode.value })
     arrangeMode.value = drawMode.value === 'manual'
     await loadAll()
   } catch (error) {
@@ -984,6 +1000,7 @@ async function generateGroups() {
     if (hasGroups.value && !(await confirmDialog(rebuildConfirmText('admin.rebuildMatchesConfirm')))) return
     errorText.value = ''
     if (!(await ensureRegistrationClosed())) return
+    const firstDraw = !hasGroups.value
     const { error } = await supabase.rpc('generate_groups', {
       p_tournament_id: props.id,
       p_group_count: Number(groupCount.value) || 2,
@@ -991,6 +1008,7 @@ async function generateGroups() {
       p_advance_per_group: hasGroups.value ? null : advanceToSend(advanceChoices.value, tournament.value?.format_config?.advance_per_group, groupAdvancePicked.value),
     })
     if (error) throw error
+    if (firstDraw) track('draw_generated', { format: tournament.value?.format })
     await loadAll()
   } catch (error) {
     errorText.value = groupsError(error?.message, t)
@@ -1027,10 +1045,12 @@ async function generateSchedule() {
     if (hasBracket.value && !(await confirmDialog(rebuildConfirmText('admin.rebuildMatchesConfirm'), { danger: true }))) return
     errorText.value = ''
     if (!(await ensureRegistrationClosed())) return
+    const firstDraw = !hasBracket.value
     const { error } = await supabase.rpc('generate_round_robin', {
       p_tournament_id: props.id,
     })
     if (error) throw error
+    if (firstDraw) track('draw_generated', { format: tournament.value?.format })
     await loadAll()
   } catch (error) {
     errorText.value = groupsError(error?.message, t)
@@ -1452,10 +1472,11 @@ onMounted(async () => {
   syncTabFromHash()
 
   // Wizard redirect flags are consumed once; strip them so refresh doesn't repeat them.
-  const { qr, regfail, ...rest } = route.query
+  const { qr, regfail, created, ...rest } = route.query
   if (qr === '1' && tournament.value?.slug) qrModalOpen.value = true
+  else if (created === '1' && tournament.value?.slug) shareMoment.value = 'created'
   if (regfail === '1') errorText.value = t('registrationRules.wizardSaveFailed')
-  if (qr !== undefined || regfail !== undefined) router.replace(adminRouteLocation(rest))
+  if (qr !== undefined || regfail !== undefined || created !== undefined) router.replace(adminRouteLocation(rest))
 })
 
 onBeforeUnmount(() => {
@@ -1525,6 +1546,17 @@ onBeforeUnmount(() => {
                 @click="qrModalOpen = true"
               >
                 <AppIcon name="qr" :size="18" />
+              </button>
+            </span>
+
+            <span v-if="showPublicShareActions" class="tooltip-wrapper" :data-tooltip="t('share.embedButton')">
+              <button
+                class="btn btn--outline btn--sm btn--icon"
+                type="button"
+                :aria-label="t('share.embedButton')"
+                @click="embedModalOpen = true"
+              >
+                <AppIcon name="code" :size="18" />
               </button>
             </span>
 
@@ -2671,6 +2703,22 @@ onBeforeUnmount(() => {
         :slug="tournament.slug"
         :name="tournament.name"
         @close="qrModalOpen = false"
+      />
+      <ShareTournamentModal
+        v-if="shareMoment && tournament.slug"
+        :slug="tournament.slug"
+        :name="tournament.name"
+        :moment="shareMoment"
+        @qr="shareToQr"
+        @poster="openPoster"
+        @close="shareMoment = null"
+      />
+      <EmbedCodeModal
+        v-if="embedModalOpen && tournament.slug"
+        :slug="tournament.slug"
+        :name="tournament.name"
+        :available="['public', 'link'].includes(visibilityOf(tournament))"
+        @close="embedModalOpen = false"
       />
 
       <MatchScoreModal

@@ -1,8 +1,10 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { beforeUnload, confirmLeaveForms } from '../lib/unsavedChanges'
-import i18n from '../i18n'
+import i18n, { setAppLocale } from '../i18n'
 import { authCallbackCleanupLocation, scrubAuthCallbackFromLocation } from '../lib/authCallbackUrl'
+import { trackPageview } from '../lib/analytics'
+import { LANDING_ROUTE_PATH, landingLocaleDecision, readStoredLocale, storeLocale } from '../lib/localeRoute'
 
 const HomeView = () => import('../views/HomeView.vue')
 const PublicTournamentView = () => import('../views/PublicTournamentView.vue')
@@ -12,12 +14,15 @@ const AdminTournamentCreateView = () => import('../views/AdminTournamentCreateVi
 const AdminTournamentView = () => import('../views/AdminTournamentView.vue')
 const AdminSettingsView = () => import('../views/AdminSettingsView.vue')
 const AdminPlatformView = () => import('../views/AdminPlatformView.vue')
+const NotFoundView = () => import('../views/NotFoundView.vue')
+const TournamentPosterView = () => import('../views/TournamentPosterView.vue')
 
 const router = createRouter({
   history: createWebHistory(),
   routes: [
     {
-      path: '/',
+      // /, /en, /lt: one landing per language for search engines (hreflang).
+      path: LANDING_ROUTE_PATH,
       name: 'home',
       component: HomeView,
       async beforeEnter() {
@@ -36,6 +41,20 @@ const router = createRouter({
       name: 'public-tournament',
       component: PublicTournamentView,
       props: true,
+    },
+    {
+      // A4 poster with the QR code, for printing.
+      path: '/tournaments/:slug/poster',
+      name: 'tournament-poster',
+      component: TournamentPosterView,
+      props: true,
+    },
+    {
+      // Widget for club websites (public/embed.js puts it in an iframe).
+      path: '/embed/:slug',
+      name: 'embed-tournament',
+      component: PublicTournamentView,
+      props: route => ({ slug: route.params.slug, embed: true }),
     },
     {
       path: '/admin',
@@ -72,6 +91,7 @@ const router = createRouter({
         },
       ],
     },
+    { path: '/:pathMatch(.*)*', name: 'not-found', component: NotFoundView },
   ],
 })
 
@@ -89,6 +109,13 @@ router.beforeEach(async (to, from) => {
   // landing hash through `redirect` records, so drop the tokens before the URL is committed.
   const cleaned = authCallbackCleanupLocation(to)
   if (cleaned) return cleaned
+
+  if (to.name === 'home') {
+    const decision = landingLocaleDecision(to, from, readStoredLocale())
+    if (decision.redirect) return { path: decision.redirect, query: to.query, hash: to.hash, replace: true }
+    await setAppLocale(decision.locale)
+    storeLocale(decision.locale)
+  }
 
   const requiresAuth = to.matched.some((record) => record.meta.requiresAuth)
   if (requiresAuth && !auth.user) {
@@ -109,6 +136,10 @@ router.beforeEach(async (to, from) => {
 })
 
 // Covers navigations that end without committing a cleaned URL (aborted or failed).
-router.afterEach(() => { scrubAuthCallbackFromLocation() })
+router.afterEach((to, from, failure) => {
+  scrubAuthCallbackFromLocation()
+  // START_LOCATION has no matched records: the first page counts even when its path is '/'.
+  if (!failure && (to.path !== from.path || !from.matched.length)) trackPageview(to)
+})
 
 export default router

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ru">
+<html lang="lt">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
@@ -10,6 +10,11 @@
       (function () {
         var t
         try { t = localStorage.getItem('champ_theme') } catch (e) { /* ignore */ }
+        // The club-site widget follows the host page (?theme= from embed.js) without saving it.
+        if (location.pathname.indexOf('/embed/') === 0) {
+          var q = /[?&]theme=(light|dark)/.exec(location.search)
+          if (q) t = q[1]
+        }
         if (t !== 'light' && t !== 'dark') {
           t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
         }
@@ -18,8 +23,23 @@
     </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 28 28'%3E%3Crect width='28' height='28' rx='8' fill='%230F7B4D'/%3E%3Cpath d='M11 8H9.5A1.5 1.5 0 0 0 8 9.5v9A1.5 1.5 0 0 0 9.5 20H11' stroke='%23ffffff' stroke-width='2' stroke-linecap='round' fill='none'/%3E%3Cpath d='M17 8h1.5A1.5 1.5 0 0 1 20 9.5v9a1.5 1.5 0 0 1-1.5 1.5H17' stroke='%23ffffff' stroke-width='2' stroke-linecap='round' fill='none'/%3E%3Ccircle cx='14' cy='14' r='2.2' fill='%23C6F24E'/%3E%3C/svg%3E" />
+    <!-- A <link> instead of a CSS @import: fonts start loading in parallel with the app CSS. -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@500;600;700;800&family=Golos+Text:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap" />
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="apple-mobile-web-app-title" content="Bracketa" />
+    <!-- seo:start -->
+    <!-- Dev/SPA defaults. The build (scripts/prerender.mjs) rewrites this block per page from src/lib/seo.js. -->
     <title>Bracketa</title>
+    <meta name="description" content="Nemokama programa teniso, padelio ir futbolo turnyrams: dalyvių registracija, turnyrų tinklelis, rezultatai tiesiogiai ir kortų tvarkaraštis. Žiūrovams paskyros nereikia." />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Bracketa" />
+    <meta property="og:title" content="Bracketa — teniso, padelio ir futbolo turnyrai" />
+    <meta property="og:image" content="__SITE_ORIGIN__/og-image.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <!-- seo:end -->
   </head>
   <body>
     <div id="app"></div>

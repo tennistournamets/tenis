@@ -7,6 +7,7 @@ import { cloneForm, sameForm } from '../lib/formDraft'
 import { supabase } from '../lib/supabase'
 import { scoringFamily } from '../lib/sportConfig'
 import { registrationDisplayState, registrationError, closedReasonKey, entryNamesError } from '../lib/registrationRules'
+import { track } from '../lib/analytics'
 
 const props = defineProps({
   tournament: {
@@ -20,7 +21,7 @@ const props = defineProps({
 
 const emit = defineEmits(['submitted', 'dirty'])
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const entryType = computed(() => props.tournament.category)
 const isTeamSport = computed(() => scoringFamily(props.tournament.sport || 'tennis') === 'goals')
 const memberOneLabel = computed(() => {
@@ -114,6 +115,7 @@ async function submit() {
     : null
 
   try {
+    // The UI language travels as a header, so the participant's emails come in the same one.
     const { data, error } = await supabase.rpc('register_entry', {
       p_slug: props.tournament.slug,
       p_entry_type: entryType.value,
@@ -123,7 +125,7 @@ async function submit() {
       p_member_two: memberTwo,
       p_display_name: form.displayName || null,
       p_access_token: props.accessToken || null,
-    })
+    }).setHeader('x-bracketa-locale', locale.value)
 
     if (error) {
       errorText.value = registrationError(error.message, t, 'registrationForm.error')
@@ -131,6 +133,7 @@ async function submit() {
     }
 
     submitted.value = true
+    track('registration_submitted', { sport: props.tournament.sport, status: data?.status || 'pending' })
     submittedStatus.value = data?.status === 'waitlisted' ? 'waitlisted' : 'pending'
     form.displayName = ''
     form.phone = ''

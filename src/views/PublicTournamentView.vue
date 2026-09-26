@@ -29,15 +29,22 @@ import { effectiveSchedule, timezoneOf } from '../lib/schedule'
 import { clearAccessToken, isAccessExpiredError, readAccessToken, setRobotsMeta, storeAccessToken, visibilityOf } from '../lib/access'
 import { displayStatus, statusBadgeClass } from '../lib/tournamentStatus'
 import TournamentChampion from '../components/TournamentChampion.vue'
+import { applyTournamentHead, clearTournamentHead, scheduleSpan, tournamentImageUrl, tournamentJsonLd } from '../lib/seo'
+import { siteOrigin } from '../lib/siteOrigin'
 
 const props = defineProps({
   slug: {
     type: String,
     required: true,
   },
+  // Compact widget for other websites: bracket/standings only, no registration or contacts.
+  embed: {
+    type: Boolean,
+    default: false,
+  },
 })
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 // The fallback keeps isolated component previews functional; routed product
 // pages always receive the real Vue Router instances.
 const route = useRoute() || { query: {}, hash: '' }
@@ -419,20 +426,65 @@ watch(
 )
 
 // Only explicitly public tournaments may be indexed; link-only pages ask crawlers to stay away.
-watch(() => (tournament.value ? visibilityOf(tournament.value) : null), mode => setRobotsMeta(mode === 'public'), { immediate: true })
+// The widget is a copy of the page and is never indexed on its own.
+watch(() => (tournament.value ? visibilityOf(tournament.value) : null), mode => setRobotsMeta(!props.embed && mode === 'public'), { immediate: true })
+
+const pageUrl = computed(() => `${siteOrigin}/tournaments/${encodeURIComponent(props.slug)}`)
+// Canonical URL (the widget points at the page) and schema.org SportsEvent for search results.
+watch(
+  [tournament, schedule, locale],
+  () => {
+    const row = tournament.value
+    if (!row) { clearTournamentHead(document); return }
+    const eventRow = { ...row, ...scheduleSpan(schedule.value) }
+    const jsonLd = !props.embed && visibilityOf(row) === 'public'
+      ? tournamentJsonLd(eventRow, { origin: siteOrigin, slug: props.slug, locale: locale.value, image: tournamentImageUrl(siteOrigin, props.slug, locale.value, row.updated_at) })
+      : null
+    applyTournamentHead(document, { canonical: pageUrl.value, jsonLd })
+  },
+  { immediate: true },
+)
+
+// The widget tells embed.js its content height so the iframe never scrolls inside the club's page.
+// The page root is measured, not the document: the app shell is at least one viewport tall.
+const rootEl = ref(null)
+let heightObserver = null
+onMounted(() => {
+  if (!props.embed || window.parent === window || typeof ResizeObserver === 'undefined' || !rootEl.value) return
+  let last = 0
+  const main = rootEl.value.parentElement
+  const padding = main ? parseFloat(getComputedStyle(main).paddingTop) + parseFloat(getComputedStyle(main).paddingBottom) : 0
+  heightObserver = new ResizeObserver(() => {
+    const height = Math.ceil(rootEl.value.getBoundingClientRect().height + padding)
+    if (height === last) return
+    last = height
+    // Only a height leaves the frame, so any parent may read it.
+    window.parent.postMessage({ type: 'bracketa:embed-height', slug: props.slug, height }, '*')
+  })
+  heightObserver.observe(rootEl.value)
+})
+const embedLink = computed(() => `${pageUrl.value}?utm_source=embed&utm_medium=widget&utm_campaign=club_site`)
 
 onBeforeUnmount(() => {
   loadVersion++
   clearInterval(nowTimer); nowTimer = null
   teardownRealtime()
   setRobotsMeta(true)
+  clearTournamentHead(document)
+  heightObserver?.disconnect()
 })
 </script>
 
 <template>
-  <div class="stack">
+  <div ref="rootEl" class="stack">
     <section v-if="loading" class="card">
       <p class="muted">{{ t('actions.loading') }}</p>
+    </section>
+
+    <!-- A third-party iframe cannot keep the unlock token: send visitors to the page itself. -->
+    <section v-else-if="accessMode === 'password' && !tournament && embed" class="card empty-state">
+      <p class="empty-state__title">{{ t('share.embedLocked') }}</p>
+      <a class="btn btn--primary" :href="embedLink" target="_blank" rel="noopener">{{ t('share.embedOpen') }}</a>
     </section>
 
     <section v-else-if="accessMode === 'password' && !tournament" class="stack">
@@ -452,7 +504,7 @@ onBeforeUnmount(() => {
         <button class="btn btn--secondary btn--sm" type="button" @click="initialLoad">{{ t('sync.retry') }}</button>
       </div>
       <p v-if="accessGrant" class="muted" role="status" style="margin: 0">{{ t('access.unlock.polling') }}</p>
-      <section class="card card--elevated pub-hero">
+      <section class="card card--elevated pub-hero" :class="{ 'pub-hero--embed': embed }">
         <span class="pub-hero__icon" aria-hidden="true">{{ heroIcon }}</span>
         <div class="pub-hero__body">
           <div class="pub-hero__title-row">
@@ -468,14 +520,14 @@ onBeforeUnmount(() => {
             <span v-for="(chip, i) in heroChips" :key="i" class="pub-chip">{{ chip }}</span>
           </div>
           <details
-            v-if="tournament.description"
+            v-if="tournament.description && !embed"
             class="pub-hero__details"
             :open="!isNarrowLayout"
           >
             <summary>{{ t('mobile.tournamentDetails') }}</summary>
             <p class="pub-hero__desc">{{ tournament.description }}</p>
           </details>
-          <div v-if="showVenue" class="pub-venue">
+          <div v-if="showVenue && !embed" class="pub-venue">
             <svg class="pub-venue__pin" viewBox="0 0 24 24" aria-hidden="true">
               <path d="M12 21s7-5.4 7-11a7 7 0 1 0-14 0c0 5.6 7 11 7 11z" />
               <circle cx="12" cy="10" r="2.6" />
@@ -492,7 +544,7 @@ onBeforeUnmount(() => {
               >{{ t(`venue.map.${link.id}`) }}</a>
             </span>
           </div>
-          <div v-if="tournament.publish_contact && (tournament.contact_phone || tournament.contact_email)" class="pub-contact">
+          <div v-if="!embed && tournament.publish_contact && (tournament.contact_phone || tournament.contact_email)" class="pub-contact">
             <strong>{{ t('mobile.organizerContacts') }}</strong>
             <a v-if="tournament.contact_phone" :href="`tel:${tournament.contact_phone}`">{{ tournament.contact_phone }}</a>
             <a v-if="tournament.contact_email" :href="`mailto:${tournament.contact_email}`">{{ tournament.contact_email }}</a>
@@ -508,7 +560,7 @@ onBeforeUnmount(() => {
         :entries-map="entriesMap"
       />
 
-      <details v-if="rulesRows.length" class="card pub-rules">
+      <details v-if="rulesRows.length && !embed" class="card pub-rules">
         <summary class="pub-rules__summary">
           <span class="pub-rules__title">{{ t('tournament.rulesSection') }}</span>
           <span class="pub-rules__hint">{{ t('tournament.rulesSectionHint') }}</span>
@@ -521,7 +573,7 @@ onBeforeUnmount(() => {
         </dl>
       </details>
 
-      <div v-if="publicTabs.length > 1" class="tab-group" role="tablist" :aria-label="t('tournament.tabsLabel')" @keydown="onTabKeydown">
+      <div v-if="publicTabs.length > 1 && !embed" class="tab-group" role="tablist" :aria-label="t('tournament.tabsLabel')" @keydown="onTabKeydown">
         <template v-for="tab in publicTabs" :key="tab.id">
           <span v-if="tab.disabled" class="tooltip-wrapper" :data-tooltip="tab.tooltip">
             <button type="button" class="tab tab--disabled" role="tab" :aria-selected="false" :aria-disabled="true" disabled>
@@ -546,7 +598,7 @@ onBeforeUnmount(() => {
       </div>
 
       <div
-        v-if="activeTab === 'registration' && showRegistrationTab"
+        v-if="activeTab === 'registration' && showRegistrationTab && !embed"
         id="pub-registration-panel"
         role="tabpanel"
         aria-labelledby="pub-tab-registration"
@@ -591,7 +643,7 @@ onBeforeUnmount(() => {
       </div>
 
       <div
-        v-else-if="activeTab === 'participants' && hasParticipants"
+        v-else-if="activeTab === 'participants' && hasParticipants && !embed"
         id="pub-participants-panel"
         role="tabpanel"
         aria-labelledby="pub-tab-participants"
@@ -734,6 +786,10 @@ onBeforeUnmount(() => {
       </div>
       </div>
 
+      <footer v-if="embed" class="pub-embed-footer">
+        <a :href="embedLink" target="_blank" rel="noopener">{{ t('share.embedOpen') }} <span aria-hidden="true">↗</span></a>
+      </footer>
+
       <LiveScoreViewerModal
         v-if="selectedLiveMatch && selectedLiveScore"
         :live-score="selectedLiveScore"
@@ -746,6 +802,23 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.pub-hero--embed { padding: var(--space-3) var(--space-4); }
+.pub-hero--embed .page-title { font-size: 1.25rem; }
+.pub-hero--embed .pub-hero__icon { display: none; }
+.pub-embed-footer {
+  display: flex;
+  justify-content: flex-end;
+  font-size: 0.8125rem;
+}
+.pub-embed-footer a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 32px;
+  color: var(--muted);
+  text-decoration: none;
+}
+.pub-embed-footer a:hover { color: var(--primary); }
 .participant-item { flex-wrap: wrap; gap: 8px 12px; }
 .participant-item strong { flex: 1 1 180px; min-width: 0; overflow-wrap: anywhere; }
 .participant-item .badge { flex-shrink: 0; }

@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { supabase } from '../lib/supabase'
+import { track } from '../lib/analytics'
 
 let authSubscription = null
 
@@ -132,6 +133,7 @@ export const useAuthStore = defineStore('auth', {
     },
 
     async signInWithGoogle() {
+      track('sign_in_start', { method: 'google' })
       const redirectTo = `${window.location.origin}/admin`
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
@@ -146,6 +148,7 @@ export const useAuthStore = defineStore('auth', {
     async signUpWithEmail(email, password) {
       const { data, error } = await supabase.auth.signUp({ email, password })
       if (error) throw error
+      track('sign_up', { method: 'email' })
       this.applySession(data.session)
       return data
     },
