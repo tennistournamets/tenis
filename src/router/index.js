@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { beforeUnload, confirmLeaveForms } from '../lib/unsavedChanges'
 import i18n from '../i18n'
+import { authCallbackCleanupLocation, scrubAuthCallbackFromLocation } from '../lib/authCallbackUrl'
 
 const HomeView = () => import('../views/HomeView.vue')
 const PublicTournamentView = () => import('../views/PublicTournamentView.vue')
@@ -84,6 +85,11 @@ router.beforeEach(async (to, from) => {
     await auth.init()
   }
 
+  // supabase-js has read the OAuth callback by now (init awaits it). vue-router keeps the
+  // landing hash through `redirect` records, so drop the tokens before the URL is committed.
+  const cleaned = authCallbackCleanupLocation(to)
+  if (cleaned) return cleaned
+
   const requiresAuth = to.matched.some((record) => record.meta.requiresAuth)
   if (requiresAuth && !auth.user) {
     return { name: 'home' }
@@ -101,5 +107,8 @@ router.beforeEach(async (to, from) => {
 
   return true
 })
+
+// Covers navigations that end without committing a cleaned URL (aborted or failed).
+router.afterEach(() => { scrubAuthCallbackFromLocation() })
 
 export default router
