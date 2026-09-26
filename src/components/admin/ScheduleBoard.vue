@@ -1,10 +1,12 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { entryMemberNames } from '../../lib/entryDisplay'
+import { entryDisplayNames } from '../../lib/entryDisplay'
 import { supabase } from '../../lib/supabase'
 import InfoTip from '../InfoTip.vue'
 import { knockoutTotals, matchRoundName } from '../../lib/roundLabels'
+import { isByeMatch } from '../../lib/bracketDisplay'
+import { compareGroupMatches, groupNamesById, groupRoundLabel } from '../../lib/groupsFlow'
 import {
   blocksPublish, conflictText, draftDiff, mergeConflicts, queueOrderConflicts, formatScheduleTime, indexSchedule, scheduleDropAction, scheduleError,
   scheduleLocked, scheduleSummary, timezoneOf,
@@ -13,6 +15,7 @@ import {
 const props = defineProps({
   tournament: { type: Object, required: true },
   matches: { type: Array, default: () => [] },
+  groups: { type: Array, default: () => [] },
   entriesMap: { type: Object, default: () => ({}) },
   courts: { type: Array, default: () => [] },
   schedule: { type: Array, default: () => [] },
@@ -47,7 +50,7 @@ const stageOrder = { group: 0, winners: 1, main: 1, losers: 2, grand_final: 3, t
 
 function teamLabel(entryId) {
   if (!entryId) return t('bracket.tbd')
-  const names = entryMemberNames(props.entriesMap[entryId])
+  const names = entryDisplayNames(props.entriesMap[entryId])
   return names.length ? names.join(' / ') : t('bracket.tbd')
 }
 const matchTitle = match => `${teamLabel(match.side_a_entry_id)} — ${teamLabel(match.side_b_entry_id)}`
@@ -56,8 +59,11 @@ const roundTotals = computed(() => knockoutTotals(props.matches, props.tournamen
 // Double elimination needs "Upper/Lower bracket" to tell its rounds apart;
 // a single bracket or a group playoff reads fine as just "Semifinal".
 const hasLosers = computed(() => props.matches.some(m => m.stage === 'losers'))
+const groupNames = computed(() => groupNamesById(props.groups))
 function roundLabel(match) {
   if (match.stage === 'grand_final' || match.stage === 'third_place') return t(`mobile.matchStage.${match.stage}`)
+  // "Group A · Round 1": without the letter every group's tour shares one heading.
+  if (match.stage === 'group') return groupRoundLabel(match, groupNames.value, t)
   const round = Number(match.round_number || 0)
   const base = t(`mobile.matchStage.${match.stage || 'main'}`)
   if (!round) return base
@@ -178,8 +184,12 @@ watch([() => props.schedule, () => props.courts, moveEnabled, disabled], () => {
   if (!moveEnabled.value || disabled.value) selectedMatchId.value = ''
 })
 
-const sortedMatches = computed(() => [...props.matches].sort((a, b) =>
-  (stageOrder[a.stage] ?? 8) - (stageOrder[b.stage] ?? 8) || (a.round_number || 0) - (b.round_number || 0) || (a.match_number || 0) - (b.match_number || 0)))
+// A BYE is decided without play: it has nothing to schedule and is not counted.
+const schedulable = computed(() => props.matches.filter(m => !isByeMatch(m)))
+const sortedMatches = computed(() => [...schedulable.value].sort((a, b) =>
+  (stageOrder[a.stage] ?? 8) - (stageOrder[b.stage] ?? 8)
+  || (a.stage === 'group' && b.stage === 'group' ? compareGroupMatches(a, b) : 0)
+  || (a.round_number || 0) - (b.round_number || 0) || (a.match_number || 0) - (b.match_number || 0)))
 
 const byRound = computed(() => {
   const groups = new Map()
@@ -196,7 +206,8 @@ const byCourt = computed(() => {
   const unscheduled = { label: t('schedule.unassigned'), key: 'unassigned', items: [] }
   for (const match of sortedMatches.value) {
     const row = index.value.draft[match.id]
-    if (!row) { unscheduled.items.push(match); continue }
+    // Played without a slot: nothing left to place on a court.
+    if (!row) { if (match.status !== 'finished') unscheduled.items.push(match); continue }
     const column = columns.find(c => c.key === row.court_id) || noCourt
     column.items.push(match)
   }
@@ -221,8 +232,10 @@ function slotParts(match) {
   const queue = row.queue_order ? t('schedule.queueLabel', { n: row.queue_order }) : ''
   return { court, time, queue }
 }
-const scheduledCount = computed(() => props.matches.filter(m => index.value.draft[m.id]).length)
-const progressPct = computed(() => (props.matches.length ? Math.round((scheduledCount.value / props.matches.length) * 100) : 0))
+const scheduledCount = computed(() => schedulable.value.filter(m => index.value.draft[m.id]).length)
+const progressPct = computed(() => (schedulable.value.length ? Math.round((scheduledCount.value / schedulable.value.length) * 100) : 0))
+// A match played without a schedule row needs no slot any more.
+const playedUnscheduled = match => match.status === 'finished' && !index.value.draft[match.id]
 const statusTone = computed(() => (diff.value.count ? 'dirty' : props.tournament.schedule_published_at ? 'live' : 'never'))
 
 // Court board: a horizontal row of lanes. Arrows and edge fades appear only
@@ -344,8 +357,8 @@ onBeforeUnmount(() => { clearTimeout(conflictsTimer); conflictsVersion += 1 })
       </div>
 
       <div v-if="matches.length" class="sb-status__progress">
-        <span class="sb-status__progress-label">{{ t('schedule.progress', { done: scheduledCount, total: matches.length }) }}</span>
-        <span class="sb-progress" role="progressbar" :aria-valuenow="scheduledCount" aria-valuemin="0" :aria-valuemax="matches.length">
+        <span class="sb-status__progress-label">{{ t('schedule.progress', { done: scheduledCount, total: schedulable.length }) }}</span>
+        <span class="sb-progress" role="progressbar" :aria-valuenow="scheduledCount" aria-valuemin="0" :aria-valuemax="schedulable.length">
           <span class="sb-progress__fill" :style="{ width: `${progressPct}%` }" />
         </span>
       </div>
@@ -490,7 +503,7 @@ onBeforeUnmount(() => { clearTimeout(conflictsTimer); conflictsVersion += 1 })
                   {{ conflictsByMatch[match.id].length }}
                 </span>
               </span>
-              <span v-if="view !== 'court'" class="sb-slot" :class="{ 'sb-slot--empty': !slotParts(match) }" :aria-label="summary(match) || t('schedule.unassigned')">
+              <span v-if="view !== 'court'" class="sb-slot" :class="{ 'sb-slot--empty': !slotParts(match) }" :aria-label="summary(match) || t(playedUnscheduled(match) ? 'groupsFlow.played' : 'schedule.unassigned')">
                 <template v-if="slotParts(match)">
                   <span v-if="slotParts(match).court && view !== 'court'" class="sb-slot__part">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="1.5" /><path d="M12 5v14" /><path d="M3 12h18" /></svg>
@@ -502,6 +515,7 @@ onBeforeUnmount(() => { clearTimeout(conflictsTimer); conflictsVersion += 1 })
                   </span>
                   <span v-if="slotParts(match).queue" class="sb-slot__part">{{ slotParts(match).queue }}</span>
                 </template>
+                <template v-else-if="playedUnscheduled(match)">{{ t('groupsFlow.played') }}</template>
                 <template v-else>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="17" rx="2" /><path d="M16 2v4" /><path d="M8 2v4" /><path d="M3 10h18" /></svg>
                   {{ t('schedule.unassigned') }}
@@ -519,6 +533,7 @@ onBeforeUnmount(() => { clearTimeout(conflictsTimer); conflictsVersion += 1 })
                 <span v-if="slotParts(match).queue" class="sb-slot__part">{{ slotParts(match).queue }}</span>
               </span>
               <button
+                v-if="!playedUnscheduled(match)"
                 class="btn btn--sm sb-assign"
                 :class="index.draft[match.id] ? 'btn--ghost' : 'btn--outline'"
                 type="button"
@@ -635,8 +650,8 @@ onBeforeUnmount(() => { clearTimeout(conflictsTimer); conflictsVersion += 1 })
 .sb-item__round { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
 .sb-item__teams { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; min-width: 0; }
 .sb-item__team { font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
-.sb-item__team.is-tbd { font-weight: 500; color: var(--disabled); }
-.sb-item__vs { font-size: 0.72rem; font-weight: 600; text-transform: uppercase; color: var(--disabled); }
+.sb-item__team.is-tbd { font-weight: 500; color: var(--muted); }
+.sb-item__vs { font-size: 0.72rem; font-weight: 600; text-transform: uppercase; color: var(--muted); }
 .sb-item__flags { display: flex; gap: 6px; flex: none; }
 .sb-item__flags:empty { display: none; }
 .sb-tag {

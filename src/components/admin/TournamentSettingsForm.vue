@@ -7,7 +7,7 @@ import InfoTip from '../InfoTip.vue'
 import RegistrationRulesFields from './RegistrationRulesFields.vue'
 import VenueFields from './VenueFields.vue'
 import { getSportConfig } from '../../lib/sportConfig'
-import { REGISTRATION_DRAFT_KEYS, formatDeadline, pickRegistrationDraft, registrationDraftFields, registrationPatch, validateRegistrationForm } from '../../lib/registrationRules'
+import { REGISTRATION_DRAFT_KEYS, formatDeadline, pickRegistrationDraft, registrationDraftFields, registrationPatch, validateRegistrationForm, organizerContactError } from '../../lib/registrationRules'
 import { COMMON_TIMEZONES, browserTimezone } from '../../lib/schedule'
 import { VISIBILITY_MODES, accessError, visibilityOf } from '../../lib/access'
 import { useFormDraft, cloneForm, matchVersions } from '../../lib/formDraft'
@@ -81,6 +81,12 @@ const isTournamentFinished = computed(() => props.tournament.status === 'complet
 const formDisabled = computed(() => settingsSaving.value || props.busy || !props.canManage)
 const structureDisabled = computed(() => isTournamentActive.value || isTournamentFinished.value || formDisabled.value)
 const sportCfg = computed(() => getSportConfig(props.tournament.sport || 'tennis'))
+// Padel keeps the tie-break target of the wizard (7 or 10) in scoring_config.
+const isPadel = computed(() => props.tournament.sport === 'padel')
+const padelTiebreak = computed({
+  get: () => (Number(settingsForm.scoring_config?.tiebreak_to) === 10 ? 10 : 7),
+  set: value => { settingsForm.scoring_config = { ...(settingsForm.scoring_config || {}), tiebreak_to: Number(value) } },
+})
 
 // Секции-аккордеон: по умолчанию раскрыто только «Основное». Состояние живёт в компоненте,
 // свёрнутая секция показывает короткую сводку своих значений.
@@ -107,6 +113,7 @@ const sectionMeta = computed(() => {
     game: joinMeta(
       sportCfg.value.supportsCategory ? t('tournament.' + f.category) : '',
       sportCfg.value.supportsSetFormat && f.set_format ? t('format.' + f.set_format) : '',
+      isPadel.value ? t(padelTiebreak.value === 10 ? 'admin.tiebreakTo10' : 'admin.tiebreakTo7') : '',
     ),
     rules: props.tournament.sport === 'tennis' ? tennisRulesSummary(f.scoring_config, t) : '',
     access: joinMeta(t('tournament.' + f.status), t('access.visibility.' + f.visibility)),
@@ -129,7 +136,7 @@ async function reloadSettings() {
     await nextTick()
     settingsDraft.discard()
     settingsError.value = ''
-  } catch (error) { settingsError.value = error.message || t('drafts.unavailable') }
+  } catch (error) { settingsError.value = accessError(error, t, 'drafts.unavailable') }
   finally { settingsSaving.value = false }
 }
 
@@ -166,6 +173,8 @@ async function saveTournamentSettings() {
   const regForm = pickRegistrationDraft(submitted)
   const regError = validateRegistrationForm(regForm)
   if (regError) { settingsError.value = t(regError); return }
+  const contactError = organizerContactError(submitted.contact_phone, submitted.contact_email)
+  if (contactError) { settingsError.value = t(contactError); return }
   const minRest = String(submitted.schedule_min_rest ?? '').trim()
   if (minRest !== '' && !/^\d+$/.test(minRest)) { settingsError.value = t('schedule.errors.invalidConfig'); return }
   const deadlineChanged = regForm.registration_deadline !== settingsDraft.baseline.value.registration_deadline
@@ -350,6 +359,13 @@ async function saveTournamentSettings() {
               <option value="best_of_5">{{ t('format.best_of_5') }}</option>
             </select>
           </div>
+          <div v-if="isPadel" class="form-field">
+            <label for="adm-tiebreak">{{ t('admin.tiebreakTo') }}</label>
+            <select id="adm-tiebreak" v-model.number="padelTiebreak" class="input" :disabled="structureDisabled">
+              <option :value="7">{{ t('admin.tiebreakTo7') }}</option>
+              <option :value="10">{{ t('admin.tiebreakTo10') }}</option>
+            </select>
+          </div>
         </div>
         <label v-if="sportCfg.supportsDoublesPairing && settingsForm.category === 'doubles'" class="checkbox-row">
           <input v-model="settingsForm.doubles_pairing_mode" type="checkbox" true-value="pick_random" false-value="pre_agreed" :disabled="structureDisabled" />
@@ -453,7 +469,7 @@ async function saveTournamentSettings() {
     </div>
 
     <footer class="admin-settings-card__footer" :class="{ 'admin-settings-card__footer--dirty': canSaveSettings && !settingsConflict }">
-      <span class="admin-settings-card__footer-status" role="status">{{ canSaveSettings && !settingsConflict ? t('drafts.unsaved') : t('admin.noChanges') }}</span>
+      <span class="admin-settings-card__footer-status" role="status">{{ canSaveSettings ? t('drafts.unsaved') : t('admin.noChanges') }}</span>
       <button v-if="hasTournamentSettingsChanges && !settingsConflict" class="btn btn--ghost" type="button" :disabled="settingsSaving || busy" @click="reloadSettings">{{ t('drafts.reload') }}</button>
       <button
         class="btn btn--primary"

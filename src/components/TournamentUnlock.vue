@@ -2,7 +2,7 @@
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { supabase } from '../lib/supabase'
-import { accessError } from '../lib/access'
+import { accessError, browserClientId } from '../lib/access'
 
 const props = defineProps({
   slug: { type: String, required: true },
@@ -18,7 +18,9 @@ async function submit() {
   loading.value = true
   errorText.value = ''
   try {
-    const { data, error } = await supabase.rpc('unlock_tournament', { p_slug: props.slug, p_password: password.value })
+    const { data, error } = await supabase.rpc('unlock_tournament', {
+      p_slug: props.slug, p_password: password.value, p_client_id: browserClientId(),
+    })
     if (error) throw error
     // Failures come back as data so the server can keep counting attempts.
     if (!data?.ok) {

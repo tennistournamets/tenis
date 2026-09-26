@@ -10,7 +10,8 @@ const { t } = useI18n()
   <button
     class="theme-toggle"
     type="button"
-    :aria-label="t('nav.toggleTheme')"
+    :aria-label="t('a11y.darkTheme')"
+    :aria-pressed="theme === 'dark' ? 'true' : 'false'"
     :title="t('nav.toggleTheme')"
     @click="toggleTheme"
   >

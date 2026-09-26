@@ -166,11 +166,11 @@ test('the display flag travels with the numbers; hidden tournaments report no st
 
 test('the forward migration chain replays without changing data and keeps the trigger definitions', async () => {
   const t = await open({ count: 2 })
-  await settings(t, { registration_capacity: 4, entry_fee_mode: 'paid', entry_fee_minor: 1500, entry_fee_currency: 'EUR', entry_fee_unit: 'pair' })
+  await settings(t, { registration_capacity: 4, entry_fee_mode: 'paid', entry_fee_minor: 1500, entry_fee_currency: 'EUR', entry_fee_unit: 'player' })
   const before = await snapshot(ctx)
   await reapplyForwardMigrations(ctx)
   assert.deepEqual(await snapshot(ctx), before)
   const triggers = (await ctx.db.query(`select tgname from pg_trigger where tgname in ('trg_entries_capacity','trg_entry_members_capacity') order by tgname`)).rows.map(r => r.tgname)
   assert.deepEqual(triggers, ['trg_entries_capacity', 'trg_entry_members_capacity'])
-  assert.deepEqual((await state(t)).fee, { mode: 'paid', amount_minor: 1500, currency: 'EUR', unit: 'pair' })
+  assert.deepEqual((await state(t)).fee, { mode: 'paid', amount_minor: 1500, currency: 'EUR', unit: 'player' })
 })

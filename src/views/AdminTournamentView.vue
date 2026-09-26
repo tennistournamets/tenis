@@ -17,12 +17,16 @@ import LiveScoringModal from '../components/LiveScoringModal.vue'
 import TournamentQrModal from '../components/TournamentQrModal.vue'
 import ScoreEditor from '../components/ScoreEditor.vue'
 import ManualEntryForm from '../components/admin/ManualEntryForm.vue'
+import EntryContact from '../components/admin/EntryContact.vue'
+import { loadEntryContacts } from '../lib/entryContacts'
 import TournamentSettingsForm from '../components/admin/TournamentSettingsForm.vue'
 import ScheduleBoard from '../components/admin/ScheduleBoard.vue'
 import CourtsEditor from '../components/admin/CourtsEditor.vue'
 import MatchScheduleModal from '../components/admin/MatchScheduleModal.vue'
 import AccessMatrix from '../components/admin/AccessMatrix.vue'
 import TournamentNextStep from '../components/admin/TournamentNextStep.vue'
+import TournamentChampion from '../components/TournamentChampion.vue'
+import { finishConfirmation } from '../lib/tournamentChampion'
 import KebabMenu from '../components/KebabMenu.vue'
 import InfoTip from '../components/InfoTip.vue'
 import AppModal from '../components/AppModal.vue'
@@ -33,7 +37,7 @@ import { scoringError } from '../lib/tennisRules'
 import { registrationDisplayState, registrationError } from '../lib/registrationRules'
 import { sameForm, cloneForm, matchVersions } from '../lib/formDraft'
 import { useUnsavedChanges, confirmDiscard, withApprovedDeparture } from '../lib/unsavedChanges'
-import { entryMemberNames } from '../lib/entryDisplay'
+import { customDisplayName, entryDisplayNames, entryMemberNames } from '../lib/entryDisplay'
 import { confirmDialog } from '../lib/confirmDialog'
 import { supabase } from '../lib/supabase'
 import { createSnapshotRefresh, subscribeTournament } from '../lib/tournamentSync'
@@ -45,8 +49,14 @@ import { useAuthStore } from '../stores/auth'
 import { useNarrowLayout } from '../lib/useNarrowLayout'
 import { useHeaderTitle } from '../lib/headerTitle'
 import { onTabKeydown as onSurfaceTabKeydown } from '../lib/tabNavigation'
-import { statusBadgeClass } from '../lib/tournamentStatus'
-import { bracketPlan, groupCountOptions, groupPlan, roundRobinPlan } from '../lib/formatPlan'
+import { displayStatus, statusBadgeClass } from '../lib/tournamentStatus'
+import { errorMessage } from '../lib/errorMessages'
+import { usePageAlerts } from '../lib/pageAlerts'
+import { pluralParams } from '../lib/plural'
+import { bracketPlan, groupAdvanceWarning, groupCountOptions, groupPlan, roundRobinPlan } from '../lib/formatPlan'
+import { isFedMatch, swapDraftSlots } from '../lib/bracketDisplay'
+import { readDrawMode, writeDrawMode } from '../lib/drawModePreference'
+import { advanceOptions, advanceToSend, changesField, effectiveAdvance, groupMatchProgress, groupsError, playoffPreviewItems, rosterMismatch } from '../lib/groupsFlow'
 
 const props = defineProps({
   id: {
@@ -55,7 +65,7 @@ const props = defineProps({
   },
 })
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 // The fallback keeps isolated component previews functional; routed product
 // pages always receive the real Vue Router instances.
 const route = useRoute() || { query: {}, hash: '' }
@@ -97,6 +107,9 @@ const scheduleMatch = ref(null)
 const groups = ref([])
 const groupStandings = ref({}) // group_id -> standings rows
 const groupCount = ref(2)
+// How many leave each group; sent with generate_groups, which stores it.
+// The organizer's own pick of "advance per group"; null keeps the wizard value.
+const groupAdvancePicked = ref(null)
 const matchSets = ref([])
 const liveScores = ref([])
 const admins = ref([])
@@ -112,7 +125,10 @@ function acceptTournament(data) {
   if (tournament.value && data.settings_revision < tournament.value.settings_revision) return
   tournament.value = data
 }
-const drawMode = ref('auto-random')
+// Remembered per tournament on this device, so a reload keeps a manual draw manual.
+const drawMode = ref(readDrawMode(props.id))
+watch(() => props.id, id => { drawMode.value = readDrawMode(id) })
+watch(drawMode, mode => writeDrawMode(props.id, mode))
 // Rearranging a built bracket is its own mode, switched on by a button (or right
 // after a manual draw) — not by the draw-mode select, which resets on reload.
 const arrangeMode = ref(false)
@@ -230,9 +246,7 @@ async function moveSeed(entry, delta) {
     if (error) throw error
     await loadAll(true)
   } catch (error) {
-    const message = error?.message || ''
-    errorText.value = message.startsWith('seeding.') ? t(message)
-      : error?.code === 'PGRST202' ? t('seeding.unavailable') : scoringError(message, t)
+    errorText.value = error?.code === 'PGRST202' ? t('seeding.unavailable') : errorMessage(error, t)
   } finally { actionLoading.value = false }
 }
 
@@ -261,15 +275,19 @@ function teamLabel(entryId) {
   if (!entry) {
     return t('bracket.tbd')
   }
-  return entryLabel(entry)
+  // Matches show the chosen bracket name, like the group tables do.
+  return entryDisplayNames(entry).join(' / ') || entryLabel(entry)
 }
 
 const showPublicShareActions = computed(() => {
   return tournament.value?.status !== 'draft'
 })
 
+// Matches must cover exactly the approved field (every format): an approval,
+// rejection or reopening after generation leaves them stale until regenerated.
+const rosterState = computed(() => rosterMismatch(approvedEntries.value, matches.value))
 const canStartTournament = computed(
-  () => tournament.value?.status === 'registration_closed' && matches.value.length > 0,
+  () => tournament.value?.status === 'registration_closed' && matches.value.length > 0 && !rosterState.value.stale,
 )
 const isTournamentActive = computed(() => tournament.value?.status === 'in_progress')
 const isTournamentFinished = computed(() => tournament.value?.status === 'completed')
@@ -281,8 +299,23 @@ const canEditScores = computed(() => scoreAccess.value.scores)
 const canUseLiveScoring = computed(() => scoreAccess.value.live)
 const canEditFinalScores = computed(() => scoreAccess.value.final)
 const regState = computed(() => registrationDisplayState(registration.value, Date.now(), tournament.value))
+// Every seat is taken by approved entries: approving more would only be refused by the server.
+const seatsFull = computed(() => registration.value?.capacity != null && registration.value?.occupied != null && registration.value.occupied >= registration.value.capacity)
+// Past the deadline an open registration accepts nothing: the badge says closed.
+const badgeStatus = computed(() => (regState.value.deadlinePassed && tournament.value?.status === 'registration_open' ? 'registration_closed' : displayStatus(tournament.value)))
 const showDeadlineHint = computed(() => canManageTournament.value && regState.value.deadlinePassed && tournament.value?.status === 'registration_open')
 const waitlistSeatFree = computed(() => Boolean(registration.value?.capacity) && !registration.value.is_full && waitlistedEntries.value.length > 0)
+// Applicants' contacts: owners and editors only, re-read when the entry list changes.
+const entryContacts = ref({})
+let entryContactsRead = 0
+watch(() => (canManageTournament.value ? entries.value.map(e => e.id).join(',') : ''), async key => {
+  const read = ++entryContactsRead
+  if (!key) { entryContacts.value = {}; return }
+  try {
+    const contacts = await loadEntryContacts(supabase, props.id)
+    if (read === entryContactsRead) entryContacts.value = contacts
+  } catch { /* Contacts are an aid; the lists work without them. */ }
+})
 const scheduleIndex = computed(() => indexSchedule(schedule.value))
 const scheduleDraftCount = computed(() => draftDiff(schedule.value).count)
 // Organizers see their draft everywhere in the admin page; changed rows are marked.
@@ -304,8 +337,10 @@ const showStartButton = computed(() => {
 // Concrete reason why "Start tournament" is disabled (shown as tooltip).
 const startBlockReason = computed(() => {
   if (canStartTournament.value) return null
-  if (tournament.value?.status !== 'registration_closed') return t('admin.startNeedRegClosed')
-  return t('admin.startNeedBracket')
+  if (tournament.value?.status !== 'registration_closed') return t(regState.value.deadlinePassed ? 'admin.startNeedRegClosedDeadline' : 'admin.startNeedRegClosed')
+  if (matches.value.length && rosterState.value.stale) return t('groupsFlow.startNeedRegenerate')
+  // Round robin and groups have matches, not a bracket.
+  return isRoundRobin.value || isGroupsPlayoff.value ? t('admin.startNeedMatches', { tab: bracketTabLabel.value }) : t('admin.startNeedBracket')
 })
 
 async function startTournament() {
@@ -333,7 +368,9 @@ async function finishTournament() {
   actionLoading.value = true
   errorText.value = ''
   try {
-    if (!(await confirmDialog(t('admin.finishTournamentConfirm')))) return
+    // Unplayed matches are listed explicitly before the tournament is closed for good.
+    const finish = finishConfirmation({ format: tournament.value.format, matches: matches.value, groups: groups.value, label: teamLabel, t })
+    if (!(await confirmDialog(finish.message, finish.options))) return
     const { data, error } = await supabase.rpc('update_tournament_settings', {
       p_tournament_id: props.id, p_patch: { status: 'completed' }, p_expected_revision: revision,
     })
@@ -434,7 +471,7 @@ const snapshotRefresh = createSnapshotRefresh({
   },
   onError: error => {
     syncFailed.value = true
-    if (!tournament.value) errorText.value = error.message || t('errors.generic')
+    if (!tournament.value) errorText.value = errorMessage(error, t)
   },
 })
 
@@ -445,6 +482,11 @@ async function loadMatchesAndSets() {
 }
 async function loadTournament() { return loadMatchesAndSets() }
 async function loadEntries() { return loadMatchesAndSets() }
+
+function retryLoad() {
+  if (!tournament.value) errorText.value = ''
+  void loadAll().catch(() => {})
+}
 
 async function loadAll() {
   if (!auth.user || disposed) return
@@ -479,6 +521,9 @@ async function updateEntryStatus(entryId, status) {
   errorText.value = ''
   noticeText.value = ''
   try {
+    const entry = entries.value.find(e => e.id === entryId)
+    if (hasBracket.value && entry && changesField(entry.status, status)
+      && !(await confirmDialog(t('groupsFlow.rosterChangeConfirm')))) return
     // The capacity trigger rejects an approval beyond the limit with registration.full.
     const { error } = await supabase.from('entries').update({ status }).eq('id', entryId)
     if (error) throw error
@@ -495,7 +540,8 @@ async function approveAllPending() {
   }
   actionLoading.value = true
   try {
-    if (!(await confirmDialog(t('admin.approveAllConfirm')))) return
+    const confirmText = hasBracket.value ? `${t('admin.approveAllConfirm')}\n\n${t('groupsFlow.rosterChangeConfirm')}` : t('admin.approveAllConfirm')
+    if (!(await confirmDialog(confirmText))) return
     errorText.value = ''
     noticeText.value = ''
     const { data, error } = await supabase.rpc('approve_pending_entries', { p_tournament_id: props.id })
@@ -613,22 +659,37 @@ const groupOptions = computed(() => groupCountOptions(approvedEntries.value.leng
 watch(groupOptions, (options) => {
   if (options.length && !options.includes(Number(groupCount.value))) groupCount.value = options[0]
 }, { immediate: true })
+const advanceChoices = computed(() => advanceOptions(approvedEntries.value.length, groupCount.value))
+// Shown value: the pick or the stored setting, clamped to the current field
+// without overwriting either (approving entries must not reset it to 1).
+const groupAdvance = computed({
+  get: () => effectiveAdvance(advanceChoices.value, tournament.value?.format_config?.advance_per_group, groupAdvancePicked.value),
+  set: value => { groupAdvancePicked.value = Number(value) || null },
+})
+const currentGroupPlan = computed(() => groupPlan(approvedEntries.value.length, groupCount.value, hasGroups.value ? tournament.value?.format_config?.advance_per_group : groupAdvance.value))
+const groupAdvanceWarningText = computed(() => {
+  const plan = currentGroupPlan.value
+  const kind = groupAdvanceWarning(plan)
+  return kind ? t(`groupsFlow.advanceWarning_${kind}`, { qualifiers: plan.qualifiers, n: plan.n }) : ''
+})
 const groupPlanText = computed(() => {
-  const plan = groupPlan(approvedEntries.value.length, groupCount.value, tournament.value?.format_config?.advance_per_group)
-  return t('admin.groupPlan', {
+  const plan = currentGroupPlan.value
+  return t('admin.groupPlan', pluralParams({
     groups: plan.groups,
     size: plan.minSize === plan.maxSize ? plan.minSize : `${plan.minSize}–${plan.maxSize}`,
     matches: plan.matches,
     advance: plan.advance,
     qualifiers: plan.qualifiers,
-  })
+  }, t, locale.value))
 })
-const bracketPlanBlocked = computed(() => isDoubleElim.value && !hasBracket.value && !bracketPlan(approvedEntries.value.length, 'double_elimination').valid)
+// Double elimination (v1) needs a power-of-two field; any other count builds nothing.
+const doubleElimCountInvalid = computed(() => isDoubleElim.value && approvedEntries.value.length >= 2 && !bracketPlan(approvedEntries.value.length, 'double_elimination').valid)
+const bracketPlanBlocked = computed(() => doubleElimCountInvalid.value && !hasBracket.value)
 const bracketPlanText = computed(() => {
   const plan = bracketPlan(approvedEntries.value.length, tournamentFormat.value)
   if (plan.n < 2) return t('nextStep.entriesTooFew')
-  if (isDoubleElim.value) return t('admin.bracketPlanDE', plan)
-  return t(plan.byes ? 'admin.bracketPlanByes' : 'admin.bracketPlanSE', plan)
+  if (isDoubleElim.value) return plan.valid ? t('admin.bracketPlanDE', pluralParams(plan, t, locale.value)) : ''
+  return t(plan.byes ? 'admin.bracketPlanByes' : 'admin.bracketPlanSE', pluralParams(plan, t, locale.value))
 })
 const slotsEditable = computed(() => canManageTournament.value && (arrangeMode.value || bracketEditing.value)
   && !actionLoading.value && !isTournamentActive.value && !isTournamentFinished.value)
@@ -647,6 +708,7 @@ const hasPlayoff = computed(() => playoffMatches.value.length > 0)
 const allGroupMatchesFinished = computed(
   () => groupMatches.value.length > 0 && groupMatches.value.every((m) => m.status === 'finished'),
 )
+const groupProgress = computed(() => groupMatchProgress(matches.value))
 const groupsView = computed(() =>
   buildGroupsView(groups.value, matches.value, groupStandings.value),
 )
@@ -908,7 +970,10 @@ async function generateBracket() {
     arrangeMode.value = drawMode.value === 'manual'
     await loadAll()
   } catch (error) {
-    errorText.value = scoringError(error?.message, t)
+    // A parallel draw (another tab or organizer) may have changed the bracket:
+    // show what the server has now instead of a raw constraint error.
+    errorText.value = /duplicate key|could not obtain lock|deadlock/i.test(error?.message ?? '') ? t('drafts.structureConflict') : scoringError(error, t)
+    try { await loadAll() } catch { /* Keep the original error. */ }
   } finally { actionLoading.value = false }
 }
 
@@ -916,32 +981,42 @@ async function generateGroups() {
   if (actionLoading.value) return
   actionLoading.value = true
   try {
-    if (hasGroups.value && !(await confirmDialog(rebuildConfirmText('admin.rebuildConfirm')))) return
+    if (hasGroups.value && !(await confirmDialog(rebuildConfirmText('admin.rebuildMatchesConfirm')))) return
     errorText.value = ''
     if (!(await ensureRegistrationClosed())) return
     const { error } = await supabase.rpc('generate_groups', {
       p_tournament_id: props.id,
       p_group_count: Number(groupCount.value) || 2,
+      // Regenerating keeps the stored value; the selector exists only before the first draw.
+      p_advance_per_group: hasGroups.value ? null : advanceToSend(advanceChoices.value, tournament.value?.format_config?.advance_per_group, groupAdvancePicked.value),
     })
     if (error) throw error
     await loadAll()
   } catch (error) {
-    errorText.value = scoringError(error?.message, t)
+    errorText.value = groupsError(error?.message, t)
   } finally { actionLoading.value = false }
 }
 
+// The organizer confirms the first-round pairs the server will create.
 async function startPlayoff() {
   if (actionLoading.value) return
   actionLoading.value = true
   errorText.value = ''
   try {
+    const { data: preview, error: previewError } = await supabase.rpc('get_group_playoff_preview', { p_tournament_id: props.id })
+    if (previewError) throw previewError
+    const confirmed = await confirmDialog(t('groupsFlow.playoffConfirm'), {
+      confirmLabel: t('groupsFlow.playoffConfirmApply'),
+      details: { intro: t('groupsFlow.playoffIntro'), items: playoffPreviewItems(preview, t), warning: t('groupsFlow.playoffWarning') },
+    })
+    if (!confirmed) return
     const { error } = await supabase.rpc('generate_group_playoff', {
       p_tournament_id: props.id,
     })
     if (error) throw error
     await loadAll()
   } catch (error) {
-    errorText.value = scoringError(error?.message, t)
+    errorText.value = groupsError(error?.message, t)
   } finally { actionLoading.value = false }
 }
 
@@ -949,7 +1024,7 @@ async function generateSchedule() {
   if (actionLoading.value) return
   actionLoading.value = true
   try {
-    if (hasBracket.value && !(await confirmDialog(rebuildConfirmText('admin.rebuildConfirm'), { danger: true }))) return
+    if (hasBracket.value && !(await confirmDialog(rebuildConfirmText('admin.rebuildMatchesConfirm'), { danger: true }))) return
     errorText.value = ''
     if (!(await ensureRegistrationClosed())) return
     const { error } = await supabase.rpc('generate_round_robin', {
@@ -958,7 +1033,7 @@ async function generateSchedule() {
     if (error) throw error
     await loadAll()
   } catch (error) {
-    errorText.value = scoringError(error?.message, t)
+    errorText.value = groupsError(error?.message, t)
   } finally { actionLoading.value = false }
 }
 
@@ -1020,26 +1095,19 @@ function swapBracketSlots(payload) {
     startBracketEditing()
   }
 
-  const arr = localMatches.value
-  const fromMatch = arr.find((m) => m.id === payload.fromMatchId)
-  const toMatch = arr.find((m) => m.id === payload.toMatchId)
-  if (!fromMatch || !toMatch) return
-  // Only first-round slots take players; a fed match fills itself from results.
-  const fed = id => arr.some(m => m.next_match_id === id || m.loser_next_match_id === id)
-  if (fed(fromMatch.id) || fed(toMatch.id)) return
-
-  const fromKey = payload.fromSide === 'a' ? 'side_a_entry_id' : 'side_b_entry_id'
-  const toKey = payload.toSide === 'a' ? 'side_a_entry_id' : 'side_b_entry_id'
-
-  const tmp = fromMatch[fromKey]
-  fromMatch[fromKey] = toMatch[toKey]
-  toMatch[toKey] = tmp
+  // Only first-round slots take players (a fed match fills itself from results)
+  // and no match may be left empty; a BYE's free pass follows its player.
+  const result = swapDraftSlots(localMatches.value, payload)
+  if (result === 'empty') errorText.value = t('drafts.bracketLayoutInvalid')
+  else if (result === 'ok' && errorText.value === t('drafts.bracketLayoutInvalid')) errorText.value = ''
 }
 
 async function saveBracketLayout() {
   if (actionLoading.value) return
   if (bracketConflict.value) { errorText.value = t('drafts.structureConflict'); return }
+  // Next-round slots only mirror the BYEs locally; the server advances them itself.
   const changed = localMatches.value.filter((lm) => {
+    if (isFedMatch(localMatches.value, lm.id)) return false
     const orig = bracketBaseline.value.find((m) => m.id === lm.id)
     if (!orig) return false
     return orig.side_a_entry_id !== lm.side_a_entry_id || orig.side_b_entry_id !== lm.side_b_entry_id
@@ -1083,11 +1151,16 @@ async function addAdmin() {
   actionLoading.value = true
   errorText.value = ''
   try {
-    const { error } = await supabase.rpc('add_tournament_admin_by_email', {
-      p_tournament_id: props.id,
-      p_email: addAdminForm.email,
-      p_role: addAdminForm.role,
-    })
+    const payload = { p_tournament_id: props.id, p_email: addAdminForm.email, p_role: addAdminForm.role }
+    // A person already on the team keeps their role unless the organizer confirms the change.
+    let { error } = await supabase.rpc('add_tournament_admin_by_email', { ...payload, p_only_new: true })
+    if (error?.message?.includes('access.alreadyMember')) {
+      const current = error.details
+      const labels = { email: addAdminForm.email.trim(), current: t(`admin.${current}`), next: t(`admin.${addAdminForm.role}`) }
+      if (current === addAdminForm.role) { errorText.value = t('access.alreadyMemberSame', labels); return }
+      if (!(await confirmDialog(t('access.alreadyMemberConfirm', labels)))) return
+      ;({ error } = await supabase.rpc('add_tournament_admin_by_email', payload))
+    }
     if (error) throw error
     addAdminForm.email = ''
     addAdminForm.role = 'editor'
@@ -1120,14 +1193,16 @@ async function changeAdminRole(admin, role) {
   } finally { actionLoading.value = false }
 }
 
-async function removeAdmin(adminId) {
+async function removeAdmin(admin) {
   if (actionLoading.value) return
   actionLoading.value = true
   errorText.value = ''
   try {
+    const confirmKey = admin.role === 'owner' ? 'access.removeOwnerConfirm' : 'access.removeConfirm'
+    if (!(await confirmDialog(t(confirmKey, { email: admin.email }), { danger: true, confirmLabel: t('actions.remove') }))) return
     const { error } = await supabase.rpc('remove_tournament_admin', {
       p_tournament_id: props.id,
-      p_admin_id: adminId,
+      p_admin_id: admin.id,
     })
     if (error) throw error
     await loadAll()
@@ -1205,13 +1280,19 @@ function readHashTab() {
 }
 
 const activeTab = ref(readHashTab())
+const pageErrorEl = ref(null)
+// Without a loaded tournament errorText is the full-page error, not a banner.
+onBeforeUnmount(usePageAlerts({ errorText, noticeText, activeTab, alertEl: pageErrorEl, keepError: () => !tournament.value }))
 
 function setTab(tab) {
   if (!TABS.includes(tab) || !isTabEnabled(tab)) {
     return
   }
   activeTab.value = tab
-  history.replaceState(null, '', `#${tab}`)
+  // Keep Vue Router's history.state (back/current/position); replacing it with null
+  // triggers "history.state seems to have been manually replaced".
+  const url = `${window.location.pathname}${window.location.search}#${tab}`
+  history.replaceState({ ...(history.state || {}), current: url }, '', url)
 }
 
 function syncTabFromHash() {
@@ -1396,17 +1477,24 @@ onBeforeUnmount(() => {
       <p class="muted">{{ t('actions.loading') }}</p>
     </section>
 
-    <section v-else-if="errorText && !tournament" class="card">
+    <section v-else-if="errorText && !tournament" class="card stack stack--sm" role="alert">
       <p class="error-text">{{ errorText }}</p>
+      <p class="muted">{{ t('sync.loadFailedHint') }}</p>
+      <div><button class="btn btn--secondary" type="button" @click="retryLoad">{{ t('sync.retry') }}</button></div>
     </section>
 
     <template v-else-if="tournament && !loading">
-      <p v-if="syncFailed" class="alert alert--error" role="status">{{ t('sync.unavailable') }}</p>
-      <div v-if="errorText" class="alert alert--error admin-page-alert" role="alert">
-        {{ errorText }}
+      <div v-if="syncFailed" class="alert alert--error" role="status">
+        {{ t('sync.unavailable') }}
+        <button class="btn btn--secondary btn--sm" type="button" @click="retryLoad">{{ t('sync.retry') }}</button>
+      </div>
+      <div v-if="errorText" ref="pageErrorEl" class="alert alert--error admin-page-alert" role="alert">
+        <span>{{ errorText }}</span>
+        <button type="button" class="admin-page-alert__close" :aria-label="t('actions.close')" @click="errorText = ''">×</button>
       </div>
       <div v-if="noticeText" class="alert alert--info admin-page-alert" role="status">
-        {{ noticeText }}
+        <span>{{ noticeText }}</span>
+        <button type="button" class="admin-page-alert__close" :aria-label="t('actions.close')" @click="noticeText = ''">×</button>
       </div>
 
       <section class="card card--elevated admin-tournament-overview stack stack--sm" aria-labelledby="adm-tournament-title">
@@ -1414,8 +1502,8 @@ onBeforeUnmount(() => {
           <div class="admin-tournament-overview__title-block stack stack--sm">
             <div class="admin-tournament-overview__title-row">
               <h1 id="adm-tournament-title" class="page-title">{{ tournament.name }}</h1>
-              <span class="badge" :class="statusBadgeClass(tournament.status)">
-                {{ t(`tournament.${tournament.status}`) }}
+              <span class="badge" :class="statusBadgeClass(badgeStatus)">
+                {{ t(`tournament.${badgeStatus}`) }}
               </span>
             </div>
             <p v-if="tournament.description" class="muted">{{ tournament.description }}</p>
@@ -1484,10 +1572,27 @@ onBeforeUnmount(() => {
         :approved-count="approvedEntries.length"
         :pending-count="pendingEntries.length"
         :matches-count="matches.length"
+        :roster-missing="rosterState.missing.length"
+        :roster-extra="rosterState.extra.length"
+        :group-matches-total="groupProgress.total"
+        :group-matches-done="groupProgress.done"
+        :has-playoff="hasPlayoff"
         :busy="actionLoading || settingsSaving"
         @go="setTab"
         @close-registration="closeRegistration"
         @start="startTournament"
+        @start-playoff="startPlayoff"
+      />
+
+      <TournamentChampion
+        :format="tournament.format"
+        :status="tournament.status"
+        :matches="matches"
+        :standings="standings"
+        :entries-map="entriesMap"
+        :can-finish="canManageTournament"
+        :busy="actionLoading || settingsSaving"
+        @finish="finishTournament"
       />
 
       <p v-if="showDeadlineHint" class="alert alert--info" role="status">{{ t('registrationRules.deadlineCloseHint') }}</p>
@@ -1596,8 +1701,10 @@ onBeforeUnmount(() => {
 
           <ManualEntryForm
             :tournament="tournament"
+            :entries="entries"
             :busy="actionLoading || settingsSaving"
             :can-manage="canManageTournament"
+            :has-structure="hasBracket"
             @update:busy="actionLoading = $event"
             @saved="refreshScoreData"
           />
@@ -1623,14 +1730,14 @@ onBeforeUnmount(() => {
             <div v-if="pendingEntries.length" class="entry-list">
               <div v-for="entry in pendingEntries" :key="entry.id" class="participant-item">
                 <span class="entry-avatar">{{ entryInitials(entry) }}</span>
-                <strong class="entry-name">{{ entryLabel(entry) }}</strong>
+                <strong class="entry-name">{{ entryLabel(entry) }}<span v-if="customDisplayName(entry)" class="entry-alias">{{ t('admin.shownAs', { name: customDisplayName(entry) }) }}</span><EntryContact :contact="entryContacts[entry.id]" /></strong>
                 <div class="entry-actions">
                   <button
                     class="entry-icon-btn entry-icon-btn--approve"
                     type="button"
-                    :disabled="actionLoading"
-                    :aria-label="t('admin.approve')"
-                    :title="t('admin.approve')"
+                    :disabled="actionLoading || seatsFull"
+                    :aria-label="t('a11y.entryAction', { action: t('admin.approve'), name: entryLabel(entry) })"
+                    :title="seatsFull ? t('registrationRules.errors.full') : t('admin.approve')"
                     @click="updateEntryStatus(entry.id, 'approved')"
                   >
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
@@ -1639,7 +1746,7 @@ onBeforeUnmount(() => {
                     class="entry-icon-btn entry-icon-btn--reject"
                     type="button"
                     :disabled="actionLoading"
-                    :aria-label="t('admin.reject')"
+                    :aria-label="t('a11y.entryAction', { action: t('admin.reject'), name: entryLabel(entry) })"
                     :title="t('admin.reject')"
                     @click="updateEntryStatus(entry.id, 'rejected')"
                   >
@@ -1661,14 +1768,14 @@ onBeforeUnmount(() => {
               <div class="entry-list">
                 <div v-for="(entry, index) in waitlistedEntries" :key="entry.id" class="participant-item">
                   <span class="entry-avatar" :aria-label="String(index + 1)">{{ index + 1 }}</span>
-                  <strong class="entry-name">{{ entryLabel(entry) }}</strong>
+                  <strong class="entry-name">{{ entryLabel(entry) }}<span v-if="customDisplayName(entry)" class="entry-alias">{{ t('admin.shownAs', { name: customDisplayName(entry) }) }}</span><EntryContact :contact="entryContacts[entry.id]" /></strong>
                   <div class="entry-actions">
                     <button
                       class="entry-icon-btn entry-icon-btn--approve"
                       type="button"
-                      :disabled="actionLoading"
-                      :aria-label="t('admin.approve')"
-                      :title="t('admin.approve')"
+                      :disabled="actionLoading || seatsFull"
+                      :aria-label="t('a11y.entryAction', { action: t('admin.approve'), name: entryLabel(entry) })"
+                      :title="seatsFull ? t('registrationRules.errors.full') : t('admin.approve')"
                       @click="updateEntryStatus(entry.id, 'approved')"
                     >
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
@@ -1677,7 +1784,7 @@ onBeforeUnmount(() => {
                       class="entry-icon-btn entry-icon-btn--reject"
                       type="button"
                       :disabled="actionLoading"
-                      :aria-label="t('admin.reject')"
+                      :aria-label="t('a11y.entryAction', { action: t('admin.reject'), name: entryLabel(entry) })"
                       :title="t('admin.reject')"
                       @click="updateEntryStatus(entry.id, 'rejected')"
                     >
@@ -1696,7 +1803,7 @@ onBeforeUnmount(() => {
               <div class="entry-list rejected-entries__list">
                 <div v-for="entry in rejectedEntries" :key="entry.id" class="participant-item">
                   <span class="entry-avatar">{{ entryInitials(entry) }}</span>
-                  <strong class="entry-name">{{ entryLabel(entry) }}</strong>
+                  <strong class="entry-name">{{ entryLabel(entry) }}<span v-if="customDisplayName(entry)" class="entry-alias">{{ t('admin.shownAs', { name: customDisplayName(entry) }) }}</span><EntryContact :contact="entryContacts[entry.id]" /></strong>
                   <button class="btn btn--ghost btn--sm" type="button" :disabled="actionLoading" @click="updateEntryStatus(entry.id, 'pending')">
                     {{ t('mobile.restoreEntry') }}
                   </button>
@@ -1740,7 +1847,7 @@ onBeforeUnmount(() => {
                   <span class="entry-avatars" :class="{ 'entry-avatars--pair': memberInitials(entry).length > 1 }" aria-hidden="true">
                     <span v-for="(initials, i) in memberInitials(entry)" :key="i" class="entry-avatar entry-avatar--ok">{{ initials }}</span>
                   </span>
-                  <strong class="entry-name">{{ entryLabel(entry) }}</strong>
+                  <strong class="entry-name">{{ entryLabel(entry) }}<span v-if="customDisplayName(entry)" class="entry-alias">{{ t('admin.shownAs', { name: customDisplayName(entry) }) }}</span><EntryContact :contact="entryContacts[entry.id]" /></strong>
                   <KebabMenu
                     v-if="!isTournamentActive && !isTournamentFinished"
                     :aria-label="t('admin.rowActions', { name: entryLabel(entry) })"
@@ -1850,7 +1957,7 @@ onBeforeUnmount(() => {
                       <button
                         class="pair-slot__remove"
                         type="button"
-                        aria-label="Remove"
+                        :aria-label="t('actions.remove')"
                         @click.stop="removeFromSlot(idx, 'A')"
                       >&times;</button>
                     </template>
@@ -1880,7 +1987,7 @@ onBeforeUnmount(() => {
                       <button
                         class="pair-slot__remove"
                         type="button"
-                        aria-label="Remove"
+                        :aria-label="t('actions.remove')"
                         @click.stop="removeFromSlot(idx, 'B')"
                       >&times;</button>
                     </template>
@@ -1967,7 +2074,7 @@ onBeforeUnmount(() => {
                       <button
                         class="pair-slot__remove"
                         type="button"
-                        aria-label="Remove"
+                        :aria-label="t('actions.remove')"
                         @click.stop="removeFromSlot(idx, 'A')"
                       >&times;</button>
                     </template>
@@ -1997,7 +2104,7 @@ onBeforeUnmount(() => {
                       <button
                         class="pair-slot__remove"
                         type="button"
-                        aria-label="Remove"
+                        :aria-label="t('actions.remove')"
                         @click.stop="removeFromSlot(idx, 'B')"
                       >&times;</button>
                     </template>
@@ -2044,13 +2151,13 @@ onBeforeUnmount(() => {
         </template>
         <div id="admin-mobile-panel" :role="isNarrowLayout && isTournamentActive && matches.length ? 'tabpanel' : undefined" :aria-labelledby="isNarrowLayout && isTournamentActive && matches.length ? `admin-surface-${adminMobileBracketSurface}` : undefined">
           <section v-if="isNarrowLayout && isTournamentActive && matches.length && adminMobileBracketSurface === 'matches'" class="card mobile-score-center mt-3">
-            <TournamentMatchList :format="tournament.format" :matches="matches" :entries-map="entriesMap" :sets-by-match="setsByMatch" :live-scores-by-match="liveScoresByMatch" :can-edit-final="canEditFinalScores" :can-live-score="canUseLiveScoring" @edit-result="openRrMatch" @view-live="openLiveScoring" />
+            <TournamentMatchList :format="tournament.format" :matches="matches" :groups="groups" :entries-map="entriesMap" :sets-by-match="setsByMatch" :live-scores-by-match="liveScoresByMatch" :can-edit-final="canEditFinalScores" :can-live-score="canUseLiveScoring" @edit-result="openRrMatch" @view-live="openLiveScoring" />
           </section>
         <!-- Round-robin: schedule + standings + fixtures -->
         <template v-if="isRoundRobin">
-          <section v-if="canManageTournament && !isTournamentActive" class="card stack stack--sm">
+          <section v-if="canManageTournament && !isTournamentActive && !isTournamentFinished" class="card stack stack--sm">
             <h2 class="section-title">{{ t('standings.matchesTitle') }}</h2>
-            <p class="muted">{{ t('standings.rrPlan', rrPlan) }}</p>
+            <p class="muted">{{ t('standings.rrPlan', pluralParams(rrPlan, t, locale)) }}</p>
             <p v-if="hasBracket" class="muted">{{ t('standings.rrRegenerateWarn') }}</p>
             <div class="inline-actions">
               <button
@@ -2080,6 +2187,7 @@ onBeforeUnmount(() => {
           <section v-if="hasBracket && !isNarrowLayout" class="card mt-4">
             <TournamentMatchList
               :format="tournament.format"
+              :groups="groups"
               :matches="matches"
               :entries-map="entriesMap"
               :sets-by-match="setsByMatch"
@@ -2094,7 +2202,23 @@ onBeforeUnmount(() => {
 
         <!-- Groups + playoff -->
         <template v-else-if="isGroupsPlayoff">
-          <section v-if="canManageTournament && !isTournamentActive" class="card stack stack--sm">
+          <!-- Running tournament: the group stage leads straight to the playoff. -->
+          <section v-if="canManageTournament && isTournamentActive && hasGroups && !hasPlayoff" class="card stack stack--sm">
+            <h2 class="section-title">{{ t('groupsFlow.playoffSection') }}</h2>
+            <p class="muted">{{ t('groupsFlow.groupProgress', groupProgress) }}</p>
+            <p class="field-hint">{{ t(allGroupMatchesFinished ? 'groupsFlow.playoffReady' : 'groupsFlow.playoffWaitGroups') }}</p>
+            <div class="inline-actions">
+              <button
+                class="btn btn--primary btn--sm"
+                type="button"
+                :disabled="actionLoading || !allGroupMatchesFinished"
+                @click="startPlayoff"
+              >
+                {{ t('admin.startPlayoff') }}
+              </button>
+            </div>
+          </section>
+          <section v-if="canManageTournament && !isTournamentActive && !isTournamentFinished" class="card stack stack--sm">
             <h2 class="section-title">{{ t('admin.groupStage') }}</h2>
             <fieldset v-if="!hasGroups" class="group-setup">
               <legend class="group-setup__legend">{{ t('admin.groupCount') }}</legend>
@@ -2105,7 +2229,18 @@ onBeforeUnmount(() => {
                 </label>
               </div>
               <p v-else class="muted">{{ t('admin.groupNeedMore') }}</p>
+              <template v-if="groupOptions.length && advanceChoices.length">
+                <p id="grp-advance-label" class="group-setup__legend">{{ t('groupsFlow.advance') }}</p>
+                <div class="group-setup__options" role="radiogroup" aria-labelledby="grp-advance-label" aria-describedby="grp-advance-hint">
+                  <label v-for="a in advanceChoices" :key="a" class="group-setup__option" :class="{ 'is-active': Number(groupAdvance) === a }">
+                    <input v-model.number="groupAdvance" class="sr-only" type="radio" name="grp-advance" :value="a" />
+                    {{ a }}
+                  </label>
+                </div>
+                <p id="grp-advance-hint" class="field-hint">{{ t('groupsFlow.advanceHint') }}</p>
+              </template>
               <p v-if="groupOptions.length" class="format-plan">{{ groupPlanText }}</p>
+              <p v-if="groupOptions.length && groupAdvanceWarningText" class="alert alert--info" role="status">{{ groupAdvanceWarningText }}</p>
               <p class="field-hint">{{ t('admin.groupSeedingHint') }}</p>
             </fieldset>
             <div class="inline-actions">
@@ -2149,8 +2284,8 @@ onBeforeUnmount(() => {
 
         <section v-if="!isRoundRobin && !isGroupsPlayoff && canManageTournament && !isTournamentActive" class="card stack stack--sm">
           <h2 class="section-title">{{ t('admin.drawSection') }}</h2>
-          <p class="muted format-plan">{{ bracketPlanText }}</p>
-          <p v-if="bracketPlanBlocked" class="alert alert--info" role="status">{{ t('admin.doubleElimNeedsPow2', { n: approvedEntries.length }) }}</p>
+          <p v-if="bracketPlanText" class="muted format-plan">{{ bracketPlanText }}</p>
+          <p v-if="doubleElimCountInvalid" class="alert alert--info" role="status">{{ t('admin.doubleElimNeedsPow2', { n: approvedEntries.length }) }}</p>
 
           <div class="form-field form-field--narrow">
             <label for="adm-draw">{{ t('admin.drawMode') }}</label>
@@ -2181,10 +2316,10 @@ onBeforeUnmount(() => {
               <button
                 class="btn btn--danger btn--sm"
                 type="button"
-                :disabled="actionLoading"
+                :disabled="actionLoading || doubleElimCountInvalid"
                 @click="generateBracket"
               >
-                {{ t('admin.rebuild') }}
+                {{ drawMode === 'manual' ? t('admin.rebuildManual') : t('admin.rebuild') }}
               </button>
               <button
                 class="btn btn--ghost btn--sm"
@@ -2293,6 +2428,7 @@ onBeforeUnmount(() => {
           v-if="activeTab === 'schedule'"
           :tournament="tournament"
           :matches="matches"
+          :groups="groups"
           :entries-map="entriesMap"
           :courts="courts"
           :schedule="schedule"
@@ -2314,7 +2450,13 @@ onBeforeUnmount(() => {
         class="tab-panel"
         :class="{ 'tab-panel--active': activeTab === 'scores' }"
       >
-        <section v-if="!canEditScores" class="card empty-state">
+        <section v-if="isTournamentFinished" class="card empty-state">
+          <AppIcon name="trophy" :size="28" class="empty-state__icon" />
+          <h2 class="empty-state__title">{{ t('lifecycle.completedTitle') }}</h2>
+          <p class="empty-state__hint">{{ t('lifecycle.scoresCompletedHint') }}</p>
+          <button class="btn btn--outline btn--sm" type="button" @click="setTab('bracket')">{{ t('lifecycle.openBracket') }}</button>
+        </section>
+        <section v-else-if="!canEditScores" class="card empty-state">
           <AppIcon name="play" :size="28" class="empty-state__icon" />
           <h2 class="empty-state__title">{{ t('admin.scoresBeforeStartTitle') }}</h2>
           <p class="empty-state__hint">{{ startBlockReason || t('admin.scoresLockedTooltip') }}</p>
@@ -2322,6 +2464,7 @@ onBeforeUnmount(() => {
         <section v-else-if="isNarrowLayout" class="card mobile-score-center">
           <TournamentMatchList
             :format="tournament.format"
+            :groups="groups"
             :matches="matches"
             :entries-map="entriesMap"
             :sets-by-match="setsByMatch"
@@ -2369,6 +2512,8 @@ onBeforeUnmount(() => {
           :set-format="tournament.set_format"
           :scoring-config="tournament.scoring_config || {}"
           :category="tournament.category"
+          :groups="groups"
+          :format="tournament.format"
           :disabled="!canEditFinalScores"
           :can-live-score="canUseLiveScoring"
           :live-scores-by-match="liveScoresByMatch"
@@ -2431,7 +2576,7 @@ onBeforeUnmount(() => {
                 class="btn btn--ghost btn--sm"
                 type="button"
                 :disabled="actionLoading"
-                @click="removeAdmin(admin.id)"
+                @click="removeAdmin(admin)"
               >
                 {{ t('actions.remove') }}
               </button>
@@ -2501,7 +2646,7 @@ onBeforeUnmount(() => {
       <LiveScoringModal
         v-if="selectedLiveMatch && canUseLiveScoring"
         :match="matches.find(m => m.id === selectedLiveMatch.id) || selectedLiveMatch"
-        :can-stop-live="canManageTournament"
+        :can-stop-live="scoreAccess.stopLive"
         :live-score="selectedLiveScore"
         :scoring-config="tournament.scoring_config || {}"
         :team-a="teamLabel(selectedLiveMatch.side_a_entry_id)"
@@ -2593,6 +2738,16 @@ onBeforeUnmount(() => {
   flex: 1;
   min-width: 0;
   font-size: 0.9375rem;
+}
+
+/* The chosen bracket name under the players' names (display_name). */
+.entry-alias {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--muted);
+  overflow-wrap: anywhere;
 }
 
 .entry-actions {

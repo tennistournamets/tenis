@@ -17,10 +17,13 @@ import AppIcon from '../components/AppIcon.vue'
 import FormatPicker from '../components/FormatPicker.vue'
 import TennisRulesSettings from '../components/TennisRulesSettings.vue'
 import RegistrationRulesFields from '../components/admin/RegistrationRulesFields.vue'
-import { hasRegistrationRules, pickRegistrationDraft, registrationDraftFields, registrationPatch, validateRegistrationForm } from '../lib/registrationRules'
+import { hasRegistrationRules, pickRegistrationDraft, registrationDraftFields, registrationPatch, validateRegistrationForm, organizerContactError } from '../lib/registrationRules'
 import { CREATE_VISIBILITY_MODES } from '../lib/access'
 import { DEFAULT_TENNIS_RULES, tennisRulesSummary } from '../lib/tennisRules'
 import VenueFields from '../components/admin/VenueFields.vue'
+import { restoreDraftFields, deadlineInPast } from '../lib/wizardDraft'
+import { errorMessage } from '../lib/errorMessages'
+import { confirmDialog } from '../lib/confirmDialog'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -64,6 +67,8 @@ const form = reactive({
   visibility: 'link',
   generate_qr: false,
   doubles_pairing_random: false,
+  // Groups + playoff: how many leave each group; checked against the group sizes when groups are drawn.
+  advance_per_group: 2,
   ...registrationDraftFields({}),
 })
 // is_public stays derived for the QR gate and the preview badge.
@@ -107,14 +112,13 @@ watch(() => flags.enabledSports, (enabled) => {
   if (!enabled.includes(form.sport)) form.sport = enabled[0]
 })
 
-// Keep format valid for the chosen sport; apply forced category.
+// Keep format valid for the chosen sport. A forced category (padel doubles, football
+// singles) is applied through effectiveCategory only, so looking at padel and going
+// back to tennis keeps the organizer's own choice.
 watch(() => form.sport, (sport) => {
   const c = getSportConfig(sport)
   if (!c.allowedFormats.includes(form.format)) {
     form.format = c.allowedFormats[0]
-  }
-  if (c.forcedCategory) {
-    form.category = c.forcedCategory
   }
 })
 
@@ -163,6 +167,12 @@ async function nextStep() {
       await showCreateError(slugInput)
       return
     }
+    const contactError = organizerContactError(form.contact_phone, form.contact_email)
+    if (contactError) {
+      errorText.value = t(contactError)
+      await showCreateError(formError)
+      return
+    }
   }
   if (step.value === 5) {
     const regError = validateRegistrationForm(pickRegistrationDraft(form))
@@ -171,6 +181,8 @@ async function nextStep() {
       await showCreateError(formError)
       return
     }
+    // Same warning as in the tournament settings: intake would close right away.
+    if (deadlineInPast(form.registration_deadline) && !(await confirmDialog(t('registrationRules.deadlinePastConfirm')))) return
   }
   step.value += 1
 }
@@ -212,6 +224,13 @@ async function createTournament() {
     await showCreateError(slugInput)
     return
   }
+  const contactError = organizerContactError(form.contact_phone, form.contact_email)
+  if (contactError) {
+    step.value = 3
+    errorText.value = t(contactError)
+    await showCreateError(formError)
+    return
+  }
   const regForm = pickRegistrationDraft(form)
   const regError = validateRegistrationForm(regForm)
   if (regError) {
@@ -238,7 +257,7 @@ async function createTournament() {
         category === 'doubles' && cfg.value.supportsDoublesPairing
           ? (form.doubles_pairing_random ? 'pick_random' : 'pre_agreed')
           : null,
-      p_format_config: {},
+      p_format_config: form.format === 'groups_playoff' ? { advance_per_group: Number(form.advance_per_group) || 2 } : {},
       p_scoring_config: form.sport === 'tennis'
         ? { ...form.scoring_config, gender: form.gender }
         : cfg.value.supportsSetFormat ? { tiebreak_to: Number(form.tiebreak_to), gender: form.gender } : { gender: form.gender },
@@ -251,11 +270,14 @@ async function createTournament() {
 
     if (error) {
       if (error.code === '23505') {
-        slugError.value = t('mobile.slugTaken')
+        // The slug field lives on step 3; showing the error on the final step left it invisible.
         saving.value = false
+        step.value = 3
+        await nextTick()
+        slugError.value = t('mobile.slugTaken')
         await showCreateError(slugInput)
       } else {
-        errorText.value = t('mobile.createFailed')
+        errorText.value = errorMessage(error, t, 'mobile.createFailed')
         await showCreateError(formError)
       }
       return
@@ -283,8 +305,8 @@ async function createTournament() {
     if (form.is_public && form.generate_qr) query.qr = '1'
     if (rulesFailed) query.regfail = '1'
     await router.replace({ name: 'admin-tournament', params: { id: newId }, query: Object.keys(query).length ? query : undefined })
-  } catch {
-    errorText.value = t('mobile.createFailed')
+  } catch (error) {
+    errorText.value = errorMessage(error, t, 'mobile.createFailed')
     await showCreateError(formError)
   } finally {
     saving.value = false
@@ -316,17 +338,7 @@ onMounted(async () => {
   draftKey.value = userDraftKey('create-tournament', auth.user?.id)
   const stored = readSessionDraft(draftKey.value)
   if (stored?.form && Number.isInteger(stored.step) && stored.step >= 1 && stored.step <= TOTAL_STEPS) {
-    const restored = {}
-    for (const [key, fallback] of Object.entries(initialForm)) {
-      const value = stored.form[key]
-      if (value === undefined) continue
-      if (fallback && typeof fallback === 'object') {
-        if (value && typeof value === 'object' && !Array.isArray(value)) restored[key] = cloneForm(value)
-      } else if (typeof value === typeof fallback) {
-        restored[key] = value
-      }
-    }
-    Object.assign(form, restored)
+    Object.assign(form, restoreDraftFields(initialForm, stored.form))
     if (!SPORTS.includes(form.sport)) form.sport = initialForm.sport
     if (flags.loaded && flags.enabledSports.length && !flags.enabledSports.includes(form.sport)) form.sport = initialForm.sport
     if (!getSportConfig(form.sport).allowedFormats.includes(form.format)) form.format = initialForm.format
@@ -394,6 +406,13 @@ onMounted(async () => {
         <p class="muted">{{ t('admin.wizardFormatHint') }}</p>
       </div>
       <FormatPicker v-model="form.format" :sport="form.sport" />
+      <div v-if="form.format === 'groups_playoff'" class="form-field form-field--narrow">
+        <label for="create-advance">{{ t('groupsFlow.advance') }}</label>
+        <select id="create-advance" v-model.number="form.advance_per_group" class="input" aria-describedby="create-advance-hint">
+          <option v-for="n in [1, 2, 3, 4]" :key="n" :value="n">{{ n }}</option>
+        </select>
+        <p id="create-advance-hint" class="field-hint">{{ t('groupsFlow.advanceHint') }}</p>
+      </div>
     </div>
 
     <!-- Steps 3–6: настройки как продолжение степпера + живое превью -->

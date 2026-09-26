@@ -8,8 +8,9 @@ before(async () => { ctx = await createDatabase() })
 after(async () => { await ctx?.db.close() })
 const denied = ['anon', 'outsider', 'counter', 'platform_admin']
 const managers = ['owner', 'editor']
+// Players are rearranged before the start, so layout tests draw a closed registration.
 async function bracket(options = {}) {
-  const t = await fixture(ctx, options)
+  const t = await fixture(ctx, { status: 'registration_closed', ...options })
   await asActor(ctx, options.owner || 'owner', 'select generate_bracket($1)', [t.id])
   return { ...t, rows: await matches(ctx, t.id) }
 }
@@ -47,10 +48,12 @@ test('manual generation and rebuild preserve the UI null-order contract and expl
     const t = await fixture(ctx)
     await asActor(ctx,actor,"select generate_bracket($1,'manual',null)",[t.id])
     assert.equal((await matches(ctx,t.id)).length,3)
+    // An explicit order is the seed list (the rest follow by seed_order):
+    // seed 1 meets seed 4 and seed 2 goes to the other half.
     const order = [t.entries[3],t.entries[1]]
     await asActor(ctx,actor,"select rebuild_bracket($1,'manual',$2::uuid[])",[t.id,order])
-    const first = (await matches(ctx,t.id)).find(m => m.round_number===1 && m.match_number===1)
-    assert.deepEqual([first.side_a_entry_id,first.side_b_entry_id],order)
+    const first = (await matches(ctx,t.id)).filter(m => m.round_number===1).sort((a,b)=>a.match_number-b.match_number)
+    assert.deepEqual(first.map(m=>[m.side_a_entry_id,m.side_b_entry_id]),[[t.entries[3],t.entries[2]],[t.entries[1],t.entries[0]]])
     await asActor(ctx,actor,"select rebuild_bracket($1,'manual',null)",[t.id])
     assert.equal((await matches(ctx,t.id)).length,3)
   }
@@ -83,7 +86,7 @@ test('layout validates every participant and item before changing any match', as
   await assertDeniedUnchanged(ctx,'owner','select apply_bracket_layout($1,$2::jsonb)',[t.id,JSON.stringify([good])],/approved/)
 })
 
-test('owner/editor can save layout swaps and explicit empty slots and use valid slot swaps', async () => {
+test('owner/editor can save layout swaps and use valid slot swaps; emptying a match is refused', async () => {
   for (const actor of managers) {
     const t = await bracket()
     const [a,b] = t.rows.filter(m => m.round_number===1)
@@ -91,10 +94,7 @@ test('owner/editor can save layout swaps and explicit empty slots and use valid 
     assert.equal((await matches(ctx,t.id)).find(m=>m.id===a.id).side_a_entry_id,b.side_a_entry_id)
     await asActor(ctx,actor,"select swap_bracket_slots($1,$2,' a ',$3,'b')",[t.id,a.id,b.id])
     await asActor(ctx,actor,"select swap_bracket_slots($1,$2,'A',$2,'B')",[t.id,a.id])
-    await layout(actor,t.id,[item(a,null,null)])
-    const empty = (await matches(ctx,t.id)).find(m=>m.id===a.id)
-    assert.equal(empty.status,'pending')
-    assert.equal(empty.side_a_entry_id,null)
+    await assertDeniedUnchanged(ctx,actor,'select apply_bracket_layout($1,$2::jsonb)',[t.id,JSON.stringify([item(a,null,null)])],/bracketLayoutInvalid/)
   }
 })
 
@@ -149,17 +149,10 @@ test('direct entry approval, admin insertion and bracket deletion used by the UI
   }
 })
 
-test('layout handles pre-existing reset data with one participant in different rounds', async () => {
+test('layout refuses matches that other matches feed, even with pre-existing reset data', async () => {
   const t=await bracket()
-  const semis=t.rows.filter(m=>m.round_number===1)
-  const sets=JSON.stringify([1,2].map(set_index=>({set_index,side_a_games:6,side_b_games:0})))
-  for (const m of semis) await asActor(ctx,'owner','select update_match_sets($1,$2::jsonb,(select score_revision from matches where id=$1))',[m.id,sets])
-  // Privileged fixture models old reset data; this direct client path is now closed.
-  for (const m of semis) await ctx.db.query('delete from match_sets where match_id=$1',[m.id])
-  await ctx.db.query("update matches set winner_entry_id=null,status='ready' where tournament_id=$1 and status<>'pending'",[t.id])
-  const current=await matches(ctx,t.id)
-  const final=current.find(m=>m.round_number===2)
-  const semi=current.find(m=>m.id===semis[0].id)
-  await layout('editor',t.id,[item(semi,semi.side_b_entry_id,semi.side_a_entry_id),item(final,final.side_b_entry_id,final.side_a_entry_id)])
-  assert.equal((await matches(ctx,t.id)).find(m=>m.id===final.id).side_b_entry_id,final.side_a_entry_id)
+  const final=t.rows.find(m=>m.round_number===2)
+  // Privileged fixture: stale entrants left in the final by old reset data.
+  await ctx.db.query('update matches set side_a_entry_id=$2,side_b_entry_id=$3 where id=$1',[final.id,t.entries[0],t.entries[1]])
+  await assertDeniedUnchanged(ctx,'editor','select apply_bracket_layout($1,$2::jsonb)',[t.id,JSON.stringify([item(final,t.entries[1],t.entries[0])])],/bracketSlotLocked/)
 })

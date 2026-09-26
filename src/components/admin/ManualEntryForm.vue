@@ -4,12 +4,17 @@ import { useI18n } from 'vue-i18n'
 import { scoringFamily } from '../../lib/sportConfig'
 import { useUnsavedChanges } from '../../lib/unsavedChanges'
 import { supabase } from '../../lib/supabase'
-import { registrationError } from '../../lib/registrationRules'
+import { entryNamesError, registrationError, sameNameMember } from '../../lib/registrationRules'
+import { confirmDialog } from '../../lib/confirmDialog'
 
 const props = defineProps({
   tournament: { type: Object, required: true },
+  // The tournament's entries, to warn about a participant who is already there.
+  entries: { type: Array, default: () => [] },
   busy: Boolean,
   canManage: Boolean,
+  // A bracket, groups or fixtures already exist: an approved addition makes them stale.
+  hasStructure: Boolean,
 })
 const emit = defineEmits(['update:busy', 'saved'])
 const { t } = useI18n()
@@ -76,54 +81,41 @@ async function addEntryManually() {
     return
   }
 
+  const namesError = entryNamesError(category, m1, m2, addEntryForm.displayName)
+  if (namesError) {
+    addEntryError.value = t(namesError)
+    return
+  }
+
   if (addEntryForm.phoneOrEmail.trim() && !isValidContact(addEntryForm.phoneOrEmail)) {
     addEntryError.value = t('registrationForm.invalidContact')
     return
   }
 
-  let phoneOrEmail = addEntryForm.phoneOrEmail.trim()
-  if (!phoneOrEmail) {
-    phoneOrEmail = `admin-entry-${crypto.randomUUID()}@local.tenis`
-  }
-
-  const customName = addEntryForm.displayName.trim()
-  const displayName =
-    customName || (category === 'singles' ? m1 : (m2 ? `${m1} / ${m2}` : m1))
+  // Same name as someone already entered: usually a double click or a second
+  // form, sometimes a namesake. Ask, do not block.
+  const twin = sameNameMember(props.entries, [m1, category === 'doubles' ? m2 : ''])
+  if (twin && !(await confirmDialog(t('admin.addEntrySameName', { name: twin })))) return
+  if (props.hasStructure && !addEntryForm.asPending && !(await confirmDialog(t('groupsFlow.rosterChangeConfirm')))) return
 
   actionLoading.value = true
 
   try {
-    const { data: entryRow, error: insertError } = await supabase
-      .from('entries')
-      .insert({
-        tournament_id: props.tournament.id,
-        entry_type: category,
-        display_name: displayName,
-        phone_or_email: phoneOrEmail,
-        status: addEntryForm.asPending ? 'pending' : 'approved',
-      })
-      .select('id')
-      .single()
+    // One server path with the public registration's contact normalisation and
+    // duplicate check (email case, phone punctuation); an empty contact is allowed.
+    const { error } = await supabase.rpc('add_manual_entry', {
+      p_tournament_id: props.tournament.id,
+      p_member_one: m1,
+      p_member_two: category === 'doubles' && m2 ? m2 : null,
+      p_display_name: addEntryForm.displayName.trim() || null,
+      p_contact: addEntryForm.phoneOrEmail.trim() || null,
+      p_status: addEntryForm.asPending ? 'pending' : 'approved',
+    })
 
-    if (insertError || !entryRow) {
-      const msg = insertError?.message || ''
-      const dup =
-        /duplicate key|unique constraint|already exists/i.test(msg) ||
-        insertError?.code === '23505'
+    if (error) {
+      const msg = error.message || ''
+      const dup = /duplicate key|unique constraint|already exists/i.test(msg) || error.code === '23505'
       addEntryError.value = dup ? t('admin.addEntryDuplicateContact') : registrationError(msg, t, 'errors.generic')
-      return
-    }
-
-    const memberRows = [{ entry_id: entryRow.id, member_name: m1, member_order: 1 }]
-    if (category === 'doubles' && m2) {
-      memberRows.push({ entry_id: entryRow.id, member_name: m2, member_order: 2 })
-    }
-
-    const { error: membersError } = await supabase.from('entry_members').insert(memberRows)
-
-    if (membersError) {
-      await supabase.from('entries').delete().eq('id', entryRow.id)
-      addEntryError.value = registrationError(membersError.message, t, 'errors.generic')
       return
     }
 
@@ -201,6 +193,7 @@ onBeforeUnmount(() => clearTimeout(addEntrySuccessTimer))
               v-model="addEntryForm.memberOne"
               class="input"
               type="text"
+              maxlength="100"
               autocomplete="name"
               :disabled="disabled"
               required
@@ -213,6 +206,7 @@ onBeforeUnmount(() => clearTimeout(addEntrySuccessTimer))
               v-model="addEntryForm.memberTwo"
               class="input"
               type="text"
+              maxlength="100"
               autocomplete="name"
               :disabled="disabled"
               required
@@ -225,6 +219,7 @@ onBeforeUnmount(() => clearTimeout(addEntrySuccessTimer))
               v-model="addEntryForm.memberTwo"
               class="input"
               type="text"
+              maxlength="100"
               autocomplete="name"
               :disabled="disabled"
             />
@@ -236,6 +231,7 @@ onBeforeUnmount(() => clearTimeout(addEntrySuccessTimer))
               v-model="addEntryForm.displayName"
               class="input"
               type="text"
+              maxlength="160"
               :disabled="disabled"
             />
           </div>

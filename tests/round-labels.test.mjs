@@ -7,6 +7,7 @@ const t = (key, params = {}) => ({
   'bracket.semifinals': 'Semifinal',
   'bracket.quarterfinals': 'Quarterfinal',
   'bracket.roundN': `Round ${params.n}`,
+  'bracket.tourN': `Tour ${params.n}`,
   'bracket.fractionFinal': `1/${params.k}`,
 }[key])
 
@@ -15,8 +16,8 @@ const roundRobin = Array.from({ length: 15 * 8 }, (_, i) => ({ stage: 'main', ro
 
 test('round-robin tours are numbered, never named as knockout fractions', () => {
   const totals = knockoutTotals(roundRobin, 'round_robin')
-  assert.deepEqual(totals, {})
-  for (let r = 1; r <= 15; r++) assert.equal(matchRoundName({ stage: 'main', round_number: r }, totals, t), `Round ${r}`)
+  assert.deepEqual(totals, { roundRobin: true })
+  for (let r = 1; r <= 15; r++) assert.equal(matchRoundName({ stage: 'main', round_number: r }, totals, t), `Tour ${r}`)
 })
 
 test('single elimination keeps names counted from the final', () => {
@@ -26,8 +27,9 @@ test('single elimination keeps names counted from the final', () => {
     ['Quarterfinal', 'Semifinal', 'Final'])
 })
 
-test('group rounds stay ordinal inside groups_playoff', () => {
+test('group rounds are tours inside groups_playoff', () => {
   const totals = knockoutTotals([{ stage: 'group', round_number: 3 }, { stage: 'winners', round_number: 2 }], 'groups_playoff')
-  assert.equal(matchRoundName({ stage: 'group', round_number: 3 }, totals, t), 'Round 3')
+  assert.equal(matchRoundName({ stage: 'group', round_number: 3 }, totals, t), 'Tour 3')
+  assert.equal(matchRoundName({ stage: 'group', round_number: 2003 }, totals, t), 'Tour 3')
   assert.equal(matchRoundName({ stage: 'winners', round_number: 2 }, totals, t), 'Final')
 })

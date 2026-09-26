@@ -6,7 +6,7 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppModal from './AppModal.vue'
 
-import { entryMemberNames } from '../lib/entryDisplay'
+import { entryDisplayNames } from '../lib/entryDisplay'
 import { supabase } from '../lib/supabase'
 import { useUnsavedChanges, confirmDiscard } from '../lib/unsavedChanges'
 import { sameForm, cloneForm } from '../lib/formDraft'
@@ -48,7 +48,7 @@ const isDraftSessionCurrent = () => draftEnabled.value && auth.user?.id === draf
 
 function teamLabel(entryId) {
   if (!entryId) return t('bracket.tbd')
-  const names = entryMemberNames(props.entriesMap[entryId])
+  const names = entryDisplayNames(props.entriesMap[entryId])
   return names.length ? names.join(' / ') : t('bracket.tbd')
 }
 
@@ -95,6 +95,11 @@ function clearScoreDraft() {
   draftRestored.value = false
 }
 useUnsavedChanges(() => dirty.value, () => saving.value, clearScoreDraft)
+// An error describes the score it was raised for; editing the score clears it
+// (a revision conflict stays until the result is reloaded).
+watch([setRows, goals], () => {
+  if (errorText.value && errorText.value !== t('scoringFlow.conflict') && !saving.value) errorText.value = ''
+}, { deep: true })
 watch([setRows, goals], () => {
   if (!draftEnabled.value) return
   if (savedFlash.value || !dirty.value) {

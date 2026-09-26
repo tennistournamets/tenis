@@ -6,7 +6,7 @@ import { useUnsavedChanges, confirmDiscard } from '../lib/unsavedChanges'
 import { cloneForm, sameForm } from '../lib/formDraft'
 import { supabase } from '../lib/supabase'
 import { scoringFamily } from '../lib/sportConfig'
-import { registrationDisplayState, registrationError, closedReasonKey } from '../lib/registrationRules'
+import { registrationDisplayState, registrationError, closedReasonKey, entryNamesError } from '../lib/registrationRules'
 
 const props = defineProps({
   tournament: {
@@ -102,6 +102,13 @@ async function submit() {
     return
   }
 
+  const namesError = entryNamesError(entryType.value, form.memberOne, form.memberTwo, form.displayName)
+  if (namesError) {
+    errorText.value = t(namesError)
+    loading.value = false
+    return
+  }
+
   const memberTwo = entryType.value === 'doubles' && form.memberTwo.trim()
     ? form.memberTwo
     : null
@@ -145,7 +152,7 @@ async function submit() {
   <form class="card card--elevated stack stack--sm" @submit.prevent="submit">
     <div>
       <h3 class="section-title">{{ t('registrationForm.title') }}</h3>
-      <p v-if="showEntryType" class="muted reg-form__type">{{ isTeamSport ? t('registrationForm.teamNote') : t('registrationForm.doublesNote') }}</p>
+      <p v-if="showEntryType" class="muted reg-form__type">{{ isTeamSport ? t('registrationForm.teamNote') : t(showMemberTwoOptional ? 'registrationForm.doublesRandomNote' : 'registrationForm.doublesNote') }}</p>
       <p class="muted reg-form__legend"><span class="reg-form__req" aria-hidden="true">*</span> {{ t('registrationForm.requiredLegend') }}</p>
     </div>
 
@@ -162,6 +169,7 @@ async function submit() {
         v-model="form.memberOne"
         class="input"
         type="text"
+        maxlength="100"
         autocomplete="name"
         :disabled="loading"
         required
@@ -175,6 +183,7 @@ async function submit() {
         v-model="form.memberTwo"
         class="input"
         type="text"
+        maxlength="100"
         autocomplete="name"
         :disabled="loading"
         required
@@ -188,6 +197,7 @@ async function submit() {
         v-model="form.memberTwo"
         class="input"
         type="text"
+        maxlength="100"
         autocomplete="name"
         :disabled="loading"
       />
@@ -200,6 +210,7 @@ async function submit() {
         v-model="form.displayName"
         class="input"
         type="text"
+        maxlength="160"
         aria-describedby="reg-display-name-hint"
         :disabled="loading"
       />
@@ -218,9 +229,11 @@ async function submit() {
         autocomplete="tel"
         :disabled="loading"
         required
+        :aria-invalid="phoneInvalid || undefined"
+        :aria-describedby="phoneInvalid ? 'reg-phone-error' : undefined"
         @blur="phoneTouched = true"
       />
-      <p v-if="phoneInvalid" class="error-text" role="alert" style="margin: 4px 0 0">{{ t('registrationForm.invalidPhone') }}</p>
+      <p v-if="phoneInvalid" id="reg-phone-error" class="error-text" role="alert" style="margin: 4px 0 0">{{ t('registrationForm.invalidPhone') }}</p>
     </div>
 
     <div class="form-field">
@@ -235,10 +248,12 @@ async function submit() {
         autocomplete="email"
         :disabled="loading"
         required
+        :aria-invalid="emailInvalid || undefined"
+        :aria-describedby="emailInvalid ? 'reg-email-error reg-email-hint' : 'reg-email-hint'"
         @blur="emailTouched = true"
       />
-      <p v-if="emailInvalid" class="error-text" role="alert" style="margin: 4px 0 0">{{ t('registrationForm.invalidEmail') }}</p>
-      <p class="field-hint">{{ t('registrationForm.contactsPrivate') }}</p>
+      <p v-if="emailInvalid" id="reg-email-error" class="error-text" role="alert" style="margin: 4px 0 0">{{ t('registrationForm.invalidEmail') }}</p>
+      <p id="reg-email-hint" class="field-hint">{{ t('registrationForm.contactsPrivate') }}</p>
     </div>
 
     <button class="btn btn--primary" :disabled="loading || registrationClosed || conditionsChanged" type="submit">

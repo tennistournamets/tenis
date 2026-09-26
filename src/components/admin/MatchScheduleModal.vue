@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import DateTimeField from '../DateTimeField.vue'
 import { useI18n } from 'vue-i18n'
 import AppModal from '../AppModal.vue'
-import { entryMemberNames } from '../../lib/entryDisplay'
+import { entryDisplayNames } from '../../lib/entryDisplay'
 import { supabase } from '../../lib/supabase'
 import { conflictText, hasHardConflict, isoToZonedLocal, scheduleError, timezoneOf, zonedLocalToIso } from '../../lib/schedule'
 
@@ -71,7 +71,7 @@ const softOnly = computed(() => conflicts.value.length > 0 && !hardConflict.valu
 
 function teamLabel(entryId) {
   if (!entryId) return t('bracket.tbd')
-  const names = entryMemberNames(props.entriesMap[entryId])
+  const names = entryDisplayNames(props.entriesMap[entryId])
   return names.length ? names.join(' / ') : t('bracket.tbd')
 }
 const title = computed(() => `${teamLabel(props.match.side_a_entry_id)} — ${teamLabel(props.match.side_b_entry_id)}`)

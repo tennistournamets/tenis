@@ -18,6 +18,16 @@ export function groupPlan(n, groupCount, advancePerGroup = 2) {
   return { n: count, groups: g, sizes, minSize: Math.min(...sizes), maxSize: Math.max(...sizes), matches, advance, qualifiers: g * advance }
 }
 
+/**
+ * The group stage barely filters when (almost) everyone advances, for example
+ * 8 of 9: 'all' when nobody is knocked out, 'almostAll' when one is.
+ */
+export function groupAdvanceWarning(plan) {
+  if (!plan || plan.n < 3 || !plan.qualifiers) return null
+  const out = plan.n - plan.qualifiers
+  return out <= 0 ? 'all' : out === 1 ? 'almostAll' : null
+}
+
 // generate_groups needs at least two entries per group.
 export function groupCountOptions(n, max = 8) {
   const count = Math.max(0, Number(n) || 0)
@@ -33,7 +43,9 @@ export function bracketPlan(n, format = 'single_elimination') {
   const size = count < 2 ? 0 : 2 ** Math.ceil(Math.log2(count))
   const rounds = size ? Math.log2(size) : 0
   if (format === 'double_elimination') {
-    return { n: count, size, rounds, byes: size - count, upper: size ? size - 1 : 0, lower: size > 2 ? size - 2 : 0, final: size ? 1 : 0, valid: isPowerOfTwo(count) }
+    // No byes in v1: other counts produce no bracket, so there is nothing to count.
+    const valid = count >= 2 && isPowerOfTwo(count)
+    return { n: count, size, rounds, byes: size - count, upper: valid ? size - 1 : 0, lower: valid && size > 2 ? size - 2 : 0, final: valid ? 1 : 0, valid }
   }
   return { n: count, size, rounds, byes: size - count, matches: count ? count - 1 : 0, valid: count >= 2 }
 }

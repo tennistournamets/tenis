@@ -1,6 +1,6 @@
 // Access helpers: visibility modes, role capabilities shown to organizers and
 // error codes raised by the admin-management RPCs.
-import { scheduleError } from './schedule.js'
+import { errorMessage } from './errorMessages.js'
 
 export const VISIBILITY_MODES = ['public', 'link', 'private', 'password']
 /** Modes a brand-new tournament can start in; a password is set afterwards in the settings. */
@@ -14,8 +14,7 @@ export function visibilityOf(tournament) {
 }
 
 export function accessError(message, t, fallbackKey = 'errors.generic') {
-  if (typeof message === 'string' && message.startsWith('access.')) return t(`access.errors.${message.slice('access.'.length)}`)
-  return scheduleError(message, t, fallbackKey)
+  return errorMessage(message, t, fallbackKey)
 }
 
 /** What each role may do; the server enforces the same split (is_tournament_admin vs can_live_score). */
@@ -45,6 +44,23 @@ export function canEditMembership(currentRole, targetRole) {
 }
 
 const accessKey = slug => `champ_access_${slug}`
+
+const CLIENT_ID_KEY = 'champ_client_id'
+
+/**
+ * Random id of this browser, sent with page-password attempts so the server
+ * counts failures per visitor (together with the hashed IP) instead of per
+ * page. Without storage a fresh id per call still works: the IP limit applies.
+ */
+export function browserClientId(storage = globalThis.localStorage, random = () => globalThis.crypto?.randomUUID?.()) {
+  try {
+    const stored = storage?.getItem(CLIENT_ID_KEY)
+    if (stored && /^[A-Za-z0-9-]{8,64}$/.test(stored)) return stored
+  } catch { /* storage blocked */ }
+  const id = random() || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`
+  try { storage?.setItem(CLIENT_ID_KEY, id) } catch { /* private mode or quota */ }
+  return id
+}
 
 /** Access grant for a password page, kept for this browser tab only. */
 export function readAccessToken(slug, storage = globalThis.sessionStorage) {

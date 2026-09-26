@@ -2,15 +2,16 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-import { entryMemberNames } from '../lib/entryDisplay'
+import { entryDisplayNames } from '../lib/entryDisplay'
 import { isByeMatch } from '../lib/bracketDisplay'
 import { supabase } from '../lib/supabase'
 import { useUnsavedChanges } from '../lib/unsavedChanges'
 import { saveMatchResult } from '../lib/saveMatchResult'
 import { confirmDialog } from '../lib/confirmDialog'
 import TennisSetInputs from './TennisSetInputs.vue'
-import { knockoutTotals, matchRoundName } from '../lib/roundLabels'
-import { scoreRows, buildSetPayload, scoringError, hasMatchWinner } from '../lib/tennisRules'
+import { knockoutTotals, matchRoundName, matchStageRoundLabel } from '../lib/roundLabels'
+import { groupIndexOfRound, groupNamesById, roundInGroup } from '../lib/groupsFlow'
+import { scoreRows, buildSetPayload, scoringError, matchScoreCheck } from '../lib/tennisRules'
 
 const props = defineProps({
   scoringConfig: { type: Object, default: () => ({}) },
@@ -46,6 +47,9 @@ const props = defineProps({
     type: Object,
     default: () => ({}),
   },
+  // Groups + playoff: group letters in round headings, "Playoff" for its knockout.
+  groups: { type: Array, default: () => [] },
+  format: { type: String, default: '' },
 })
 
 const emit = defineEmits(['saved', 'start-live'])
@@ -56,7 +60,9 @@ const savedFlash = reactive({})
 const drafts = reactive({})
 const draftMatches = reactive({})
 const removed = id => !props.matches.some(m => m.id === id)
-const visibleMatches = computed(() => [...props.matches, ...Object.values(draftMatches).filter(m => removed(m.id) && changed(m.id))])
+// A BYE is an automatic pass, not a match to score: it stays on the board but
+// not in this list, so "Finished N" and "Played M of K" count the same matches.
+const visibleMatches = computed(() => [...props.matches.filter(m => !isByeMatch(m)), ...Object.values(draftMatches).filter(m => removed(m.id) && changed(m.id))])
 useUnsavedChanges(() => Object.keys(drafts).some(id => changed(id)), () => Object.values(setForms).some(rows => rows.some(r => r.saving)))
 const rowsKey = rows => JSON.stringify((rows || []).map(({ saving, error, ...row }) => row))
 function changed(matchId) { return Boolean(drafts[matchId] && drafts[matchId].key !== rowsKey(setForms[matchId])) }
@@ -100,6 +106,19 @@ watch(
   { immediate: true, deep: true },
 )
 
+// A validation or server error describes the score it was raised for: editing
+// the fields clears it (a revision conflict stays until the result is reloaded).
+watch(
+  () => Object.fromEntries(Object.entries(setForms).map(([id, rows]) => [id, rowsKey(rows)])),
+  (now, before = {}) => {
+    for (const [id, key] of Object.entries(now)) {
+      if (before[id] === undefined || before[id] === key) continue
+      const first = setForms[id]?.[0]
+      if (first?.error && first.error !== t('scoringFlow.conflict')) first.error = ''
+    }
+  },
+)
+
 // Display filter only: hidden matches keep their drafts and unsaved guard.
 const filter = ref('all')
 const isFinished = m => m.status === 'finished'
@@ -120,7 +139,13 @@ const filterKeys = computed(() => ['all', 'todo', 'finished', ...(counts.value.w
 const filterLabel = key => t(`scoringFlow.${{ all: 'filterAll', todo: 'filterToEnter', finished: 'filterFinished', waiting: 'filterWaiting' }[key]}`)
 const liveCount = computed(() => playable.value.filter(m => liveStatus(m.id) === 'active').length)
 // The server accepts only a complete result; say so before the click, not after.
-const missingWinner = match => !hasMatchWinner(setForms[match.id] || [], props.scoringConfig, props.setFormat)
+const scoreCheck = match => matchScoreCheck(setForms[match.id] || [], props.scoringConfig, props.setFormat)
+const missingWinner = match => !scoreCheck(match).winner
+// Why the typed score is not a result yet, in the words the server would use.
+function missingWinnerText(match) {
+  const problem = scoreCheck(match).problem
+  return problem === 'needWinner' || !problem ? t('scoringFlow.needWinner', { n: requiredWins.value }) : t(`tennisRules.${problem}`)
+}
 const requiredWins = computed(() => (props.setFormat === 'best_of_5' ? 3 : 2))
 const playable = computed(() => props.matches.filter(m => !isByeMatch(m)))
 const playedCount = computed(() => playable.value.filter(isFinished).length)
@@ -131,24 +156,34 @@ function matchStatus(match) {
 }
 
 const stageOrder = { main: 0, group: 1, winners: 2, losers: 3, grand_final: 4 }
-const multipleStages = computed(() => new Set(props.matches.map(m => m.stage)).size > 1)
 const matchesByRound = computed(() => {
   const map = new Map()
   for (const m of visibleMatches.value) {
     if (!filterMatch(m)) continue
     const key = `${m.stage}:${m.round_number}`
-    if (!map.has(key)) map.set(key, { key, stage: m.stage, roundNumber: m.round_number, matches: [] })
+    if (!map.has(key)) map.set(key, { key, stage: m.stage, roundNumber: m.round_number, groupId: m.group_id, matches: [] })
     map.get(key).matches.push(m)
   }
+  // Group rounds carry a per-group offset: order them tour by tour, A before B.
+  const roundOrder = group => group.stage === 'group'
+    ? roundInGroup(group.roundNumber) * 1000 + groupIndexOfRound(group.roundNumber) : group.roundNumber
   return [...map.values()]
-    .sort((a, b) => (stageOrder[a.stage] ?? 9) - (stageOrder[b.stage] ?? 9) || a.roundNumber - b.roundNumber)
+    .sort((a, b) => (stageOrder[a.stage] ?? 9) - (stageOrder[b.stage] ?? 9) || roundOrder(a) - roundOrder(b))
     .map(group => ({ ...group, matches: group.matches.sort((a, b) => a.match_number - b.match_number || a.id.localeCompare(b.id)) }))
 })
 
-const roundTotals = computed(() => knockoutTotals(props.matches))
-function roundLabel(roundNumber, stage) {
-  if (!roundNumber) return ''
-  return matchRoundName({ stage, round_number: roundNumber }, roundTotals.value, t)
+const roundTotals = computed(() => knockoutTotals(props.matches, props.format))
+const hasLosers = computed(() => props.matches.some(m => m.stage === 'losers'))
+const groupNames = computed(() => groupNamesById(props.groups))
+// Same names as the board, the schedule and the correction preview:
+// "Semifinal", "Upper bracket · Final", "Lower bracket · Round 2",
+// "Grand final", "Group A · Tour 1", "Tour 3" (round robin), "Playoff · Final".
+function roundHeading(group) {
+  const match = { stage: group.stage, round_number: group.roundNumber, group_id: group.groupId }
+  if (group.stage === 'winners' && props.format === 'groups_playoff') {
+    return `${t('admin.playoff')} · ${matchRoundName(match, roundTotals.value, t)}`
+  }
+  return matchStageRoundLabel(match, { totals: roundTotals.value, hasLosers: hasLosers.value, groupNames: groupNames.value }, t)
 }
 
 const isDoubles = computed(() => props.category === 'doubles')
@@ -158,7 +193,7 @@ function teamLabel(entryId, match) {
   if (!entryId) {
     return t(isByeMatch(match) ? 'bracket.bye' : 'bracket.tbd')
   }
-  const names = entryMemberNames(props.entriesMap[entryId])
+  const names = entryDisplayNames(props.entriesMap[entryId])
   return names.length ? names.join(' / ') : t('bracket.tbd')
 }
 
@@ -204,7 +239,7 @@ async function save(match) {
     p_match_id: match.id,
     p_sets: payload,
     p_expected_revision: drafts[match.id]?.revision,
-  }, t)
+  }, t, { matches: props.matches })
 
   rows.forEach((row) => {
     row.saving = false
@@ -268,7 +303,7 @@ async function save(match) {
 
     <section v-for="group in matchesByRound" :key="group.key" class="se-round">
       <h3 class="se-round__title">
-        <span>{{ group.stage === 'grand_final' ? t('scoringFlow.stage_grand_final') : `${multipleStages ? `${t(`scoringFlow.stage_${group.stage}`)} · ` : ''}${roundLabel(group.roundNumber, group.stage)}` }}</span>
+        <span>{{ roundHeading(group) }}</span>
         <span class="se-count">{{ group.matches.length }}</span>
       </h3>
 
@@ -334,7 +369,7 @@ async function save(match) {
             <p
               v-if="missingWinner(match) && liveStatus(match.id) !== 'active' && !removed(match.id) && !(setForms[match.id] || [])[0]?.error"
               class="se-card__hint"
-            >{{ t('scoringFlow.needWinner', { n: requiredWins }) }}</p>
+            >{{ missingWinnerText(match) }}</p>
 
             <footer class="score-match__actions se-card__foot">
               <Transition name="saved-pop">
@@ -409,8 +444,9 @@ async function save(match) {
 .se-status--live .se-status__dot { background: var(--accent); animation: livePulse 1.5s ease-in-out infinite; }
 .se-card__live { margin-left: auto; min-height: 32px; height: 32px; padding: 0 10px; font-size: 0.8125rem; }
 .se-card__teams-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin: 0; font-weight: 600; }
-.se-card__teams-line .is-tbd { color: var(--disabled); font-weight: 500; }
-.se-card__vs { font-size: 0.72rem; text-transform: uppercase; color: var(--disabled); }
+/* --muted, not --disabled: this is readable information (WCAG AA 4.5:1 in both themes). */
+.se-card__teams-line .is-tbd { color: var(--muted); font-weight: 500; }
+.se-card__vs { font-size: 0.72rem; text-transform: uppercase; color: var(--muted); }
 .se-card__note { margin: -6px 0 0; font-size: 0.8125rem; color: var(--muted); }
 .se-card--compact { gap: 10px; }
 .se-card__error { margin: 0; font-size: 0.875rem; }

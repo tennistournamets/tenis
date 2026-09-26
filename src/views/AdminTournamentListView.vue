@@ -6,9 +6,10 @@ import { useI18n } from 'vue-i18n'
 import { supabase } from '../lib/supabase'
 import CopyTournamentLink from '../components/CopyTournamentLink.vue'
 import AppIcon from '../components/AppIcon.vue'
-import { getSportConfig } from '../lib/sportConfig'
+import { categoryLabelKey } from '../lib/sportConfig'
 import { useAuthStore } from '../stores/auth'
-import { statusBadgeClass } from '../lib/tournamentStatus'
+import { displayStatus, statusBadgeClass } from '../lib/tournamentStatus'
+import { errorMessage } from '../lib/errorMessages'
 
 const { t, locale } = useI18n()
 const router = useRouter()
@@ -100,6 +101,7 @@ async function loadTournaments() {
           set_format,
           doubles_pairing_mode,
           visibility,
+          registration_deadline,
           created_at
         )
       `,
@@ -107,7 +109,7 @@ async function loadTournaments() {
       .eq('user_id', auth.user.id)
 
     if (error) {
-      loadError.value = error.message
+      loadError.value = errorMessage(error, t, 'drafts.unavailable')
       tournaments.value = []
       return
     }
@@ -120,7 +122,7 @@ async function loadTournaments() {
     tournaments.value = list
     await loadProgress(list.map(item => item.id))
   } catch (error) {
-    loadError.value = error?.message || t('drafts.unavailable')
+    loadError.value = errorMessage(error, t, 'drafts.unavailable')
     tournaments.value = []
   } finally {
     loading.value = false
@@ -159,9 +161,9 @@ function hasPublicShareLink(status) {
 
 function itemSubtitle(item) {
   const parts = [t(`tournamentFormat.${item.format}`)]
-  if (getSportConfig(item.sport).supportsCategory) {
-    parts.push(t(`tournament.${item.category}`))
-  }
+  // Padel is always doubles: say so, like tennis says its category.
+  const category = categoryLabelKey(item.sport, item.category)
+  if (category) parts.push(t(category))
   return parts.join(' · ')
 }
 
@@ -234,6 +236,7 @@ onMounted(async () => {
         type="button"
         class="filter-segment__btn"
         :class="{ 'filter-segment__btn--active': statusFilter === 'active' }"
+        :aria-pressed="statusFilter === 'active'"
         @click="statusFilter = 'active'"
       >
         {{ t('admin.filterActive') }}
@@ -242,6 +245,7 @@ onMounted(async () => {
         type="button"
         class="filter-segment__btn"
         :class="{ 'filter-segment__btn--active': statusFilter === 'completed' }"
+        :aria-pressed="statusFilter === 'completed'"
         @click="statusFilter = 'completed'"
       >
         {{ t('admin.filterCompleted') }}
@@ -250,6 +254,7 @@ onMounted(async () => {
         type="button"
         class="filter-segment__btn"
         :class="{ 'filter-segment__btn--active': statusFilter === 'all' }"
+        :aria-pressed="statusFilter === 'all'"
         @click="statusFilter = 'all'"
       >
         {{ t('admin.filterAll') }}
@@ -274,8 +279,8 @@ onMounted(async () => {
           <div class="t-card__info">
             <div class="t-card__title-row">
               <h2 class="t-card__title">{{ item.name }}</h2>
-              <span class="badge" :class="statusBadgeClass(item.status)">
-                {{ t(`tournament.${item.status}`) }}
+              <span class="badge" :class="statusBadgeClass(displayStatus(item))">
+                {{ t(`tournament.${displayStatus(item)}`) }}
               </span>
               <span v-if="item.currentRole && item.currentRole !== 'owner'" class="badge badge--neutral">{{ t(`admin.${item.currentRole}`) }}</span>
               <span v-if="item.visibility && item.visibility !== 'link'" class="badge badge--neutral">{{ t(`access.visibility.${item.visibility}`) }}</span>

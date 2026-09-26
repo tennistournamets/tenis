@@ -57,7 +57,7 @@
       "path": "supabase/migrations/20260920171949_owner_only_tournament_delete.sql",
       "sha256": "4262ecd9e97a8f53935ecc392c7944e577a0ed68e4224dbf701c8c3ba110a211",
       "tenisAppliedVersion": null,
-      "tenisNote": "Not applied to TENIS yet; apply via psql (session pooler) like the previous forward steps."
+      "tenisNote": "Applied 2026-09-26 via psql (session pooler, one transaction per file) after logical backup; no migration history entry. Catalog verified identical to the local chain."
     },
     {
       "path": "supabase/migrations/20260920185917_feature_flags.sql",
@@ -69,19 +69,41 @@
       "path": "supabase/migrations/20260921192934_entry_contact_split.sql",
       "sha256": "e41db6875a1909696caeceb4ff70e1053705a28bb2c5d53b72619a071c1e706f",
       "tenisAppliedVersion": null,
-      "tenisNote": "Not applied to TENIS yet; apply via psql (session pooler) like the previous forward steps."
+      "tenisNote": "Already present on TENIS (verified 2026-09-26 by catalog comparison); no migration history entry."
     },
     {
       "path": "supabase/migrations/20260921210903_tournament_venue.sql",
       "sha256": "e63938743ca265aafb49661f2dfda905e30ddd2c2bfd695cdd49ed747513fb48",
       "tenisAppliedVersion": null,
-      "tenisNote": "Not applied to TENIS yet; apply via psql (session pooler) like the previous forward steps."
+      "tenisNote": "Already present on TENIS (verified 2026-09-26 by catalog comparison); no migration history entry."
     },
     {
       "path": "supabase/migrations/20260924210822_entry_seed_order.sql",
       "sha256": "8039e678c924f7d4dff1df7f212f84d1b8b0e65300c6af887f5530f01a22bba4",
       "tenisAppliedVersion": null,
-      "tenisNote": "Not applied to TENIS yet; apply via psql (session pooler) like the previous forward steps."
+      "tenisNote": "Applied 2026-09-26 via psql (session pooler, one transaction per file) after logical backup; no migration history entry. Catalog verified identical to the local chain."
+    },
+    {
+      "path": "supabase/migrations/20260926085326_groups_rr_fixes.sql",
+      "sha256": "595e935603db089b872f00c650578b52d20f1bac1f2a381afdc286f1c8e893ff",
+      "tenisAppliedVersion": null,
+      "tenisNote": "Applied 2026-09-26 via psql (session pooler, one transaction per file) after logical backup; no migration history entry. Catalog verified identical to the local chain."
+    },
+    {
+      "path": "supabase/migrations/20260926085610_lifecycle_access_fixes.sql",
+      "sha256": "d764c289106daacdaf6a22917e3913be52a166456768b44364672fbce6d1e46c",
+      "tenisNote": "Applied 2026-09-26 via psql (session pooler, one transaction per file) after logical backup; no migration history entry. Catalog verified identical to the local chain."
+    },
+    {
+      "path": "supabase/migrations/20260926085932_bracket_fixes.sql",
+      "sha256": "b7494ce4e09380b909bb976ef08d6cfdd712de59d02b24d584b3c2cbef66d046",
+      "tenisAppliedVersion": null,
+      "tenisNote": "Applied 2026-09-26 via psql (session pooler, one transaction per file) after logical backup; no migration history entry. Catalog verified identical to the local chain."
+    },
+    {
+      "path": "supabase/migrations/20260926123704_qa_round2_fixes.sql",
+      "sha256": "3b516095af7830fd4c75e7fa06678a52de942552db9d39a9479cf316c21dbde1",
+      "tenisNote": "Applied 2026-09-26 via psql (session pooler, one transaction per file) after logical backup; no migration history entry. Catalog verified identical to the local chain."
     }
   ],
   "baseline": {

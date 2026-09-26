@@ -9,7 +9,9 @@ export function scoringAccess(tournament, role) {
   const active = tournament?.status === 'in_progress'
   const live = Boolean(active && scorer && sportConfig[tournament?.sport]?.supportsLiveScoring)
   const final = Boolean(active && scorer && sportConfig[tournament?.sport])
-  return { manager, live, final, scores: live || final }
+  // Stopping a live match belongs to live scoring itself, counter included
+  // (stop_live_match checks can_live_score).
+  return { manager, live, final, scores: live || final, stopLive: live }
 }
 
 export function matchScoringAction(tournament, role, match) {

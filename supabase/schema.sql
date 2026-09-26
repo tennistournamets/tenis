@@ -7815,3 +7815,2567 @@ returns jsonb language sql stable security invoker set search_path=public as $$
 $$;
 
 notify pgrst, 'reload schema';
+
+-- Round robin and groups + playoff fixes (QA stream B). Safe to re-run: every
+-- function is replaced (generate_groups is dropped first because its
+-- signature changes) and grants are restated.
+--
+-- * Standings: one internal computation (standings_rows) shared by the public
+--   RPC and the playoff seeding. Ties on points break by head-to-head, set or
+--   goal difference, then game difference (sets sports) before the name, so a
+--   circular tie no longer falls through to the alphabet. Password viewers
+--   with a valid token read standings inside their snapshot.
+-- * Generators refuse to wipe recorded results of a running or completed
+--   tournament (round robin, groups, playoff).
+-- * Playoff seeding follows the organizer decision: group winners by strength,
+--   then the best runners-up, BYEs go to the top seeds, and players from the
+--   same group never meet in the first round. The playoff tree is built here
+--   from a positional slot list, independent of generate_single_elim.
+-- * A group correction rebuilds the playoff only when the qualifiers or their
+--   placement change; the rebuilt playoff keeps its schedule slots, and the
+--   preview reports scheduled and published matches it touches.
+
+-- =============================================
+-- Standings
+-- =============================================
+
+create or replace function public.standings_rows(p_tournament_id uuid, p_group_id uuid default null)
+returns table (
+  entry_id uuid,
+  display_name text,
+  played integer,
+  won integer,
+  drawn integer,
+  lost integer,
+  score_for integer,
+  score_against integer,
+  diff integer,
+  points integer,
+  rank integer,
+  games_for integer,
+  games_against integer,
+  games_diff integer
+)
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  v_sport sport;
+  v_cfg jsonb;
+  v_win integer;
+  v_draw integer;
+  v_loss integer;
+begin
+  select t.sport, coalesce(t.scoring_config, '{}'::jsonb)
+    into v_sport, v_cfg
+  from tournaments t
+  where t.id = p_tournament_id;
+  if v_sport is null then
+    raise exception 'Tournament not found';
+  end if;
+
+  -- points defaults: goals sports use 3/1/0, sets sports 1/0/0; scoring_config may override
+  if v_sport in ('tennis', 'padel') then
+    v_win := coalesce((v_cfg->>'points_win')::integer, 1);
+    v_draw := coalesce((v_cfg->>'points_draw')::integer, 0);
+    v_loss := coalesce((v_cfg->>'points_loss')::integer, 0);
+  else
+    v_win := coalesce((v_cfg->>'points_win')::integer, 3);
+    v_draw := coalesce((v_cfg->>'points_draw')::integer, 1);
+    v_loss := coalesce((v_cfg->>'points_loss')::integer, 0);
+  end if;
+
+  return query
+  with participants as (
+    select e.id, e.display_name
+    from entries e
+    where e.tournament_id = p_tournament_id
+      and e.status = 'approved'
+      and (
+        p_group_id is null
+        or e.id in (select ge.entry_id from group_entries ge where ge.group_id = p_group_id)
+      )
+  ),
+  played_matches as (
+    select m.*
+    from matches m
+    where m.tournament_id = p_tournament_id
+      and m.status = 'finished'
+      and (p_group_id is null or m.group_id = p_group_id)
+      and m.side_a_entry_id is not null
+      and m.side_b_entry_id is not null
+  ),
+  -- Games per match for the sets family. A deciding match tie-break counts as
+  -- one game for its winner, the usual convention for game totals.
+  match_games as (
+    select ms.match_id,
+           sum(case when ms.score_kind = 'match_tiebreak'
+                    then case when coalesce(ms.side_a_tiebreak, 0) > coalesce(ms.side_b_tiebreak, 0) then 1 else 0 end
+                    else ms.side_a_games end)::integer as a_games,
+           sum(case when ms.score_kind = 'match_tiebreak'
+                    then case when coalesce(ms.side_b_tiebreak, 0) > coalesce(ms.side_a_tiebreak, 0) then 1 else 0 end
+                    else ms.side_b_games end)::integer as b_games
+    from match_sets ms
+    where ms.match_id in (select pm.id from played_matches pm)
+    group by ms.match_id
+  ),
+  sides as (
+    select pm.side_a_entry_id as eid,
+           coalesce(pm.side_a_score, 0) as gf,
+           coalesce(pm.side_b_score, 0) as ga,
+           coalesce(g.a_games, 0) as games_f,
+           coalesce(g.b_games, 0) as games_a,
+           pm.winner_entry_id
+    from played_matches pm left join match_games g on g.match_id = pm.id
+    union all
+    select pm.side_b_entry_id as eid,
+           coalesce(pm.side_b_score, 0) as gf,
+           coalesce(pm.side_a_score, 0) as ga,
+           coalesce(g.b_games, 0) as games_f,
+           coalesce(g.a_games, 0) as games_a,
+           pm.winner_entry_id
+    from played_matches pm left join match_games g on g.match_id = pm.id
+  ),
+  agg as (
+    select s.eid,
+           count(*)::integer as played,
+           count(*) filter (where s.winner_entry_id = s.eid)::integer as won,
+           count(*) filter (where s.winner_entry_id is null)::integer as drawn,
+           count(*) filter (where s.winner_entry_id is not null and s.winner_entry_id <> s.eid)::integer as lost,
+           coalesce(sum(s.gf), 0)::integer as score_for,
+           coalesce(sum(s.ga), 0)::integer as score_against,
+           coalesce(sum(s.games_f), 0)::integer as games_for,
+           coalesce(sum(s.games_a), 0)::integer as games_against
+    from sides s
+    group by s.eid
+  ),
+  merged as (
+    select p.id as entry_id,
+           p.display_name,
+           coalesce(a.played, 0) as played,
+           coalesce(a.won, 0) as won,
+           coalesce(a.drawn, 0) as drawn,
+           coalesce(a.lost, 0) as lost,
+           coalesce(a.score_for, 0) as score_for,
+           coalesce(a.score_against, 0) as score_against,
+           (coalesce(a.score_for, 0) - coalesce(a.score_against, 0)) as diff,
+           (coalesce(a.won, 0) * v_win + coalesce(a.drawn, 0) * v_draw + coalesce(a.lost, 0) * v_loss) as points,
+           coalesce(a.games_for, 0) as games_for,
+           coalesce(a.games_against, 0) as games_against,
+           (coalesce(a.games_for, 0) - coalesce(a.games_against, 0)) as games_diff
+    from participants p
+    left join agg a on a.eid = p.id
+  ),
+  -- Head-to-head points, counting only matches between entries tied on total points.
+  -- Breaks pairwise/group ties; a circular tie falls through to the differences.
+  h2h as (
+    select e.entry_id, coalesce(sum(e.pts), 0) as h2h_points
+    from (
+      select pm.side_a_entry_id as entry_id,
+             case when pm.winner_entry_id = pm.side_a_entry_id then v_win
+                  when pm.winner_entry_id is null then v_draw
+                  else v_loss end as pts
+      from played_matches pm
+      join merged ma on ma.entry_id = pm.side_a_entry_id
+      join merged mb on mb.entry_id = pm.side_b_entry_id
+      where ma.points = mb.points
+      union all
+      select pm.side_b_entry_id as entry_id,
+             case when pm.winner_entry_id = pm.side_b_entry_id then v_win
+                  when pm.winner_entry_id is null then v_draw
+                  else v_loss end as pts
+      from played_matches pm
+      join merged ma on ma.entry_id = pm.side_a_entry_id
+      join merged mb on mb.entry_id = pm.side_b_entry_id
+      where ma.points = mb.points
+    ) e
+    group by e.entry_id
+  )
+  select mg.entry_id,
+         mg.display_name,
+         mg.played,
+         mg.won,
+         mg.drawn,
+         mg.lost,
+         mg.score_for,
+         mg.score_against,
+         mg.diff,
+         mg.points,
+         (row_number() over (
+            order by mg.points desc, coalesce(h.h2h_points, 0) desc,
+                     mg.diff desc, mg.games_diff desc, mg.score_for desc, mg.games_for desc,
+                     mg.display_name asc, mg.entry_id asc
+         ))::integer as rank,
+         mg.games_for,
+         mg.games_against,
+         mg.games_diff
+  from merged mg
+  left join h2h h on h.entry_id = mg.entry_id
+  order by rank;
+end;
+$$;
+revoke execute on function public.standings_rows(uuid, uuid) from public, anon, authenticated;
+
+-- The public contract keeps its columns (historical patches replace it with
+-- the same row type); the game totals only order the ranking.
+create or replace function public.get_standings(
+  p_tournament_id uuid,
+  p_group_id uuid default null
+)
+returns table (
+  entry_id uuid,
+  display_name text,
+  played integer,
+  won integer,
+  drawn integer,
+  lost integer,
+  score_for integer,
+  score_against integer,
+  diff integer,
+  points integer,
+  rank integer
+)
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+begin
+  if not exists (select 1 from tournaments t where t.id = p_tournament_id) then
+    raise exception 'Tournament not found';
+  end if;
+  -- tenis.access_tournament is set, transaction-local, only by
+  -- get_tournament_sync_state_with_token after it has validated the token.
+  if not (
+    exists (select 1 from tournaments t where t.id = p_tournament_id and t.is_public)
+    or is_tournament_admin(p_tournament_id)
+    or can_live_score(p_tournament_id)
+    or coalesce(current_setting('tenis.access_tournament', true), '') = p_tournament_id::text
+  ) then
+    raise exception 'Not allowed';
+  end if;
+  if p_group_id is not null and not exists (
+    select 1 from groups where id = p_group_id and tournament_id = p_tournament_id
+  ) then
+    raise exception 'Group does not belong to this tournament';
+  end if;
+  return query
+  select s.entry_id, s.display_name, s.played, s.won, s.drawn, s.lost,
+         s.score_for, s.score_against, s.diff, s.points, s.rank
+  from standings_rows(p_tournament_id, p_group_id) s;
+end;
+$$;
+revoke execute on function public.get_standings(uuid, uuid) from public;
+grant execute on function public.get_standings(uuid, uuid) to anon, authenticated;
+
+-- Password viewers get the same snapshot reduced to its public projection. The
+-- snapshot computes standings through get_standings, which admits this viewer
+-- through the transaction-local grant set here and cleared right after.
+create or replace function public.get_tournament_sync_state_with_token(p_tournament_id uuid, p_token text)
+returns jsonb language plpgsql stable security definer set search_path=public as $$
+declare v jsonb;
+begin
+ if not valid_access_token(p_tournament_id,p_token) then raise exception 'access.tokenExpired'; end if;
+ perform set_config('tenis.access_tournament',p_tournament_id::text,true);
+ v:=get_tournament_sync_state(p_tournament_id);
+ perform set_config('tenis.access_tournament','',true);
+ if v is null then return null; end if;
+ v:=jsonb_set(v,'{entries}',coalesce((select jsonb_agg(e) from jsonb_array_elements(v->'entries') e where e->>'status'='approved'),'[]'::jsonb));
+ v:=jsonb_set(v,'{schedule}',coalesce((select jsonb_agg(s) from jsonb_array_elements(v->'schedule') s where s->>'state'='published'),'[]'::jsonb));
+ v:=jsonb_set(v,'{registration}',coalesce(tournament_registration_state(p_tournament_id,true),'null'::jsonb));
+ v:=jsonb_set(v,'{tournament,access_password_set}','null'::jsonb);
+ v:=jsonb_set(v,'{tournament,contact_phone}','null'::jsonb);
+ v:=jsonb_set(v,'{tournament,contact_email}','null'::jsonb);
+ v:=jsonb_set(v,'{tournament,publish_contact}','false'::jsonb);
+ return v;
+end;
+$$;
+revoke execute on function public.get_tournament_sync_state_with_token(uuid,text) from public;
+grant execute on function public.get_tournament_sync_state_with_token(uuid,text) to anon, authenticated;
+
+-- =============================================
+-- Generator guards
+-- =============================================
+
+-- Anything a regeneration would erase: a played (non-BYE) result, a saved
+-- score or set, or a live-scoring row. p_stages narrows the check.
+create or replace function public.tournament_has_results(p_tournament_id uuid, p_stages match_stage[] default null)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from matches m
+    where m.tournament_id = p_tournament_id
+      and (p_stages is null or m.stage = any(p_stages))
+      and (
+        m.side_a_score is not null or m.side_b_score is not null
+        or (m.status = 'finished' and m.side_a_entry_id is not null and m.side_b_entry_id is not null)
+        or exists (select 1 from match_sets s where s.match_id = m.id)
+        or exists (select 1 from live_scores l where l.match_id = m.id)
+      )
+  );
+$$;
+revoke execute on function public.tournament_has_results(uuid, match_stage[]) from public, anon, authenticated;
+
+-- A completed tournament is final; a running one keeps its recorded results.
+create or replace function public.assert_structure_regenerable(p_tournament_id uuid, p_stages match_stage[] default null)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare v_status tournament_status;
+begin
+  select status into v_status from tournaments where id = p_tournament_id for update;
+  if v_status is null then
+    raise exception 'Tournament not found';
+  end if;
+  if v_status = 'completed'
+     or (v_status = 'in_progress' and tournament_has_results(p_tournament_id, p_stages)) then
+    raise exception using errcode = '22023', message = 'groupsFlow.regenerateLocked';
+  end if;
+end;
+$$;
+revoke execute on function public.assert_structure_regenerable(uuid, match_stage[]) from public, anon, authenticated;
+
+create or replace function public.generate_round_robin(p_tournament_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_entries uuid[];
+begin
+  if not is_tournament_admin(p_tournament_id) then
+    raise exception 'Not allowed';
+  end if;
+  perform assert_structure_regenerable(p_tournament_id);
+
+  select array_agg(e.id order by coalesce(e.seed_order, 999999), e.created_at)
+    into v_entries
+  from entries e
+  where e.tournament_id = p_tournament_id
+    and e.status = 'approved';
+
+  if coalesce(array_length(v_entries, 1), 0) < 2 then
+    raise exception 'At least 2 approved entries required';
+  end if;
+
+  delete from match_sets
+  where match_id in (select id from matches where tournament_id = p_tournament_id);
+  delete from matches where tournament_id = p_tournament_id;
+
+  perform generate_round_robin_matches(p_tournament_id, v_entries, 'main', null, 0);
+end;
+$$;
+grant execute on function public.generate_round_robin(uuid) to authenticated;
+
+-- Snake-distribute approved entries into N groups, then round-robin within each
+-- group. p_advance_per_group (optional) stores how many leave each group; it
+-- must fit the smallest group.
+drop function if exists public.generate_groups(uuid, integer);
+create or replace function public.generate_groups(
+  p_tournament_id uuid,
+  p_group_count integer default 2,
+  p_advance_per_group integer default null
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_entries uuid[];
+  v_n integer;
+  v_g integer;
+  v_i integer;
+  v_group_ids uuid[] := '{}';
+  v_gid uuid;
+  v_target integer;
+  v_pos integer;
+  v_group_members uuid[];
+  v_advance integer;
+begin
+  if not is_tournament_admin(p_tournament_id) then
+    raise exception 'Not allowed';
+  end if;
+  if p_group_count is null or p_group_count < 2 then
+    raise exception 'At least 2 groups required';
+  end if;
+  perform assert_structure_regenerable(p_tournament_id);
+
+  select array_agg(e.id order by coalesce(e.seed_order, 999999), e.created_at)
+    into v_entries
+  from entries e
+  where e.tournament_id = p_tournament_id and e.status = 'approved';
+
+  v_n := coalesce(array_length(v_entries, 1), 0);
+  if v_n < p_group_count * 2 then
+    raise exception 'Need at least 2 entries per group';
+  end if;
+
+  select coalesce(p_advance_per_group, (format_config->>'advance_per_group')::integer, 2)
+    into v_advance from tournaments where id = p_tournament_id;
+  -- The smallest group has floor(n / groups) entries.
+  if v_advance < 1 or v_advance > v_n / p_group_count then
+    raise exception using errcode = '22023', message = 'groupsFlow.invalidAdvance';
+  end if;
+  if p_advance_per_group is not null then
+    update tournaments
+      set format_config = jsonb_set(coalesce(format_config, '{}'::jsonb), '{advance_per_group}', to_jsonb(p_advance_per_group))
+    where id = p_tournament_id
+      and (format_config->>'advance_per_group') is distinct from p_advance_per_group::text;
+  end if;
+
+  -- wipe existing structure
+  delete from match_sets where match_id in (select id from matches where tournament_id = p_tournament_id);
+  delete from matches where tournament_id = p_tournament_id;
+  delete from groups where tournament_id = p_tournament_id;  -- cascades group_entries
+
+  -- create groups A, B, C, ...
+  for v_g in 0..(p_group_count - 1) loop
+    insert into groups (tournament_id, name, group_index)
+    values (p_tournament_id, chr(65 + v_g), v_g)
+    returning id into v_gid;
+    v_group_ids := v_group_ids || v_gid;
+  end loop;
+
+  -- snake distribution
+  for v_i in 1..v_n loop
+    v_pos := ((v_i - 1) / p_group_count);           -- row index (0-based)
+    if v_pos % 2 = 0 then
+      v_target := ((v_i - 1) % p_group_count);      -- left to right
+    else
+      v_target := p_group_count - 1 - ((v_i - 1) % p_group_count); -- right to left
+    end if;
+    insert into group_entries (group_id, entry_id, seed)
+    values (v_group_ids[v_target + 1], v_entries[v_i], v_i);
+  end loop;
+
+  -- round-robin per group; round_offset keeps round numbers unique across groups
+  for v_g in 0..(p_group_count - 1) loop
+    select array_agg(ge.entry_id order by ge.seed)
+      into v_group_members
+    from group_entries ge
+    where ge.group_id = v_group_ids[v_g + 1];
+
+    perform generate_round_robin_matches(
+      p_tournament_id, v_group_members, 'group', v_group_ids[v_g + 1], v_g * 1000
+    );
+  end loop;
+end;
+$$;
+revoke execute on function public.generate_groups(uuid, integer, integer) from public;
+grant execute on function public.generate_groups(uuid, integer, integer) to authenticated;
+
+-- =============================================
+-- Groups -> playoff seeding
+-- =============================================
+
+-- Positional first-round slots of the playoff: slot 2k-1 and 2k meet in match
+-- k, a NULL entry is a BYE. Qualifiers are seeded by group place, then by
+-- strength across groups (per-match points, difference, game difference,
+-- score), then group order. Standard seeding puts 1 and 2 in different halves
+-- and gives the BYEs to the top seeds; a first-round meeting of two players
+-- from the same group is resolved by swapping the weaker one with the closest
+-- seed of the same place (else the closest seed) from another full match.
+create or replace function public.group_playoff_seeding(p_tournament_id uuid)
+returns table (
+  slot integer,
+  entry_id uuid,
+  seed integer,
+  group_id uuid,
+  group_name text,
+  group_rank integer
+)
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  v_advance integer;
+  v_min integer;
+  v_n integer;
+  v_b integer := 1;
+  v_ids uuid[];
+  v_gids uuid[];
+  v_gnames text[];
+  v_gidx integer[];
+  v_ranks integer[];
+  v_order integer[] := array[1];
+  v_next integer[];
+  v_len integer := 1;
+  v_s integer;
+  v_slots integer[] := '{}';
+  v_k integer;
+  v_q integer;
+  v_qpos integer;
+  v_a integer;
+  v_bb integer;
+  v_weak integer;
+  v_wpos integer;
+  v_partner_w integer;
+  v_partner_q integer;
+  v_best integer;
+  v_best_dist integer;
+  v_dist integer;
+  v_changed boolean;
+  v_pass integer;
+begin
+  select coalesce((format_config->>'advance_per_group')::integer, 2)
+    into v_advance from tournaments where id = p_tournament_id;
+  if v_advance is null then
+    raise exception 'Tournament not found';
+  end if;
+  if not exists (select 1 from groups g where g.tournament_id = p_tournament_id) then
+    raise exception 'No groups found';
+  end if;
+  select min(c) into v_min from (
+    select count(*) c from groups g
+    join group_entries ge on ge.group_id = g.id
+    join entries e on e.id = ge.entry_id and e.status = 'approved'
+    where g.tournament_id = p_tournament_id group by g.id
+    union all
+    select 0 from groups g where g.tournament_id = p_tournament_id
+      and not exists (select 1 from group_entries ge join entries e on e.id = ge.entry_id and e.status = 'approved' where ge.group_id = g.id)
+  ) x;
+  if v_advance < 1 or v_advance > v_min then
+    raise exception using errcode = '22023', message = 'groupsFlow.invalidAdvance';
+  end if;
+
+  with q as (
+    select s.entry_id, g.id as gid, g.name as gname, g.group_index, s.rank as grank,
+           case when s.played > 0 then s.points::numeric / s.played else 0 end as ppm,
+           case when s.played > 0 then s.diff::numeric / s.played else 0 end as dpm,
+           case when s.played > 0 then s.games_diff::numeric / s.played else 0 end as gpm,
+           case when s.played > 0 then s.score_for::numeric / s.played else 0 end as fpm
+    from groups g
+    cross join lateral standings_rows(p_tournament_id, g.id) s
+    where g.tournament_id = p_tournament_id and s.rank <= v_advance
+  ), ranked as (
+    select q.*, row_number() over (order by q.grank, q.ppm desc, q.dpm desc, q.gpm desc, q.fpm desc, q.group_index) as sn
+    from q
+  )
+  select array_agg(r.entry_id order by r.sn), array_agg(r.gid order by r.sn), array_agg(r.gname order by r.sn),
+         array_agg(r.group_index order by r.sn), array_agg(r.grank order by r.sn)
+    into v_ids, v_gids, v_gnames, v_gidx, v_ranks
+  from ranked r;
+
+  v_n := coalesce(array_length(v_ids, 1), 0);
+  if v_n < 2 then
+    raise exception 'Not enough qualifiers for a playoff';
+  end if;
+  while v_b < v_n loop v_b := v_b * 2; end loop;
+
+  -- Standard seed order: [1,2] -> [1,4,2,3] -> [1,8,4,5,2,7,3,6] ...
+  while v_len < v_b loop
+    v_next := '{}';
+    foreach v_s in array v_order loop
+      v_next := v_next || v_s || (2 * v_len + 1 - v_s);
+    end loop;
+    v_order := v_next;
+    v_len := v_len * 2;
+  end loop;
+  for v_k in 1..v_b loop
+    v_slots := v_slots || case when v_order[v_k] <= v_n then v_order[v_k] else 0 end;
+  end loop;
+
+  -- Every swap removes one same-group pair without creating another, so the
+  -- loop ends; passes are bounded anyway.
+  for v_pass in 1..v_b loop
+    v_changed := false;
+    for v_k in 1..(v_b / 2) loop
+      v_a := v_slots[2 * v_k - 1];
+      v_bb := v_slots[2 * v_k];
+      continue when v_a = 0 or v_bb = 0 or v_gidx[v_a] <> v_gidx[v_bb];
+      v_weak := greatest(v_a, v_bb);
+      v_partner_w := least(v_a, v_bb);
+      v_wpos := case when v_a > v_bb then 2 * v_k - 1 else 2 * v_k end;
+      v_best := 0;
+      v_best_dist := null;
+      for v_qpos in 1..v_b loop
+        continue when (v_qpos + 1) / 2 = v_k;
+        v_q := v_slots[v_qpos];
+        continue when v_q = 0;
+        v_partner_q := v_slots[case when v_qpos % 2 = 1 then v_qpos + 1 else v_qpos - 1 end];
+        -- A seed holding a BYE keeps it: free passes stay with the top seeds.
+        continue when v_partner_q = 0;
+        continue when v_gidx[v_q] = v_gidx[v_partner_w] or v_gidx[v_weak] = v_gidx[v_partner_q];
+        v_dist := case when v_ranks[v_q] = v_ranks[v_weak] then 0 else 1000 end + abs(v_q - v_weak);
+        if v_best_dist is null or v_dist < v_best_dist then
+          v_best := v_qpos;
+          v_best_dist := v_dist;
+        end if;
+      end loop;
+      if v_best > 0 then
+        v_slots[v_wpos] := v_slots[v_best];
+        v_slots[v_best] := v_weak;
+        v_changed := true;
+      end if;
+    end loop;
+    exit when not v_changed;
+  end loop;
+
+  for v_k in 1..v_b loop
+    slot := v_k;
+    v_s := v_slots[v_k];
+    if v_s = 0 then
+      entry_id := null; seed := null; group_id := null; group_name := null; group_rank := null;
+    else
+      entry_id := v_ids[v_s]; seed := v_s; group_id := v_gids[v_s]; group_name := v_gnames[v_s]; group_rank := v_ranks[v_s];
+    end if;
+    return next;
+  end loop;
+end;
+$$;
+revoke execute on function public.group_playoff_seeding(uuid) from public, anon, authenticated;
+
+create or replace function public.group_playoff_slots(p_tournament_id uuid)
+returns uuid[]
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select array_agg(s.entry_id order by s.slot) from group_playoff_seeding(p_tournament_id) s;
+$$;
+revoke execute on function public.group_playoff_slots(uuid) from public, anon, authenticated;
+
+-- Replaces the playoff (stage 'winners') with a fresh tree for the current
+-- seeding. Group matches are untouched. Schedule rows follow their bracket
+-- position (round, match number): courts and times belong to the slot.
+create or replace function public.build_group_playoff(p_tournament_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_slots uuid[];
+  v_b integer;
+  v_rounds integer := 0;
+  v_round integer;
+  v_k integer;
+  v_cnt integer;
+  v_ids uuid[] := '{}';
+  v_id uuid;
+  v_offset integer;
+  v_next_offset integer;
+  v_a uuid;
+  v_bb uuid;
+  v_winner uuid;
+  v_schedule jsonb;
+begin
+  v_slots := group_playoff_slots(p_tournament_id);
+  v_b := array_length(v_slots, 1);
+  v_cnt := v_b;
+  while v_cnt > 1 loop v_rounds := v_rounds + 1; v_cnt := v_cnt / 2; end loop;
+
+  select coalesce(jsonb_agg(jsonb_build_object('round_number', m.round_number, 'match_number', m.match_number,
+           'state', s.state, 'court_id', s.court_id, 'scheduled_at', s.scheduled_at, 'time_kind', s.time_kind,
+           'queue_order', s.queue_order)), '[]'::jsonb)
+    into v_schedule
+  from match_schedule s join matches m on m.id = s.match_id
+  where m.tournament_id = p_tournament_id and m.stage = 'winners';
+
+  delete from match_sets
+  where match_id in (select id from matches where tournament_id = p_tournament_id and stage = 'winners');
+  delete from matches where tournament_id = p_tournament_id and stage = 'winners';
+
+  -- Match (r, k) sits at index offset(r) + k, offset(r) = b - b / 2^(r-1).
+  for v_round in 1..v_rounds loop
+    for v_k in 1..(v_b / (2 ^ v_round)::integer) loop
+      insert into matches (tournament_id, stage, round_number, match_number, status)
+      values (p_tournament_id, 'winners', v_round, v_k, 'pending'::match_status)
+      returning id into v_id;
+      v_ids := v_ids || v_id;
+    end loop;
+  end loop;
+  for v_round in 1..(v_rounds - 1) loop
+    v_offset := v_b - v_b / (2 ^ (v_round - 1))::integer;
+    v_next_offset := v_b - v_b / (2 ^ v_round)::integer;
+    for v_k in 1..(v_b / (2 ^ v_round)::integer) loop
+      update matches
+        set next_match_id = v_ids[v_next_offset + (v_k + 1) / 2],
+            next_slot = case when v_k % 2 = 1 then 'A' else 'B' end
+      where id = v_ids[v_offset + v_k];
+    end loop;
+  end loop;
+
+  for v_k in 1..(v_b / 2) loop
+    v_a := v_slots[2 * v_k - 1];
+    v_bb := v_slots[2 * v_k];
+    v_winner := case when v_a is null then v_bb when v_bb is null then v_a else null end;
+    update matches
+      set side_a_entry_id = v_a,
+          side_b_entry_id = v_bb,
+          winner_entry_id = v_winner,
+          status = case
+            when v_winner is not null then 'finished'::match_status
+            when v_a is not null and v_bb is not null then 'ready'::match_status
+            else 'pending'::match_status
+          end
+    where id = v_ids[v_k];
+    if v_winner is not null then
+      perform propagate_winner(v_ids[v_k], v_winner);
+    end if;
+  end loop;
+
+  insert into match_schedule (tournament_id, match_id, state, court_id, scheduled_at, time_kind, queue_order)
+  select p_tournament_id, m.id, x.state, x.court_id, x.scheduled_at, x.time_kind, x.queue_order
+  from jsonb_to_recordset(v_schedule) as x(round_number integer, match_number integer, state text, court_id uuid,
+         scheduled_at timestamptz, time_kind text, queue_order integer)
+  join matches m on m.tournament_id = p_tournament_id and m.stage = 'winners'
+    and m.round_number = x.round_number and m.match_number = x.match_number
+  where not (m.status = 'finished' and (m.side_a_entry_id is null) <> (m.side_b_entry_id is null))
+  on conflict (match_id, state) do nothing;
+end;
+$$;
+revoke execute on function public.build_group_playoff(uuid) from public, anon, authenticated;
+
+-- After all group matches finish, seed the knockout (stage 'winners'). A
+-- playoff with recorded results is replaced only through a group correction.
+create or replace function public.generate_group_playoff(p_tournament_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare v_status tournament_status;
+begin
+  if not is_tournament_admin(p_tournament_id) then
+    raise exception 'Not allowed';
+  end if;
+  select status into v_status from tournaments where id = p_tournament_id for update;
+  if v_status = 'completed' then
+    raise exception using errcode = '22023', message = 'groupsFlow.regenerateLocked';
+  end if;
+  if not exists (select 1 from groups where tournament_id = p_tournament_id) then
+    raise exception 'No groups found';
+  end if;
+  if exists (
+    select 1 from matches
+    where tournament_id = p_tournament_id and stage = 'group' and status <> 'finished'
+  ) then
+    raise exception 'All group matches must be finished first';
+  end if;
+  if tournament_has_results(p_tournament_id, array['winners']::match_stage[]) then
+    raise exception using errcode = '22023', message = 'groupsFlow.playoffStarted';
+  end if;
+  perform build_group_playoff(p_tournament_id);
+end;
+$$;
+grant execute on function public.generate_group_playoff(uuid) to authenticated;
+
+-- What "Start playoff" will create, for the confirmation dialog.
+create or replace function public.get_group_playoff_preview(p_tournament_id uuid)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare v_slots jsonb;
+begin
+  if not is_tournament_admin(p_tournament_id) then
+    raise exception 'Not allowed';
+  end if;
+  if exists (
+    select 1 from matches
+    where tournament_id = p_tournament_id and stage = 'group' and status <> 'finished'
+  ) then
+    raise exception 'All group matches must be finished first';
+  end if;
+  select jsonb_agg(jsonb_build_object('slot', s.slot, 'entry_id', s.entry_id, 'name', e.display_name,
+           'seed', s.seed, 'group_name', s.group_name, 'group_rank', s.group_rank) order by s.slot)
+    into v_slots
+  from group_playoff_seeding(p_tournament_id) s left join entries e on e.id = s.entry_id;
+  return jsonb_build_object(
+    'bracket_size', jsonb_array_length(v_slots),
+    'qualifiers', (select count(*) from jsonb_array_elements(v_slots) x where x->>'entry_id' is not null),
+    'pairs', (select jsonb_agg(jsonb_build_object('match_number', k,
+                'a', case when v_slots->(2*k-2)->>'entry_id' is null then null else v_slots->(2*k-2) end,
+                'b', case when v_slots->(2*k-1)->>'entry_id' is null then null else v_slots->(2*k-1) end) order by k)
+              from generate_series(1, jsonb_array_length(v_slots) / 2) k));
+end;
+$$;
+revoke execute on function public.get_group_playoff_preview(uuid) from public, anon;
+grant execute on function public.get_group_playoff_preview(uuid) to authenticated;
+
+-- =============================================
+-- Result corrections
+-- =============================================
+
+-- The sport-specific validated write shared by the preview dry run and the
+-- confirmed correction; the bracket side effects are left to the caller.
+create or replace function public.write_correction_result(p_match_id uuid, p_result jsonb, p_expected_revision integer)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare v_sport sport; v_field text;
+begin
+  select t.sport into v_sport from matches m join tournaments t on t.id = m.tournament_id where m.id = p_match_id;
+  if v_sport in ('tennis','padel') then
+    return write_match_sets_result(p_match_id,p_result->'sets',p_expected_revision,true);
+  elsif v_sport='football' then
+    foreach v_field in array array['a_goals','b_goals','a_pens','b_pens'] loop
+      if p_result->v_field is not null and p_result->v_field<>'null'::jsonb then
+        if jsonb_typeof(p_result->v_field)<>'number' or (p_result->>v_field)::numeric<>trunc((p_result->>v_field)::numeric) then
+          raise exception 'Valid goal and penalty counts required';
+        end if;
+      end if;
+    end loop;
+    return write_football_result(p_match_id,(p_result->>'a_goals')::integer,(p_result->>'b_goals')::integer,
+      (p_result->>'a_pens')::integer,(p_result->>'b_pens')::integer,p_expected_revision,true);
+  end if;
+  raise exception 'Unsupported sport';
+end;
+$$;
+revoke execute on function public.write_correction_result(uuid, jsonb, integer) from public, anon, authenticated;
+
+-- A group result changes the playoff only when the qualifiers or their
+-- placement change. The preview applies the result inside a subtransaction,
+-- compares the playoff slots and rolls the write back; it reports whether the
+-- playoff is rebuilt and which scheduled / published playoff matches it touches.
+create or replace function public.get_match_correction_preview(p_match_id uuid,p_result jsonb,p_expected_revision integer)
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare m matches%rowtype; t tournaments%rowtype; v_ids uuid[]; v_data jsonb; v_state jsonb; v_group boolean; v_reseed boolean:=false; v_token text;
+  v_before uuid[]; v_after uuid[]; v_scheduled integer:=0; v_published integer:=0;
+begin
+  select * into m from matches where id=p_match_id;
+  if m.id is null then raise exception 'Match not found'; end if;
+  if not can_live_score(m.tournament_id) then raise exception 'Not allowed'; end if;
+  select * into t from tournaments where id=m.tournament_id for share nowait;
+  if t.status<>'in_progress' then raise exception 'Scores can be entered only after the tournament starts'; end if;
+  -- Corrections are rare. Short NOWAIT locks avoid deadlocks with point RPCs
+  -- (which already lock their match before the live row) and bracket edits.
+  perform 1 from matches where tournament_id=m.tournament_id order by id for update nowait;
+  perform 1 from live_scores where tournament_id=m.tournament_id order by match_id for update nowait;
+  select * into m from matches where id=p_match_id;
+  if m.id is null or p_expected_revision is null or m.score_revision<>p_expected_revision then raise exception 'scoringFlow.conflict'; end if;
+  if exists(select 1 from live_scores where match_id=m.id and status='active') then raise exception 'scoringFlow.liveBlocked'; end if;
+  if jsonb_typeof(p_result) is distinct from 'object' then raise exception 'Invalid result'; end if;
+  v_group:=m.stage='group' and t.format='groups_playoff' and exists(select 1 from matches where tournament_id=t.id and stage='winners');
+  if v_group then
+    v_before:=group_playoff_slots(t.id);
+    begin
+      perform write_correction_result(m.id,p_result,p_expected_revision);
+      v_after:=group_playoff_slots(t.id);
+      raise exception using errcode='YB001',message='correction preview rollback';
+    exception
+      when sqlstate 'YB001' then null;
+      -- An invalid result fails the confirmed write anyway; assume a rebuild.
+      when others then v_after:=null;
+    end;
+    v_reseed:=v_after is null or v_after is distinct from v_before;
+  end if;
+  if v_group and v_reseed then
+    select coalesce(array_agg(id order by id),'{}') into v_ids from matches where tournament_id=t.id and stage='winners';
+    select count(distinct s.match_id), count(distinct s.match_id) filter (where s.state='published')
+      into v_scheduled, v_published
+    from match_schedule s where s.match_id=any(v_ids);
+  elsif v_group then v_ids:='{}';
+  else v_ids:=correction_descendants(m.id); end if;
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'id',d.id,'stage',d.stage,'round_number',d.round_number,'match_number',d.match_number,
+    'side_a_entry_id',d.side_a_entry_id,'side_b_entry_id',d.side_b_entry_id,
+    'side_a_name',a.display_name,'side_b_name',b.display_name,
+    'side_a_score',d.side_a_score,'side_b_score',d.side_b_score,
+    'side_a_pens',d.side_a_pens,'side_b_pens',d.side_b_pens,
+    'status',d.status,'live_status',l.status,
+    'has_result',d.status='finished' or d.winner_entry_id is not null or d.side_a_score is not null or d.side_b_score is not null or l.id is not null
+      or exists(select 1 from match_sets where match_id=d.id)
+  ) order by d.stage,d.round_number,d.match_number),'[]') into v_data
+  from matches d left join entries a on a.id=d.side_a_entry_id left join entries b on b.id=d.side_b_entry_id
+  left join live_scores l on l.match_id=d.id where d.id=any(v_ids);
+  -- The token binds the submitted result AND every relevant row. Group reseeding
+  -- also depends on the other group scores, qualifiers, tournament settings and
+  -- the playoff schedule that follows the rebuilt bracket.
+  select jsonb_build_object('tournament',to_jsonb(t),'result',p_result,
+    'matches',(select jsonb_agg(to_jsonb(x) order by x.id) from matches x where case when v_group then x.tournament_id=t.id else x.id=any(v_ids||m.id) end),
+    'sets',(select jsonb_agg(to_jsonb(x) order by x.match_id,x.set_index) from match_sets x join matches d on d.id=x.match_id where case when v_group then d.tournament_id=t.id else d.id=any(v_ids||m.id) end),
+    'live',(select jsonb_agg(to_jsonb(x) order by x.match_id) from live_scores x where x.match_id=any(v_ids||m.id)),
+    'groups',case when v_group then (select jsonb_agg(to_jsonb(x) order by x.id) from groups x where x.tournament_id=t.id) end,
+    'qualifiers',case when v_group then (select jsonb_agg(to_jsonb(x) order by x.id) from group_entries x join groups g on g.id=x.group_id where g.tournament_id=t.id) end,
+    'schedule',case when v_group then (select jsonb_agg(to_jsonb(x) order by x.id) from match_schedule x join matches d on d.id=x.match_id where d.tournament_id=t.id and d.stage='winners') end
+  ) into v_state;
+  v_token:=encode(extensions.digest(v_state::text,'sha256'),'hex');
+  return jsonb_build_object('token',v_token,'matches',v_data,'reseed_playoff',v_group and v_reseed,'group_stage',v_group,
+    'schedule_matches',v_scheduled,'schedule_published',v_published,
+    'blocked_live',exists(select 1 from live_scores where match_id=any(v_ids) and status='active'));
+exception when lock_not_available or deadlock_detected then
+  raise exception 'scoringFlow.correctionConflict';
+end;
+$$;
+
+create or replace function public.apply_match_correction(p_match_id uuid,p_result jsonb,p_expected_revision integer,p_confirmation_token text)
+returns uuid language plpgsql security definer set search_path=public as $$
+declare v_preview jsonb; m matches%rowtype; v_new uuid;
+begin
+  -- This repeats permission, LIVE, revision and graph checks under row locks.
+  v_preview:=get_match_correction_preview(p_match_id,p_result,p_expected_revision);
+  if p_confirmation_token is null or p_confirmation_token is distinct from v_preview->>'token' then
+    raise exception 'scoringFlow.correctionConflict';
+  end if;
+  if (v_preview->>'blocked_live')::boolean then raise exception 'scoringFlow.correctionLive'; end if;
+  select * into m from matches where id=p_match_id;
+  -- Reuse the exact validators used by ordinary manual saves. Nothing in the
+  -- graph changes unless the full result is valid; every write is one transaction.
+  v_new:=write_correction_result(m.id,p_result,p_expected_revision);
+  if (v_preview->>'reseed_playoff')::boolean then
+    -- New UUIDs fence every old playoff form/session. Other group results stay.
+    perform build_group_playoff(m.tournament_id);
+  elsif coalesce((v_preview->>'group_stage')::boolean,false) then
+    -- Same qualifiers in the same places: the playoff stays as it is.
+    null;
+  elsif m.winner_entry_id is distinct from v_new then
+    perform reset_correction_descendants(m.id);
+    perform propagate_winner(m.id,v_new);
+  end if;
+  return v_new;
+exception when lock_not_available or deadlock_detected then
+  raise exception 'scoringFlow.correctionConflict';
+end;
+$$;
+
+revoke execute on function public.get_match_correction_preview(uuid,jsonb,integer),public.apply_match_correction(uuid,jsonb,integer,text) from public,anon,authenticated;
+grant execute on function public.get_match_correction_preview(uuid,jsonb,integer),public.apply_match_correction(uuid,jsonb,integer,text) to authenticated;
+
+notify pgrst, 'reload schema';
+-- Lifecycle, access and entries fixes (QA stream C). Safe to re-run: functions
+-- are replaced, tables and columns are created only when missing, grants are
+-- restated.
+--
+-- 1. A completed tournament cannot be moved back to an earlier status.
+-- 2. Page-password attempts are counted per client (hashed IP + browser id),
+--    so one visitor guessing passwords no longer locks the page for everyone;
+--    the tournament-wide counter only slows attempts down for a minute.
+-- 3. Adding an assistant who is already on the team no longer changes their
+--    role silently, and an unknown email gets a neutral translated error.
+-- 4. Organizers (owner, editor) read applicants' contacts through one RPC.
+-- 5. Entries added by an organizer go through an RPC with the same contact
+--    normalisation and duplicate check as the public registration.
+-- 6. Validation: participant name length, a pair made of the same player,
+--    organizer phone/email, waitlist without a limit, fee unit and zero fee.
+
+-- ---------------------------------------------------------------------------
+-- Shared entry validation
+-- ---------------------------------------------------------------------------
+
+-- A name compared the way a person reads it: case and repeated spaces ignored.
+create or replace function public.entry_name_key(p_name text)
+returns text language sql immutable set search_path=public as $$
+ select lower(regexp_replace(btrim(coalesce(p_name,'')),'\s+',' ','g'));
+$$;
+revoke execute on function public.entry_name_key(text) from public, anon, authenticated;
+
+create or replace function public.validate_entry_names(p_entry_type tournament_category, p_member_one text, p_member_two text, p_display_name text)
+returns void language plpgsql immutable set search_path=public as $$
+begin
+ if length(btrim(coalesce(p_member_one,'')))>100 or length(btrim(coalesce(p_member_two,'')))>100
+    or length(btrim(coalesce(p_display_name,'')))>160 then
+  raise exception 'registration.nameTooLong';
+ end if;
+ if p_entry_type='doubles' and nullif(btrim(coalesce(p_member_two,'')),'') is not null
+    and entry_name_key(p_member_one)=entry_name_key(p_member_two) then
+  raise exception 'registration.samePlayer';
+ end if;
+end;
+$$;
+revoke execute on function public.validate_entry_names(tournament_category,text,text,text) from public, anon, authenticated;
+
+-- One duplicate rule for every way an entry is added: the same legacy
+-- contact, the same email (case-insensitive) or the same phone digits among
+-- active entries of the tournament.
+create or replace function public.entry_contact_taken(p_tournament_id uuid, p_contact text, p_phone text, p_email text)
+returns boolean language sql stable set search_path=public as $$
+ select exists (
+  select 1 from entries e
+  where e.tournament_id=p_tournament_id
+    and e.status in ('pending','approved','waitlisted')
+    and (
+      (p_contact is not null and e.phone_or_email=p_contact)
+      or (p_email is not null and e.contact_email=lower(p_email))
+      or (p_phone is not null and e.contact_phone is not null
+          and regexp_replace(e.contact_phone,'\D','','g')=regexp_replace(p_phone,'\D','','g'))
+    )
+ );
+$$;
+revoke execute on function public.entry_contact_taken(uuid,text,text,text) from public, anon, authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Public registration: same signature, plus name validation and the shared
+-- duplicate check.
+-- ---------------------------------------------------------------------------
+create or replace function register_entry(
+  p_slug text,
+  p_entry_type tournament_category,
+  p_phone_or_email text default null,
+  p_member_one text default null,
+  p_member_two text default null,
+  p_display_name text default null,
+  p_access_token text default null,
+  p_phone text default null,
+  p_email text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_tournament tournaments;
+  v_entry_id uuid;
+  v_display_name text;
+  v_status registration_status := 'pending';
+  v_phone text;
+  v_email text;
+  v_legacy text;
+  v_contact text;
+  v_member_one text := btrim(coalesce(p_member_one, ''));
+  v_member_two text := nullif(btrim(coalesce(p_member_two, '')), '');
+begin
+  select *
+    into v_tournament
+  from tournaments
+  where slug = p_slug
+  limit 1;
+
+  if v_tournament.id is null then
+    raise exception 'Tournament not found';
+  end if;
+
+  if v_tournament.is_public is false
+     and not (v_tournament.visibility = 'password' and valid_access_token(v_tournament.id, p_access_token)) then
+    raise exception 'Tournament is private';
+  end if;
+
+  if v_tournament.status <> 'registration_open' then
+    raise exception 'Registration is closed';
+  end if;
+
+  if v_tournament.registration_deadline is not null and now() >= v_tournament.registration_deadline then
+    raise exception 'registration.deadlinePassed';
+  end if;
+
+  if v_tournament.registration_capacity is not null
+     and registration_occupancy(v_tournament.id, null) >= v_tournament.registration_capacity then
+    if v_tournament.waitlist_enabled then
+      v_status := 'waitlisted';
+    else
+      raise exception 'registration.full';
+    end if;
+  end if;
+
+  if v_tournament.category <> p_entry_type then
+    raise exception 'Invalid category for tournament';
+  end if;
+
+  if p_entry_type = 'singles' and v_member_one = '' then
+    raise exception 'Single entry requires one participant';
+  end if;
+
+  if p_entry_type = 'doubles' then
+    if v_member_one = '' then
+      raise exception 'Double entry requires at least one participant';
+    end if;
+    if v_tournament.doubles_pairing_mode <> 'pick_random' and v_member_two is null then
+      raise exception 'Double entry requires two participants';
+    end if;
+  end if;
+
+  perform validate_entry_names(p_entry_type, v_member_one, v_member_two, p_display_name);
+
+  v_phone := nullif(btrim(coalesce(p_phone, '')), '');
+  v_email := lower(nullif(btrim(coalesce(p_email, '')), ''));
+  v_legacy := nullif(btrim(coalesce(p_phone_or_email, '')), '');
+
+  if v_phone is null and v_email is null then
+    -- A caller that still sends one combined contact: classify it by shape.
+    if v_legacy is null then
+      raise exception 'Contact info is required';
+    end if;
+    if v_legacy ~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' then
+      v_email := lower(v_legacy);
+    elsif v_legacy ~ '^\+?[0-9\s\-\(\)]{7,20}$' then
+      v_phone := v_legacy;
+    else
+      raise exception 'Invalid phone number or email';
+    end if;
+  else
+    -- Both fields are mandatory once either of them is sent.
+    if v_phone is null then
+      raise exception 'registration.phoneRequired';
+    end if;
+    if v_email is null then
+      raise exception 'registration.emailRequired';
+    end if;
+    if v_phone !~ '^\+?[0-9\s\-\(\)]{7,20}$' then
+      raise exception 'registration.invalidPhone';
+    end if;
+    if v_email !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' then
+      raise exception 'registration.invalidEmail';
+    end if;
+  end if;
+
+  -- The legacy column keeps one value: the email when there is one.
+  v_contact := coalesce(v_email, v_phone);
+
+  if entry_contact_taken(v_tournament.id, v_contact, v_phone, v_email) then
+    raise exception 'Registration already exists for this contact';
+  end if;
+
+  if p_display_name is not null and btrim(p_display_name) <> '' then
+    v_display_name := btrim(p_display_name);
+  elsif p_entry_type = 'singles' then
+    v_display_name := v_member_one;
+  elsif v_member_two is not null then
+    v_display_name := v_member_one || ' / ' || v_member_two;
+  else
+    v_display_name := v_member_one;
+  end if;
+
+  insert into entries (
+    tournament_id,
+    entry_type,
+    display_name,
+    phone_or_email,
+    contact_phone,
+    contact_email,
+    status
+  ) values (
+    v_tournament.id,
+    p_entry_type,
+    v_display_name,
+    v_contact,
+    v_phone,
+    v_email,
+    v_status
+  )
+  returning id into v_entry_id;
+
+  insert into entry_members (entry_id, member_name, member_order)
+  values (v_entry_id, v_member_one, 1);
+
+  if p_entry_type = 'doubles' and v_member_two is not null then
+    insert into entry_members (entry_id, member_name, member_order)
+    values (v_entry_id, v_member_two, 2);
+  end if;
+
+  return jsonb_build_object('id', v_entry_id, 'status', v_status);
+end;
+$$;
+revoke execute on function register_entry(text, tournament_category, text, text, text, text, text, text, text) from public;
+grant execute on function register_entry(text, tournament_category, text, text, text, text, text, text, text) to anon, authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Entries added by an organizer. The contact is optional (a placeholder keeps
+-- the legacy unique column filled); when given it is classified, normalised and
+-- checked for duplicates exactly like a public registration.
+-- ---------------------------------------------------------------------------
+create or replace function public.add_manual_entry(
+  p_tournament_id uuid,
+  p_member_one text,
+  p_member_two text default null,
+  p_display_name text default null,
+  p_contact text default null,
+  p_status registration_status default 'approved'
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_t tournaments%rowtype;
+  v_member_one text := btrim(coalesce(p_member_one, ''));
+  v_member_two text := nullif(btrim(coalesce(p_member_two, '')), '');
+  v_contact text := nullif(btrim(coalesce(p_contact, '')), '');
+  v_phone text;
+  v_email text;
+  v_display text;
+  v_id uuid;
+begin
+  if not is_tournament_admin(p_tournament_id) then
+    raise exception 'Not allowed';
+  end if;
+  select * into v_t from tournaments where id = p_tournament_id for update;
+  if v_t.id is null then
+    raise exception 'Tournament not found';
+  end if;
+  if v_t.status in ('in_progress', 'completed') then
+    raise exception 'drafts.rulesLocked';
+  end if;
+  if p_status is null or p_status not in ('approved', 'pending') then
+    raise exception 'Invalid entry status';
+  end if;
+
+  if v_t.category = 'singles' and v_member_one = '' then
+    raise exception 'Single entry requires one participant';
+  end if;
+  if v_t.category = 'doubles' then
+    if v_member_one = '' then
+      raise exception 'Double entry requires at least one participant';
+    end if;
+    if coalesce(v_t.doubles_pairing_mode::text, 'pre_agreed') <> 'pick_random' and v_member_two is null then
+      raise exception 'Double entry requires two participants';
+    end if;
+  else
+    v_member_two := null;
+  end if;
+  perform validate_entry_names(v_t.category, v_member_one, v_member_two, p_display_name);
+
+  if v_contact is null then
+    v_contact := 'admin-entry-' || gen_random_uuid()::text || '@local.tenis';
+  elsif v_contact ~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' then
+    v_email := lower(v_contact);
+    v_contact := v_email;
+  elsif v_contact ~ '^\+?[0-9\s\-\(\)]{7,20}$' then
+    v_phone := v_contact;
+  else
+    raise exception 'Invalid phone number or email';
+  end if;
+
+  if entry_contact_taken(p_tournament_id, v_contact, v_phone, v_email) then
+    raise exception 'Registration already exists for this contact';
+  end if;
+
+  v_display := coalesce(nullif(btrim(coalesce(p_display_name, '')), ''),
+    case when v_member_two is not null then v_member_one || ' / ' || v_member_two else v_member_one end);
+
+  insert into entries (tournament_id, entry_type, display_name, phone_or_email, contact_phone, contact_email, status)
+  values (p_tournament_id, v_t.category, v_display, v_contact, v_phone, v_email, p_status)
+  returning id into v_id;
+
+  insert into entry_members (entry_id, member_name, member_order) values (v_id, v_member_one, 1);
+  if v_member_two is not null then
+    insert into entry_members (entry_id, member_name, member_order) values (v_id, v_member_two, 2);
+  end if;
+
+  return jsonb_build_object('id', v_id, 'status', p_status);
+end;
+$$;
+revoke execute on function public.add_manual_entry(uuid, text, text, text, text, registration_status) from public, anon, authenticated;
+grant execute on function public.add_manual_entry(uuid, text, text, text, text, registration_status) to authenticated;
+
+-- Contacts of applicants for the organizers who process the entries. Owners
+-- and editors only: a results-only counter and the public get nothing, and the
+-- contact columns themselves stay closed to every API role.
+create or replace function public.get_entry_contacts(p_tournament_id uuid)
+returns table (entry_id uuid, contact_phone text, contact_email text)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+ select e.id, e.contact_phone, e.contact_email
+ from entries e
+ where is_tournament_admin(p_tournament_id)
+   and e.tournament_id = p_tournament_id
+   and (e.contact_phone is not null or e.contact_email is not null)
+ order by e.created_at, e.id;
+$$;
+revoke execute on function public.get_entry_contacts(uuid) from public, anon, authenticated;
+grant execute on function public.get_entry_contacts(uuid) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Assistants
+-- ---------------------------------------------------------------------------
+-- p_only_new: the "add assistant" form refuses a person who is already on the
+-- team (the detail carries their role) instead of changing it silently; the
+-- role selector keeps calling without it. An unknown email gets a code, not
+-- the address echoed back in English.
+drop function if exists add_tournament_admin_by_email(uuid, text, text);
+create or replace function add_tournament_admin_by_email(
+  p_tournament_id uuid,
+  p_email text,
+  p_role text default 'editor',
+  p_only_new boolean default false
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid;
+  v_caller text;
+  v_current text;
+  v_owners integer;
+begin
+  v_caller := get_my_tournament_role(p_tournament_id);
+  if v_caller is null or v_caller not in ('owner', 'editor') then
+    raise exception 'Not authorized';
+  end if;
+  if p_role is null or p_role not in ('owner', 'editor', 'counter') then
+    raise exception 'access.invalidRole';
+  end if;
+
+  select id into v_user_id
+  from auth.users
+  where email = lower(trim(coalesce(p_email, '')));
+
+  if v_user_id is null then
+    raise exception 'access.userNotFound';
+  end if;
+
+  perform 1 from tournaments where id = p_tournament_id for update;
+  select role into v_current from tournament_admins where tournament_id = p_tournament_id and user_id = v_user_id;
+  if coalesce(p_only_new, false) and v_current is not null then
+    raise exception 'access.alreadyMember' using detail = v_current;
+  end if;
+  -- Only an owner grants ownership or changes another owner's role.
+  if (p_role = 'owner' or v_current = 'owner') and v_caller <> 'owner' then
+    raise exception 'access.ownerOnly';
+  end if;
+  if v_current = 'owner' and p_role <> 'owner' then
+    select count(*) into v_owners from tournament_admins where tournament_id = p_tournament_id and role = 'owner';
+    if v_owners <= 1 then
+      raise exception 'access.lastOwner';
+    end if;
+  end if;
+
+  insert into tournament_admins (tournament_id, user_id, role)
+  values (p_tournament_id, v_user_id, p_role)
+  on conflict (tournament_id, user_id)
+  do update set role = excluded.role;
+
+  return jsonb_build_object('user_id', v_user_id, 'role', p_role, 'previous_role', v_current);
+end;
+$$;
+revoke execute on function add_tournament_admin_by_email(uuid, text, text, boolean) from public, anon;
+grant execute on function add_tournament_admin_by_email(uuid, text, text, boolean) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Page password: per-client attempt counting
+-- ---------------------------------------------------------------------------
+-- One row per (tournament, hashed client key). Two keys per visitor: the IP
+-- with the browser id (locks after 10 failures) and the IP alone (locks after
+-- 30, so rotating the browser id does not help). A count older than 15 quiet
+-- minutes starts over. Only hashes are stored.
+create table if not exists public.tournament_unlock_client_attempts (
+  tournament_id uuid not null references tournaments (id) on delete cascade,
+  client_hash text not null,
+  failed_count integer not null default 0,
+  locked_until timestamptz,
+  updated_at timestamptz not null default now(),
+  primary key (tournament_id, client_hash)
+);
+alter table public.tournament_unlock_client_attempts enable row level security;
+revoke all on public.tournament_unlock_client_attempts from public, anon, authenticated;
+
+-- The tournament-wide row becomes a one-minute rate window: failures from all
+-- clients are counted per window and, above the limit, attempts wait for the
+-- window to end. Rows from the old global lockout carry no window and are
+-- dropped, which also lifts any lockout they still hold.
+alter table public.tournament_unlock_attempts add column if not exists window_started_at timestamptz;
+delete from public.tournament_unlock_attempts where window_started_at is null;
+
+-- Client IP as PostgREST passes it in the request headers; empty outside HTTP.
+create or replace function public.request_client_ip()
+returns text language plpgsql stable set search_path=public as $$
+declare v_headers jsonb; v_ip text;
+begin
+ begin
+  v_headers := nullif(current_setting('request.headers', true), '')::jsonb;
+ exception when others then
+  v_headers := null;
+ end;
+ if v_headers is null or jsonb_typeof(v_headers) <> 'object' then return ''; end if;
+ v_ip := coalesce(nullif(btrim(v_headers->>'cf-connecting-ip'), ''),
+  nullif(btrim(v_headers->>'x-real-ip'), ''),
+  nullif(btrim(split_part(coalesce(v_headers->>'x-forwarded-for', ''), ',', 1)), ''));
+ return left(coalesce(v_ip, ''), 64);
+end;
+$$;
+revoke execute on function public.request_client_ip() from public, anon, authenticated;
+
+-- The previous two-argument version is replaced, not overloaded: an older
+-- client calling with p_slug and p_password keeps working through the default.
+drop function if exists public.unlock_tournament(text, text);
+create or replace function public.unlock_tournament(p_slug text, p_password text, p_client_id text default null)
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare
+ v_t tournaments%rowtype;
+ v_global tournament_unlock_attempts%rowtype;
+ v_ip text;
+ v_client_key text;
+ v_ip_key text;
+ v_locked timestamptz;
+ v_token text;
+ v_expires timestamptz;
+begin
+ select * into v_t from tournaments where slug=p_slug for update;
+ if v_t.id is null or v_t.visibility<>'password' or v_t.access_password_hash is null then return jsonb_build_object('ok',false,'error','access.noPassword'); end if;
+
+ v_ip := request_client_ip();
+ v_ip_key := encode(extensions.digest('ip|'||v_t.id::text||'|'||v_ip,'sha256'),'hex');
+ v_client_key := encode(extensions.digest('client|'||v_t.id::text||'|'||v_ip||'|'||left(btrim(coalesce(p_client_id,'')),128),'sha256'),'hex');
+
+ -- Forget idle counters so the table does not grow with every visitor.
+ delete from tournament_unlock_client_attempts
+  where tournament_id=v_t.id and updated_at<now()-interval '1 day' and (locked_until is null or locked_until<=now());
+
+ select * into v_global from tournament_unlock_attempts where tournament_id=v_t.id for update;
+ if v_global.locked_until is not null and v_global.locked_until>now() then
+  return jsonb_build_object('ok',false,'error','access.rateLimited','retry_at',v_global.locked_until);
+ end if;
+
+ select max(locked_until) into v_locked from tournament_unlock_client_attempts
+  where tournament_id=v_t.id and client_hash in (v_client_key, v_ip_key) and locked_until>now();
+ if v_locked is not null then
+  return jsonb_build_object('ok',false,'error','access.locked','locked_until',v_locked);
+ end if;
+
+ if p_password is null or extensions.crypt(p_password,v_t.access_password_hash)<>v_t.access_password_hash then
+  insert into tournament_unlock_client_attempts as a (tournament_id,client_hash,failed_count,locked_until,updated_at)
+   values (v_t.id,v_client_key,1,null,now()),(v_t.id,v_ip_key,1,null,now())
+   on conflict (tournament_id,client_hash) do update set
+    failed_count=case when (case when a.updated_at<=now()-interval '15 minutes' then 1 else a.failed_count+1 end)
+      >=(case when a.client_hash=v_ip_key then 30 else 10 end) then 0
+     else (case when a.updated_at<=now()-interval '15 minutes' then 1 else a.failed_count+1 end) end,
+    locked_until=case when (case when a.updated_at<=now()-interval '15 minutes' then 1 else a.failed_count+1 end)
+      >=(case when a.client_hash=v_ip_key then 30 else 10 end) then now()+interval '15 minutes' else null end,
+    updated_at=now();
+  insert into tournament_unlock_attempts as g (tournament_id,failed_count,locked_until,updated_at,window_started_at)
+   values (v_t.id,1,null,now(),now())
+   on conflict (tournament_id) do update set
+    failed_count=case when g.window_started_at is null or g.window_started_at<=now()-interval '1 minute' then 1 else g.failed_count+1 end,
+    window_started_at=case when g.window_started_at is null or g.window_started_at<=now()-interval '1 minute' then now() else g.window_started_at end,
+    locked_until=case when g.window_started_at is not null and g.window_started_at>now()-interval '1 minute' and g.failed_count+1>=60
+     then g.window_started_at+interval '1 minute' else null end,
+    updated_at=now();
+  return jsonb_build_object('ok',false,'error','access.wrongPassword');
+ end if;
+
+ -- The browser that got in starts over; the address keeps its count (it may be
+ -- shared with someone still guessing) and forgets it after 15 quiet minutes.
+ delete from tournament_unlock_client_attempts where tournament_id=v_t.id and client_hash=v_client_key;
+ delete from tournament_access_grants where tournament_id=v_t.id and expires_at<=now();
+ v_token:=encode(extensions.gen_random_bytes(32),'hex');
+ v_expires:=now()+interval '12 hours';
+ insert into tournament_access_grants(tournament_id,token_hash,password_version,expires_at)
+  values(v_t.id,encode(extensions.digest(v_token,'sha256'),'hex'),v_t.access_password_version,v_expires);
+ return jsonb_build_object('ok',true,'tournament_id',v_t.id,'token',v_token,'expires_at',v_expires);
+end;
+$$;
+revoke execute on function public.unlock_tournament(text,text,text) from public;
+grant execute on function public.unlock_tournament(text,text,text) to anon, authenticated;
+
+-- A new password starts every counter from zero, per client and per page.
+create or replace function public.set_tournament_password(p_tournament_id uuid, p_password text, p_expected_revision integer)
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare v_t tournaments%rowtype;
+begin
+ if not is_tournament_admin(p_tournament_id) then raise exception 'Not allowed'; end if;
+ select * into v_t from tournaments where id=p_tournament_id for update;
+ if v_t.id is null then raise exception 'Tournament not found'; end if;
+ if p_expected_revision is null or p_expected_revision<>v_t.settings_revision then raise exception 'drafts.conflict'; end if;
+ if p_password is null or btrim(p_password)='' then
+  if v_t.visibility='password' then raise exception 'access.passwordRequired'; end if;
+  update tournaments set access_password_hash=null,access_password_plain=null,
+   access_password_version=access_password_version+1 where id=p_tournament_id returning * into v_t;
+ else
+  if length(p_password)<4 or length(p_password)>72 then raise exception 'access.passwordTooShort'; end if;
+  update tournaments set access_password_hash=extensions.crypt(p_password,extensions.gen_salt('bf',10)),
+   access_password_plain=p_password,
+   access_password_version=access_password_version+1 where id=p_tournament_id returning * into v_t;
+ end if;
+ -- Every change invalidates issued tokens.
+ delete from tournament_access_grants where tournament_id=p_tournament_id;
+ delete from tournament_unlock_attempts where tournament_id=p_tournament_id;
+ delete from tournament_unlock_client_attempts where tournament_id=p_tournament_id;
+ return jsonb_build_object('password_set',v_t.access_password_hash is not null,'settings_revision',v_t.settings_revision);
+end;
+$$;
+revoke execute on function public.set_tournament_password(uuid,text,integer) from public, anon, authenticated;
+grant execute on function public.set_tournament_password(uuid,text,integer) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Settings: completed is final; stricter contact and registration rules
+-- ---------------------------------------------------------------------------
+create or replace function update_tournament_settings(p_tournament_id uuid,p_patch jsonb,p_expected_revision integer,p_expected_matches jsonb default null)
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare v_old tournaments%rowtype; v_new tournaments%rowtype; k text; v_category_changed boolean; v_tz text; v_units text[];
+begin
+ if not is_tournament_admin(p_tournament_id) then raise exception 'Not allowed'; end if;
+ select * into v_old from tournaments where id=p_tournament_id for update;
+ if v_old.id is null then raise exception 'Tournament not found'; end if;
+ if p_expected_revision is null or p_expected_revision<>v_old.settings_revision then raise exception 'drafts.conflict'; end if;
+ if jsonb_typeof(p_patch) is distinct from 'object' then raise exception 'Invalid settings'; end if;
+ for k in select jsonb_object_keys(p_patch) loop
+  if k<>all(array['name','description','category','set_format','scoring_config','doubles_pairing_mode','status','is_public','contact_phone','contact_email','publish_contact',
+   'registration_capacity','capacity_public','registration_deadline','entry_fee_mode','entry_fee_minor','entry_fee_currency','entry_fee_unit','waitlist_enabled',
+   'schedule_config','visibility','venue_address','venue_lat','venue_lng']) then raise exception 'Unsupported settings field'; end if;
+ end loop;
+ v_new:=jsonb_populate_record(v_old,p_patch);
+ -- A finished tournament stays finished: its results and champion are final.
+ if v_old.status='completed' and v_new.status is distinct from 'completed' then raise exception 'lifecycle.completedLocked'; end if;
+ if v_new.name is null or btrim(v_new.name)='' or v_new.is_public is null or v_new.scoring_config is null or v_new.publish_contact is null or v_new.capacity_public is null or v_new.waitlist_enabled is null then raise exception 'Invalid settings'; end if;
+ -- Organizer contacts are checked when they change (older rows keep saving).
+ if nullif(btrim(coalesce(v_new.contact_phone,'')),'') is distinct from nullif(btrim(coalesce(v_old.contact_phone,'')),'')
+    and nullif(btrim(coalesce(v_new.contact_phone,'')),'') !~ '^\+?[0-9\s\-\(\)]{7,20}$' then raise exception 'registration.invalidPhone'; end if;
+ if nullif(btrim(coalesce(v_new.contact_email,'')),'') is distinct from nullif(btrim(coalesce(v_old.contact_email,'')),'')
+    and nullif(btrim(coalesce(v_new.contact_email,'')),'') !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' then raise exception 'registration.invalidEmail'; end if;
+ if v_new.publish_contact and nullif(btrim(coalesce(v_new.contact_phone,'')),'') is null and nullif(btrim(coalesce(v_new.contact_email,'')),'') is null then raise exception 'Contact required'; end if;
+ if v_new.registration_capacity is not null and v_new.registration_capacity<=0 then raise exception 'registration.invalidCapacity'; end if;
+ -- Lowering the limit never removes approved participants silently.
+ if v_new.registration_capacity is not null and v_new.registration_capacity is distinct from v_old.registration_capacity
+    and v_new.registration_capacity<registration_occupancy(p_tournament_id,null) then raise exception 'registration.capacityBelowOccupied'; end if;
+ -- A waitlist queues entries beyond the limit, so it needs one.
+ if v_new.waitlist_enabled and v_new.registration_capacity is null
+    and (v_new.waitlist_enabled,v_new.registration_capacity) is distinct from (v_old.waitlist_enabled,v_old.registration_capacity) then raise exception 'registration.waitlistNeedsCapacity'; end if;
+ if v_new.entry_fee_mode is distinct from 'paid' then
+  v_new.entry_fee_minor:=null; v_new.entry_fee_currency:=null; v_new.entry_fee_unit:=null;
+  if v_new.entry_fee_mode is not null and v_new.entry_fee_mode<>'free' then raise exception 'registration.invalidFee'; end if;
+ else
+  v_new.entry_fee_currency:=upper(btrim(coalesce(v_new.entry_fee_currency,'')));
+  if v_new.entry_fee_minor is null or v_new.entry_fee_minor<0 or v_new.entry_fee_currency!~'^[A-Z]{3}$'
+     or v_new.entry_fee_unit is null or v_new.entry_fee_unit<>all(array['player','pair','team']) then raise exception 'registration.invalidFee'; end if;
+  -- A newly set fee is a real amount per a unit that exists in this tournament.
+  if (v_new.entry_fee_mode,v_new.entry_fee_minor,v_new.entry_fee_unit) is distinct from (v_old.entry_fee_mode,v_old.entry_fee_minor,v_old.entry_fee_unit) then
+   if v_new.entry_fee_minor=0 then raise exception 'registration.zeroFee'; end if;
+   v_units:=case when v_new.sport='football' then array['team','player'] when v_new.category='doubles' then array['pair','player'] else array['player'] end;
+   if v_new.entry_fee_unit<>all(v_units) then raise exception 'registration.feeUnitMismatch'; end if;
+  end if;
+ end if;
+ -- Venue: an address of sane length, and a point that is either complete or absent.
+ v_new.venue_address:=nullif(btrim(coalesce(v_new.venue_address,'')),'');
+ if v_new.venue_address is not null and length(v_new.venue_address)>300 then raise exception 'venue.invalidAddress'; end if;
+ if (v_new.venue_lat is null)<>(v_new.venue_lng is null) then raise exception 'venue.invalidPoint'; end if;
+ if v_new.venue_lat is not null and (v_new.venue_lat< -90 or v_new.venue_lat>90 or v_new.venue_lng< -180 or v_new.venue_lng>180) then raise exception 'venue.invalidPoint'; end if;
+ -- Schedule settings: a minimum rest in whole minutes and an IANA time zone name.
+ if v_new.schedule_config is null or jsonb_typeof(v_new.schedule_config) is distinct from 'object' then raise exception 'schedule.invalidConfig'; end if;
+ for k in select jsonb_object_keys(v_new.schedule_config) loop
+  if k<>all(array['min_rest_minutes','timezone']) then raise exception 'schedule.invalidConfig'; end if;
+ end loop;
+ if v_new.schedule_config ? 'min_rest_minutes' and (jsonb_typeof(v_new.schedule_config->'min_rest_minutes') is distinct from 'number'
+    or (v_new.schedule_config->>'min_rest_minutes')::numeric<0 or (v_new.schedule_config->>'min_rest_minutes')::numeric<>floor((v_new.schedule_config->>'min_rest_minutes')::numeric)) then
+  raise exception 'schedule.invalidConfig';
+ end if;
+ if v_new.schedule_config ? 'timezone' then
+  v_tz:=v_new.schedule_config->>'timezone';
+  if jsonb_typeof(v_new.schedule_config->'timezone') is distinct from 'string' or v_tz!~'^[A-Za-z_]+(/[A-Za-z0-9_+\-]+)*$' or length(v_tz)>64 then raise exception 'schedule.invalidConfig'; end if;
+ end if;
+ if v_new.visibility is null or v_new.visibility<>all(array['public','link','private','password']) then raise exception 'access.invalidVisibility'; end if;
+ if v_new.visibility='password' and v_old.access_password_hash is null then raise exception 'access.passwordRequired'; end if;
+ v_category_changed:=v_old.category is distinct from v_new.category;
+ if v_category_changed then
+  if v_old.status in ('in_progress','completed') then raise exception 'drafts.rulesLocked'; end if;
+  perform 1 from matches where tournament_id=p_tournament_id order by id for update nowait;
+  if exists(select 1 from matches where tournament_id=p_tournament_id) and p_expected_matches is distinct from tournament_match_versions(p_tournament_id) then raise exception 'drafts.structureConflict'; end if;
+  if exists(select 1 from matches where tournament_id=p_tournament_id and (status='finished' or winner_entry_id is not null))
+    or exists(select 1 from match_sets s join matches m on m.id=s.match_id where m.tournament_id=p_tournament_id)
+    or exists(select 1 from live_scores where tournament_id=p_tournament_id) then raise exception 'drafts.rulesLocked'; end if;
+ end if;
+ update tournaments set name=v_new.name,description=v_new.description,category=v_new.category,set_format=v_new.set_format,
+  scoring_config=v_new.scoring_config,doubles_pairing_mode=v_new.doubles_pairing_mode,status=v_new.status,is_public=v_new.is_public,
+  contact_phone=nullif(btrim(coalesce(v_new.contact_phone,'')),''),contact_email=nullif(btrim(coalesce(v_new.contact_email,'')),''),publish_contact=v_new.publish_contact,
+  registration_capacity=v_new.registration_capacity,capacity_public=v_new.capacity_public,registration_deadline=v_new.registration_deadline,
+  entry_fee_mode=v_new.entry_fee_mode,entry_fee_minor=v_new.entry_fee_minor,entry_fee_currency=v_new.entry_fee_currency,entry_fee_unit=v_new.entry_fee_unit,
+  waitlist_enabled=v_new.waitlist_enabled,schedule_config=v_new.schedule_config,visibility=v_new.visibility,
+  venue_address=v_new.venue_address,venue_lat=v_new.venue_lat,venue_lng=v_new.venue_lng
+ where id=p_tournament_id returning * into v_new;
+ if v_category_changed then delete from matches where tournament_id=p_tournament_id; end if;
+ return to_jsonb(v_new);
+exception when lock_not_available or deadlock_detected then raise exception 'drafts.structureConflict';
+end;
+$$;
+
+notify pgrst, 'reload schema';
+
+-- Knockout bracket fixes (single and double elimination).
+--  * A manual draw follows the seeding (entries.seed_order, then created_at)
+--    and places it in standard bracket positions: seeds 1 and 2 in opposite
+--    halves, 1 v N, 2 v N-1…, and the BYEs go to the top seeds. The random
+--    draw is unchanged.
+--  * Draws of one tournament are serialized on its row, so parallel rebuilds
+--    wait instead of failing on the match unique key.
+--  * A started or completed tournament whose bracket has results cannot be
+--    redrawn: that would silently erase the results.
+--  * Rearranging players is checked on the server: first-round slots only
+--    (matches no other match feeds), a permutation of the players already
+--    there, never after the start or during live scoring. A BYE can be
+--    rearranged too; its free pass follows the player.
+-- generate_single_elim (reused by the group playoff) and generate_double_elim
+-- keep their contracts: both still take a flat, already ordered seed array.
+-- Safe to re-run: every function is replaced and its grants restated.
+
+-- Standard seeded positions for the smallest power-of-two bracket that fits
+-- the seeds: slot i holds seed positions[i] ([1,8,4,5,2,7,3,6] for eight), and
+-- a seed beyond the field is a BYE (NULL), so free passes go to the top seeds.
+-- Neighbouring slots form the first-round matches.
+create or replace function knockout_seeded_slots(p_seeds uuid[])
+returns uuid[]
+language plpgsql
+immutable
+set search_path = public
+as $$
+declare
+  v_count integer := coalesce(array_length(p_seeds, 1), 0);
+  v_positions integer[] := array[1];
+  v_next integer[];
+  v_size integer := 1;
+  v_seed integer;
+  v_slots uuid[] := '{}';
+begin
+  while v_size < v_count loop
+    v_next := '{}';
+    foreach v_seed in array v_positions loop
+      v_next := v_next || v_seed || (2 * v_size + 1 - v_seed);
+    end loop;
+    v_positions := v_next;
+    v_size := v_size * 2;
+  end loop;
+  foreach v_seed in array v_positions loop
+    v_slots := array_append(v_slots, case when v_seed <= v_count then p_seeds[v_seed] end);
+  end loop;
+  return v_slots;
+end;
+$$;
+revoke execute on function knockout_seeded_slots(uuid[]) from public, anon, authenticated;
+
+create or replace function generate_bracket(
+  p_tournament_id uuid,
+  p_mode draw_mode default 'auto-random',
+  p_manual_order uuid[] default null
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_tournament tournaments%rowtype;
+  v_entry_ids uuid[];
+  v_ordered_ids uuid[];
+  v_slots uuid[] := '{}';
+  v_count integer;
+  v_bracket_size integer := 1;
+  v_rounds integer := 0;
+  v_round integer;
+  v_match integer;
+  v_matches_in_round integer;
+  v_match_id uuid;
+  v_next_match_id uuid;
+  v_side_a uuid;
+  v_side_b uuid;
+  v_winner uuid;
+  v_seed_index integer := 1;
+  v_byes integer;
+begin
+  if not is_tournament_admin(p_tournament_id) then
+    raise exception 'Not allowed';
+  end if;
+
+  -- One draw at a time per tournament: a concurrent rebuild waits here and
+  -- then replaces the committed bracket instead of racing on the unique key.
+  select * into v_tournament from tournaments where id = p_tournament_id for update;
+  if v_tournament.id is null then
+    raise exception 'Tournament not found';
+  end if;
+  -- Redrawing deletes every match; once play has begun that would silently
+  -- erase results (a BYE is not a result).
+  if v_tournament.status in ('in_progress', 'completed') and (
+    exists (
+      select 1 from matches m
+      where m.tournament_id = p_tournament_id
+        and (m.side_a_score is not null or m.side_b_score is not null
+          or m.side_a_pens is not null or m.side_b_pens is not null
+          or (m.status = 'finished' and m.side_a_entry_id is not null and m.side_b_entry_id is not null))
+    )
+    or exists (select 1 from match_sets s join matches m on m.id = s.match_id where m.tournament_id = p_tournament_id)
+    or exists (select 1 from live_scores l where l.tournament_id = p_tournament_id and l.status = 'active')
+  ) then
+    raise exception using errcode = '22023', message = 'drafts.bracketResultsLocked';
+  end if;
+
+  select array_agg(e.id)
+    into v_entry_ids
+  from entries e
+  where e.tournament_id = p_tournament_id
+    and e.status = 'approved';
+
+  v_count := coalesce(array_length(v_entry_ids, 1), 0);
+
+  if v_count < 2 then
+    raise exception 'At least 2 approved entries required';
+  end if;
+
+  if p_mode is null then
+    raise exception 'Draw mode is required';
+  end if;
+  if p_manual_order is not null then
+    if coalesce(array_ndims(p_manual_order), 1) <> 1
+       or exists (select 1 from unnest(p_manual_order) x(id) where x.id is null or not (x.id = any(v_entry_ids)))
+       or (select count(*) <> count(distinct id) from unnest(p_manual_order) x(id)) then
+      raise exception 'Manual order must contain unique approved entries from this tournament';
+    end if;
+  end if;
+
+  if p_mode = 'manual' then
+    -- Seed list: a supplied order first, then the rest of the approved field
+    -- by seeding (seed_order; unseeded and ties by entry time). The UI sends
+    -- NULL and draws the organizer's seeding.
+    select coalesce(array_agg(x.id order by x.position), '{}') into v_ordered_ids
+    from unnest(p_manual_order) with ordinality x(id, position);
+
+    select coalesce(v_ordered_ids, '{}') || coalesce(array_agg(e.id order by e.seed_order nulls last, e.created_at, e.id), '{}')
+      into v_ordered_ids
+    from entries e
+    where e.tournament_id = p_tournament_id
+      and e.status = 'approved'
+      and not (e.id = any(coalesce(v_ordered_ids, '{}')));
+  else
+    select array_agg(e.id order by random())
+      into v_ordered_ids
+    from entries e
+    where e.tournament_id = p_tournament_id
+      and e.status = 'approved';
+  end if;
+
+  -- Double elimination is built by a dedicated generator that pairs
+  -- neighbouring seeds; a manual draw hands it the seeded positions. Other
+  -- counts go through unchanged so the generator reports them.
+  if v_tournament.format = 'double_elimination' then
+    if p_mode = 'manual' and (v_count & (v_count - 1)) = 0 then
+      v_ordered_ids := knockout_seeded_slots(v_ordered_ids);
+    end if;
+    perform generate_double_elim(p_tournament_id, v_ordered_ids);
+    return;
+  end if;
+
+  while v_bracket_size < v_count loop
+    v_bracket_size := v_bracket_size * 2;
+  end loop;
+
+  v_matches_in_round := v_bracket_size / 2;
+  while v_matches_in_round >= 1 loop
+    v_rounds := v_rounds + 1;
+    v_matches_in_round := v_matches_in_round / 2;
+  end loop;
+
+  -- First-round slots, two per match (NULL = BYE).
+  if p_mode = 'manual' then
+    v_slots := knockout_seeded_slots(v_ordered_ids);
+  else
+    -- Random draw: give every first-round match a participant, spreading the
+    -- BYEs evenly across sibling sections. Integer division decides which
+    -- matches get a free pass; the drawn order fills the remaining slots.
+    v_matches_in_round := v_bracket_size / 2;
+    v_byes := v_bracket_size - v_count;
+    for v_match in 1..v_matches_in_round loop
+      v_slots := array_append(v_slots, v_ordered_ids[v_seed_index]);
+      v_seed_index := v_seed_index + 1;
+      if (v_match * v_byes) / v_matches_in_round
+         = ((v_match - 1) * v_byes) / v_matches_in_round then
+        v_slots := array_append(v_slots, v_ordered_ids[v_seed_index]);
+        v_seed_index := v_seed_index + 1;
+      else
+        v_slots := array_append(v_slots, null::uuid);
+      end if;
+    end loop;
+  end if;
+
+  delete from match_sets
+  where match_id in (
+    select m.id
+    from matches m
+    where m.tournament_id = p_tournament_id
+  );
+
+  delete from matches
+  where tournament_id = p_tournament_id;
+
+  drop table if exists tmp_match_ids;
+  create temporary table tmp_match_ids (
+    round_number integer,
+    match_number integer,
+    match_id uuid
+  ) on commit drop;
+
+  for v_round in 1..v_rounds loop
+    v_matches_in_round := v_bracket_size / (2 ^ v_round);
+
+    for v_match in 1..v_matches_in_round loop
+      insert into matches (
+        tournament_id,
+        round_number,
+        match_number,
+        status
+      ) values (
+        p_tournament_id,
+        v_round,
+        v_match,
+        'pending'::match_status
+      )
+      returning id into v_match_id;
+
+      insert into tmp_match_ids (round_number, match_number, match_id)
+      values (v_round, v_match, v_match_id);
+    end loop;
+  end loop;
+
+  for v_round in 1..(v_rounds - 1) loop
+    v_matches_in_round := v_bracket_size / (2 ^ v_round);
+
+    for v_match in 1..v_matches_in_round loop
+      select tmi.match_id
+        into v_match_id
+      from tmp_match_ids tmi
+      where tmi.round_number = v_round
+        and tmi.match_number = v_match;
+
+      select tmi.match_id
+        into v_next_match_id
+      from tmp_match_ids tmi
+      where tmi.round_number = v_round + 1
+        and tmi.match_number = ((v_match + 1) / 2)::integer;
+
+      update matches
+      set next_match_id = v_next_match_id,
+          next_slot = case when mod(v_match, 2) = 1 then 'A' else 'B' end
+      where id = v_match_id;
+    end loop;
+  end loop;
+
+  v_matches_in_round := v_bracket_size / 2;
+  for v_match in 1..v_matches_in_round loop
+    v_side_a := v_slots[2 * v_match - 1];
+    v_side_b := v_slots[2 * v_match];
+
+    select tmi.match_id
+      into v_match_id
+    from tmp_match_ids tmi
+    where tmi.round_number = 1
+      and tmi.match_number = v_match;
+
+    v_winner := case
+      when v_side_a is null then v_side_b
+      when v_side_b is null then v_side_a
+      else null
+    end;
+
+    update matches
+    set side_a_entry_id = v_side_a,
+        side_b_entry_id = v_side_b,
+        winner_entry_id = v_winner,
+        status = case
+          when v_winner is not null then 'finished'::match_status
+          when v_side_a is not null and v_side_b is not null then 'ready'::match_status
+          else 'pending'::match_status
+        end
+    where id = v_match_id;
+
+    if v_winner is not null then
+      perform propagate_winner(v_match_id, v_winner);
+    end if;
+  end loop;
+end;
+$$;
+
+create or replace function rebuild_bracket(
+  p_tournament_id uuid,
+  p_mode draw_mode default 'auto-random',
+  p_manual_order uuid[] default null
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_snapshot jsonb;
+begin
+  if not is_tournament_admin(p_tournament_id) then
+    raise exception 'Not allowed';
+  end if;
+
+  -- Take the snapshot under the same lock generate_bracket uses, so a
+  -- concurrent rebuild cannot change the bracket between the two.
+  perform 1 from tournaments where id = p_tournament_id for update;
+
+  select jsonb_build_object(
+    'matches', coalesce((
+      select jsonb_agg(row_to_json(m))
+      from matches m
+      where m.tournament_id = p_tournament_id
+    ), '[]'::jsonb),
+    'match_sets', coalesce((
+      select jsonb_agg(row_to_json(ms))
+      from match_sets ms
+      join matches m on m.id = ms.match_id
+      where m.tournament_id = p_tournament_id
+    ), '[]'::jsonb)
+  ) into v_snapshot;
+
+  if v_snapshot->'matches' <> '[]'::jsonb then
+    insert into bracket_versions (tournament_id, snapshot)
+    values (p_tournament_id, v_snapshot);
+  end if;
+
+  perform generate_bracket(p_tournament_id, p_mode, p_manual_order);
+end;
+$$;
+
+-- Rearranges players in first-round knockout slots before the start. Only a
+-- match no other match feeds takes players (the rest fill from results), the
+-- layout must move the players already in those matches without losing or
+-- duplicating anyone, and every match keeps at least one player. A match left
+-- with one player is a BYE: its free pass follows the player to the next round.
+create or replace function apply_bracket_layout(
+  p_tournament_id uuid,
+  p_layout jsonb
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_item jsonb;
+  v_match_id uuid;
+  v_side_a uuid;
+  v_side_b uuid;
+  v_match matches%rowtype;
+  v_next matches%rowtype;
+  v_seen_matches uuid[] := '{}';
+  v_before uuid[] := '{}';
+  v_after uuid[] := '{}';
+  v_status tournament_status;
+  v_format tournament_format;
+begin
+  if not is_tournament_admin(p_tournament_id) then
+    raise exception 'Not allowed';
+  end if;
+
+  if jsonb_typeof(p_layout) is distinct from 'array' then
+    raise exception 'Layout must be an array';
+  end if;
+
+  select status, format into v_status, v_format from tournaments where id = p_tournament_id for update;
+  if v_status in ('in_progress', 'completed') then
+    raise exception 'drafts.rulesLocked';
+  end if;
+
+  -- Check every requested change before modifying a match.
+  for v_item in select * from jsonb_array_elements(p_layout)
+  loop
+    if jsonb_typeof(v_item) is distinct from 'object'
+       or not (v_item ?& array['match_id', 'side_a_entry_id', 'side_b_entry_id']) then
+      raise exception 'Each layout item requires a match and both participant slots';
+    end if;
+    v_match_id := (v_item->>'match_id')::uuid;
+    v_side_a := nullif(v_item->>'side_a_entry_id', '')::uuid;
+    v_side_b := nullif(v_item->>'side_b_entry_id', '')::uuid;
+
+    if v_match_id is null or v_match_id = any(v_seen_matches) then
+      raise exception 'Layout requires distinct non-null match IDs';
+    end if;
+    v_seen_matches := array_append(v_seen_matches, v_match_id);
+
+    select * into v_match from matches where id = v_match_id for update;
+    if v_match.id is null then
+      raise exception 'Match % not found', v_match_id;
+    end if;
+    if v_match.tournament_id <> p_tournament_id then
+      raise exception 'Match does not belong to this tournament';
+    end if;
+    if v_format not in ('single_elimination', 'double_elimination')
+       or v_match.stage not in ('main', 'winners')
+       or exists (select 1 from matches f where f.next_match_id = v_match_id or f.loser_next_match_id = v_match_id) then
+      raise exception 'drafts.bracketSlotLocked';
+    end if;
+    -- A BYE (one player, no score) may move; a played match may not.
+    if v_match.status = 'finished'::match_status
+       and not (num_nonnulls(v_match.side_a_entry_id, v_match.side_b_entry_id) = 1
+         and v_match.side_a_score is null and v_match.side_b_score is null) then
+      raise exception 'Cannot modify finished match';
+    end if;
+    if exists (select 1 from match_sets where match_id = v_match_id)
+       or exists (select 1 from live_scores where match_id = v_match_id and status = 'active') then
+      raise exception 'Cannot modify a match with scores or active live scoring';
+    end if;
+    if v_side_a = v_side_b then
+      raise exception 'A match cannot contain the same participant twice';
+    end if;
+    if (v_side_a is not null and not exists (
+          select 1 from entries where id = v_side_a and tournament_id = p_tournament_id and status = 'approved'
+        )) or (v_side_b is not null and not exists (
+          select 1 from entries where id = v_side_b and tournament_id = p_tournament_id and status = 'approved'
+        )) then
+      raise exception 'Participant does not belong to the approved entries of this tournament';
+    end if;
+    if v_side_a is null and v_side_b is null then
+      raise exception 'drafts.bracketLayoutInvalid';
+    end if;
+    -- The free pass of a BYE has already advanced; moving it is safe only
+    -- while the next match is unplayed.
+    if v_match.winner_entry_id is not null and v_match.next_match_id is not null then
+      select * into v_next from matches where id = v_match.next_match_id for update;
+      if v_next.status = 'finished'::match_status
+         or v_next.side_a_score is not null or v_next.side_b_score is not null
+         or exists (select 1 from match_sets where match_id = v_next.id)
+         or exists (select 1 from live_scores where match_id = v_next.id and status = 'active') then
+        raise exception 'drafts.rulesLocked';
+      end if;
+    end if;
+    v_before := v_before || array_remove(array[v_match.side_a_entry_id, v_match.side_b_entry_id], null);
+    v_after := v_after || array_remove(array[v_side_a, v_side_b], null);
+  end loop;
+
+  -- Players only change places: nobody is added, dropped or put in twice.
+  if (select coalesce(array_agg(x order by x), '{}') from unnest(v_before) x)
+     is distinct from (select coalesce(array_agg(x order by x), '{}') from unnest(v_after) x) then
+    raise exception 'drafts.bracketLayoutInvalid';
+  end if;
+
+  -- Withdraw the free passes of the old BYEs before placing anyone.
+  for v_item in select * from jsonb_array_elements(p_layout)
+  loop
+    select * into v_match from matches where id = (v_item->>'match_id')::uuid;
+    if v_match.winner_entry_id is not null and v_match.next_match_id is not null then
+      update matches
+      set side_a_entry_id = case when v_match.next_slot = 'A' and side_a_entry_id = v_match.winner_entry_id then null else side_a_entry_id end,
+          side_b_entry_id = case when v_match.next_slot = 'B' and side_b_entry_id = v_match.winner_entry_id then null else side_b_entry_id end
+      where id = v_match.next_match_id;
+      update matches
+      set status = case when side_a_entry_id is not null and side_b_entry_id is not null then 'ready'::match_status else 'pending'::match_status end
+      where id = v_match.next_match_id;
+    end if;
+  end loop;
+
+  for v_item in select * from jsonb_array_elements(p_layout)
+  loop
+    v_match_id := (v_item->>'match_id')::uuid;
+    v_side_a := nullif(v_item->>'side_a_entry_id', '')::uuid;
+    v_side_b := nullif(v_item->>'side_b_entry_id', '')::uuid;
+
+    update matches
+    set
+      side_a_entry_id = v_side_a,
+      side_b_entry_id = v_side_b,
+      winner_entry_id = case when v_side_a is null then v_side_b when v_side_b is null then v_side_a end,
+      status = case
+        when v_side_a is not null and v_side_b is not null then 'ready'::match_status
+        else 'finished'::match_status
+      end
+    where id = v_match_id;
+
+    if v_side_a is null or v_side_b is null then
+      perform propagate_winner(v_match_id, coalesce(v_side_a, v_side_b));
+    end if;
+  end loop;
+end;
+$$;
+
+-- A slot swap is a two-match layout and goes through the same checks.
+create or replace function swap_bracket_slots(
+  p_tournament_id uuid,
+  p_from_match_id uuid,
+  p_from_slot text,
+  p_to_match_id uuid,
+  p_to_slot text
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_fs text := upper(trim(p_from_slot));
+  v_ts text := upper(trim(p_to_slot));
+  m_from matches%rowtype;
+  m_to matches%rowtype;
+  v1 uuid;
+  v2 uuid;
+  nf_a uuid;
+  nf_b uuid;
+  nt_a uuid;
+  nt_b uuid;
+begin
+  if v_fs is null or v_ts is null or v_fs not in ('A', 'B') or v_ts not in ('A', 'B') then
+    raise exception 'Invalid slot (use A or B)';
+  end if;
+
+  if not is_tournament_admin(p_tournament_id) then
+    raise exception 'Not allowed';
+  end if;
+
+  select * into m_from from matches where id = p_from_match_id;
+  select * into m_to from matches where id = p_to_match_id;
+
+  if m_from.id is null or m_to.id is null then
+    raise exception 'Match not found';
+  end if;
+
+  if m_from.tournament_id <> p_tournament_id or m_to.tournament_id <> p_tournament_id then
+    raise exception 'Match does not belong to this tournament';
+  end if;
+
+  if p_from_match_id = p_to_match_id then
+    if v_fs = v_ts then
+      return;
+    end if;
+    perform apply_bracket_layout(p_tournament_id, jsonb_build_array(jsonb_build_object(
+      'match_id', m_from.id, 'side_a_entry_id', m_from.side_b_entry_id, 'side_b_entry_id', m_from.side_a_entry_id)));
+    return;
+  end if;
+
+  v1 := case v_fs when 'A' then m_from.side_a_entry_id else m_from.side_b_entry_id end;
+  v2 := case v_ts when 'A' then m_to.side_a_entry_id else m_to.side_b_entry_id end;
+
+  nf_a := m_from.side_a_entry_id;
+  nf_b := m_from.side_b_entry_id;
+  nt_a := m_to.side_a_entry_id;
+  nt_b := m_to.side_b_entry_id;
+
+  if v_fs = 'A' then
+    nf_a := v2;
+  else
+    nf_b := v2;
+  end if;
+
+  if v_ts = 'A' then
+    nt_a := v1;
+  else
+    nt_b := v1;
+  end if;
+
+  perform apply_bracket_layout(p_tournament_id, jsonb_build_array(
+    jsonb_build_object('match_id', m_from.id, 'side_a_entry_id', nf_a, 'side_b_entry_id', nf_b),
+    jsonb_build_object('match_id', m_to.id, 'side_a_entry_id', nt_a, 'side_b_entry_id', nt_b)));
+end;
+$$;
+
+grant execute on function generate_bracket(uuid, draw_mode, uuid[]) to authenticated;
+grant execute on function rebuild_bracket(uuid, draw_mode, uuid[]) to authenticated;
+grant execute on function swap_bracket_slots(uuid, uuid, text, uuid, text) to authenticated;
+grant execute on function apply_bracket_layout(uuid, jsonb) to authenticated;
+notify pgrst, 'reload schema';
+
+-- QA round 2 fixes. Safe to re-run: functions are replaced with their
+-- signatures, owners and grants unchanged; internal helpers stay closed.
+--
+-- 1. Starting a tournament (update_tournament_settings -> in_progress) is
+--    refused while the generated matches do not hold exactly the approved
+--    field (lifecycle.rosterStale), in every format.
+-- 2. Scheduling a finished or live match names the reason
+--    (schedule.matchFinished / schedule.matchLive) instead of schedule.conflict.
+-- 3. Standings rank a full tie (before the first result, too) by seeding,
+--    then by name. The public get_standings columns stay the same.
+
+-- ---------------------------------------------------------------------------
+-- Start guard: the structure must match the approved field
+-- ---------------------------------------------------------------------------
+create or replace function public.tournament_roster_stale(p_tournament_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  -- Every format places each approved entry in its first stage (round robin,
+  -- groups, round 1 with BYEs), so the entries in matches are the field.
+  with playing as (
+    select distinct x.entry_id
+    from matches m
+    cross join lateral (values (m.side_a_entry_id), (m.side_b_entry_id)) x(entry_id)
+    where m.tournament_id = p_tournament_id and x.entry_id is not null
+  ),
+  approved as (
+    select e.id as entry_id from entries e
+    where e.tournament_id = p_tournament_id and e.status = 'approved'
+  )
+  select exists (select 1 from matches m where m.tournament_id = p_tournament_id)
+    and (
+      exists (select 1 from playing p where not exists (select 1 from approved a where a.entry_id = p.entry_id))
+      or exists (select 1 from approved a where not exists (select 1 from playing p where p.entry_id = a.entry_id))
+    );
+$$;
+revoke execute on function public.tournament_roster_stale(uuid) from public, anon, authenticated;
+
+create or replace function update_tournament_settings(p_tournament_id uuid,p_patch jsonb,p_expected_revision integer,p_expected_matches jsonb default null)
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare v_old tournaments%rowtype; v_new tournaments%rowtype; k text; v_category_changed boolean; v_tz text; v_units text[];
+begin
+ if not is_tournament_admin(p_tournament_id) then raise exception 'Not allowed'; end if;
+ select * into v_old from tournaments where id=p_tournament_id for update;
+ if v_old.id is null then raise exception 'Tournament not found'; end if;
+ if p_expected_revision is null or p_expected_revision<>v_old.settings_revision then raise exception 'drafts.conflict'; end if;
+ if jsonb_typeof(p_patch) is distinct from 'object' then raise exception 'Invalid settings'; end if;
+ for k in select jsonb_object_keys(p_patch) loop
+  if k<>all(array['name','description','category','set_format','scoring_config','doubles_pairing_mode','status','is_public','contact_phone','contact_email','publish_contact',
+   'registration_capacity','capacity_public','registration_deadline','entry_fee_mode','entry_fee_minor','entry_fee_currency','entry_fee_unit','waitlist_enabled',
+   'schedule_config','visibility','venue_address','venue_lat','venue_lng']) then raise exception 'Unsupported settings field'; end if;
+ end loop;
+ v_new:=jsonb_populate_record(v_old,p_patch);
+ -- A finished tournament stays finished: its results and champion are final.
+ if v_old.status='completed' and v_new.status is distinct from 'completed' then raise exception 'lifecycle.completedLocked'; end if;
+ -- Starting plays the generated structure: it must hold exactly the approved
+ -- field (an approval or rejection after the draw leaves it stale).
+ if v_new.status='in_progress' and v_old.status is distinct from 'in_progress' and tournament_roster_stale(p_tournament_id) then
+  raise exception 'lifecycle.rosterStale';
+ end if;
+ if v_new.name is null or btrim(v_new.name)='' or v_new.is_public is null or v_new.scoring_config is null or v_new.publish_contact is null or v_new.capacity_public is null or v_new.waitlist_enabled is null then raise exception 'Invalid settings'; end if;
+ -- Organizer contacts are checked when they change (older rows keep saving).
+ if nullif(btrim(coalesce(v_new.contact_phone,'')),'') is distinct from nullif(btrim(coalesce(v_old.contact_phone,'')),'')
+    and nullif(btrim(coalesce(v_new.contact_phone,'')),'') !~ '^\+?[0-9\s\-\(\)]{7,20}$' then raise exception 'registration.invalidPhone'; end if;
+ if nullif(btrim(coalesce(v_new.contact_email,'')),'') is distinct from nullif(btrim(coalesce(v_old.contact_email,'')),'')
+    and nullif(btrim(coalesce(v_new.contact_email,'')),'') !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' then raise exception 'registration.invalidEmail'; end if;
+ if v_new.publish_contact and nullif(btrim(coalesce(v_new.contact_phone,'')),'') is null and nullif(btrim(coalesce(v_new.contact_email,'')),'') is null then raise exception 'Contact required'; end if;
+ if v_new.registration_capacity is not null and v_new.registration_capacity<=0 then raise exception 'registration.invalidCapacity'; end if;
+ -- Lowering the limit never removes approved participants silently.
+ if v_new.registration_capacity is not null and v_new.registration_capacity is distinct from v_old.registration_capacity
+    and v_new.registration_capacity<registration_occupancy(p_tournament_id,null) then raise exception 'registration.capacityBelowOccupied'; end if;
+ -- A waitlist queues entries beyond the limit, so it needs one.
+ if v_new.waitlist_enabled and v_new.registration_capacity is null
+    and (v_new.waitlist_enabled,v_new.registration_capacity) is distinct from (v_old.waitlist_enabled,v_old.registration_capacity) then raise exception 'registration.waitlistNeedsCapacity'; end if;
+ if v_new.entry_fee_mode is distinct from 'paid' then
+  v_new.entry_fee_minor:=null; v_new.entry_fee_currency:=null; v_new.entry_fee_unit:=null;
+  if v_new.entry_fee_mode is not null and v_new.entry_fee_mode<>'free' then raise exception 'registration.invalidFee'; end if;
+ else
+  v_new.entry_fee_currency:=upper(btrim(coalesce(v_new.entry_fee_currency,'')));
+  if v_new.entry_fee_minor is null or v_new.entry_fee_minor<0 or v_new.entry_fee_currency!~'^[A-Z]{3}$'
+     or v_new.entry_fee_unit is null or v_new.entry_fee_unit<>all(array['player','pair','team']) then raise exception 'registration.invalidFee'; end if;
+  -- A newly set fee is a real amount per a unit that exists in this tournament.
+  if (v_new.entry_fee_mode,v_new.entry_fee_minor,v_new.entry_fee_unit) is distinct from (v_old.entry_fee_mode,v_old.entry_fee_minor,v_old.entry_fee_unit) then
+   if v_new.entry_fee_minor=0 then raise exception 'registration.zeroFee'; end if;
+   v_units:=case when v_new.sport='football' then array['team','player'] when v_new.category='doubles' then array['pair','player'] else array['player'] end;
+   if v_new.entry_fee_unit<>all(v_units) then raise exception 'registration.feeUnitMismatch'; end if;
+  end if;
+ end if;
+ -- Venue: an address of sane length, and a point that is either complete or absent.
+ v_new.venue_address:=nullif(btrim(coalesce(v_new.venue_address,'')),'');
+ if v_new.venue_address is not null and length(v_new.venue_address)>300 then raise exception 'venue.invalidAddress'; end if;
+ if (v_new.venue_lat is null)<>(v_new.venue_lng is null) then raise exception 'venue.invalidPoint'; end if;
+ if v_new.venue_lat is not null and (v_new.venue_lat< -90 or v_new.venue_lat>90 or v_new.venue_lng< -180 or v_new.venue_lng>180) then raise exception 'venue.invalidPoint'; end if;
+ -- Schedule settings: a minimum rest in whole minutes and an IANA time zone name.
+ if v_new.schedule_config is null or jsonb_typeof(v_new.schedule_config) is distinct from 'object' then raise exception 'schedule.invalidConfig'; end if;
+ for k in select jsonb_object_keys(v_new.schedule_config) loop
+  if k<>all(array['min_rest_minutes','timezone']) then raise exception 'schedule.invalidConfig'; end if;
+ end loop;
+ if v_new.schedule_config ? 'min_rest_minutes' and (jsonb_typeof(v_new.schedule_config->'min_rest_minutes') is distinct from 'number'
+    or (v_new.schedule_config->>'min_rest_minutes')::numeric<0 or (v_new.schedule_config->>'min_rest_minutes')::numeric<>floor((v_new.schedule_config->>'min_rest_minutes')::numeric)) then
+  raise exception 'schedule.invalidConfig';
+ end if;
+ if v_new.schedule_config ? 'timezone' then
+  v_tz:=v_new.schedule_config->>'timezone';
+  if jsonb_typeof(v_new.schedule_config->'timezone') is distinct from 'string' or v_tz!~'^[A-Za-z_]+(/[A-Za-z0-9_+\-]+)*$' or length(v_tz)>64 then raise exception 'schedule.invalidConfig'; end if;
+ end if;
+ if v_new.visibility is null or v_new.visibility<>all(array['public','link','private','password']) then raise exception 'access.invalidVisibility'; end if;
+ if v_new.visibility='password' and v_old.access_password_hash is null then raise exception 'access.passwordRequired'; end if;
+ v_category_changed:=v_old.category is distinct from v_new.category;
+ if v_category_changed then
+  if v_old.status in ('in_progress','completed') then raise exception 'drafts.rulesLocked'; end if;
+  perform 1 from matches where tournament_id=p_tournament_id order by id for update nowait;
+  if exists(select 1 from matches where tournament_id=p_tournament_id) and p_expected_matches is distinct from tournament_match_versions(p_tournament_id) then raise exception 'drafts.structureConflict'; end if;
+  if exists(select 1 from matches where tournament_id=p_tournament_id and (status='finished' or winner_entry_id is not null))
+    or exists(select 1 from match_sets s join matches m on m.id=s.match_id where m.tournament_id=p_tournament_id)
+    or exists(select 1 from live_scores where tournament_id=p_tournament_id) then raise exception 'drafts.rulesLocked'; end if;
+ end if;
+ update tournaments set name=v_new.name,description=v_new.description,category=v_new.category,set_format=v_new.set_format,
+  scoring_config=v_new.scoring_config,doubles_pairing_mode=v_new.doubles_pairing_mode,status=v_new.status,is_public=v_new.is_public,
+  contact_phone=nullif(btrim(coalesce(v_new.contact_phone,'')),''),contact_email=nullif(btrim(coalesce(v_new.contact_email,'')),''),publish_contact=v_new.publish_contact,
+  registration_capacity=v_new.registration_capacity,capacity_public=v_new.capacity_public,registration_deadline=v_new.registration_deadline,
+  entry_fee_mode=v_new.entry_fee_mode,entry_fee_minor=v_new.entry_fee_minor,entry_fee_currency=v_new.entry_fee_currency,entry_fee_unit=v_new.entry_fee_unit,
+  waitlist_enabled=v_new.waitlist_enabled,schedule_config=v_new.schedule_config,visibility=v_new.visibility,
+  venue_address=v_new.venue_address,venue_lat=v_new.venue_lat,venue_lng=v_new.venue_lng
+ where id=p_tournament_id returning * into v_new;
+ if v_category_changed then delete from matches where tournament_id=p_tournament_id; end if;
+ return to_jsonb(v_new);
+exception when lock_not_available or deadlock_detected then raise exception 'drafts.structureConflict';
+end;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- Schedule: finished and live matches get their own error codes
+-- ---------------------------------------------------------------------------
+create or replace function public.set_match_schedule(p_match_id uuid, p_court_id uuid, p_scheduled_at timestamptz, p_time_kind text, p_queue_order integer, p_ignore_warnings boolean default false)
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare v_tid uuid; v_conflicts jsonb; v_row match_schedule%rowtype;
+begin
+ select tournament_id into v_tid from matches where id=p_match_id;
+ if v_tid is null or not is_tournament_admin(v_tid) then raise exception 'Not allowed'; end if;
+ perform 1 from tournaments where id=v_tid for update;
+ if p_time_kind is not null and p_time_kind<>all(array['fixed','not_before']) then raise exception 'schedule.invalidAssignment'; end if;
+ if (p_scheduled_at is null)<>(p_time_kind is null) then raise exception 'schedule.invalidAssignment'; end if;
+ if p_court_id is null and p_scheduled_at is null then raise exception 'schedule.invalidAssignment'; end if;
+ if p_queue_order is not null and (p_court_id is null or p_queue_order<=0) then raise exception 'schedule.invalidAssignment'; end if;
+ v_conflicts:=match_schedule_conflicts(p_match_id,p_court_id,p_scheduled_at,p_time_kind,p_queue_order);
+ -- A played or live match keeps its slot; say so instead of a generic conflict.
+ if exists(select 1 from jsonb_array_elements(v_conflicts) c where c->>'kind'='match_finished') then raise exception 'schedule.matchFinished'; end if;
+ if exists(select 1 from jsonb_array_elements(v_conflicts) c where c->>'kind'='match_live') then raise exception 'schedule.matchLive'; end if;
+ if exists(select 1 from jsonb_array_elements(v_conflicts) c where c->>'severity'='hard') then raise exception 'schedule.conflict'; end if;
+ if not p_ignore_warnings and jsonb_array_length(v_conflicts)>0 then raise exception 'schedule.warnings'; end if;
+ insert into match_schedule(tournament_id,match_id,state,court_id,scheduled_at,time_kind,queue_order)
+  values(v_tid,p_match_id,'draft',p_court_id,p_scheduled_at,p_time_kind,p_queue_order)
+  on conflict(match_id,state) do update set court_id=excluded.court_id,scheduled_at=excluded.scheduled_at,
+   time_kind=excluded.time_kind,queue_order=excluded.queue_order
+  returning * into v_row;
+ return jsonb_build_object('schedule',to_jsonb(v_row),'conflicts',v_conflicts);
+end;
+$$;
+
+create or replace function public.place_match_in_court_queue(
+  p_match_id uuid, p_court_id uuid, p_order uuid[], p_ignore_warnings boolean default false)
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare v_tid uuid; v_row match_schedule%rowtype; v_old_court uuid; v_conflicts jsonb; v_moved uuid[];
+begin
+ select tournament_id into v_tid from matches where id=p_match_id;
+ if v_tid is null or not is_tournament_admin(v_tid) then raise exception 'Not allowed'; end if;
+ perform 1 from tournaments where id=v_tid for update;
+ if p_court_id is null or not exists(select 1 from courts c where c.id=p_court_id and c.tournament_id=v_tid) then
+  raise exception 'schedule.invalidCourt';
+ end if;
+ if p_order is null or coalesce(array_length(p_order,1),0)=0
+    or not (p_match_id=any(p_order))
+    or array_length(p_order,1)<>(select count(distinct x) from unnest(p_order) x)
+    or exists(select 1 from unnest(p_order) x where not exists(select 1 from matches m where m.id=x and m.tournament_id=v_tid))
+ then raise exception 'schedule.invalidAssignment'; end if;
+
+ select * into v_row from match_schedule where match_id=p_match_id and state='draft';
+ v_old_court:=v_row.court_id;
+ -- queue_taken cannot apply: this function is the only assigner of the numbers
+ -- and they are unique by construction, so the check runs without one.
+ v_conflicts:=match_schedule_conflicts(p_match_id,p_court_id,v_row.scheduled_at,v_row.time_kind,null);
+ -- A played or live match keeps its slot; say so instead of a generic conflict.
+ if exists(select 1 from jsonb_array_elements(v_conflicts) c where c->>'kind'='match_finished') then raise exception 'schedule.matchFinished'; end if;
+ if exists(select 1 from jsonb_array_elements(v_conflicts) c where c->>'kind'='match_live') then raise exception 'schedule.matchLive'; end if;
+ if exists(select 1 from jsonb_array_elements(v_conflicts) c where c->>'severity'='hard') then raise exception 'schedule.conflict'; end if;
+ if not p_ignore_warnings and jsonb_array_length(v_conflicts)>0 then raise exception 'schedule.warnings'; end if;
+
+ insert into match_schedule(tournament_id,match_id,state,court_id,scheduled_at,time_kind,queue_order)
+  values(v_tid,p_match_id,'draft',p_court_id,v_row.scheduled_at,v_row.time_kind,null)
+  on conflict(match_id,state) do update set court_id=excluded.court_id;
+
+ -- Renumber the target queue 1..N. Rows the caller did not list keep a place
+ -- after the listed ones, so a stale board never discards another organizer's
+ -- work. Rows without a number stay unnumbered: they are the timed head.
+ with wanted as (select x.match_id, x.ord from unnest(p_order) with ordinality x(match_id,ord)),
+ target as (
+  select s.match_id,
+         (case when w.ord is null then 1 else 0 end) as tail,
+         coalesce(w.ord, s.queue_order) as ord
+  from match_schedule s left join wanted w on w.match_id=s.match_id
+  where s.tournament_id=v_tid and s.state='draft' and s.court_id=p_court_id
+    and (w.ord is not null or s.queue_order is not null)),
+ numbered as (select match_id, row_number() over (order by tail, ord, match_id) n from target),
+ upd as (update match_schedule s set queue_order=numbered.n from numbered
+   where s.match_id=numbered.match_id and s.state='draft' and s.queue_order is distinct from numbered.n
+   returning s.match_id)
+ select coalesce(array_agg(match_id),'{}'::uuid[]) into v_moved from upd;
+
+ -- A live or finished match never changes its place in a queue; raising here
+ -- rolls the whole renumbering back, so a column is never left half-moved.
+ if exists(select 1 from matches m where m.id=any(v_moved) and m.id<>p_match_id
+   and (m.status='finished' or exists(select 1 from live_scores l where l.match_id=m.id and l.status='active')))
+ then raise exception 'schedule.queueLocked'; end if;
+
+ -- Close the gap the match left on its previous court. Compaction keeps the
+ -- relative order, so it is not a change of place and needs no extra check.
+ if v_old_court is not null and v_old_court<>p_court_id then
+  with numbered as (select s.match_id, row_number() over (order by s.queue_order, s.match_id) n
+   from match_schedule s where s.tournament_id=v_tid and s.state='draft' and s.court_id=v_old_court and s.queue_order is not null)
+  update match_schedule s set queue_order=numbered.n from numbered
+   where s.match_id=numbered.match_id and s.state='draft' and s.queue_order is distinct from numbered.n;
+ end if;
+
+ select * into v_row from match_schedule where match_id=p_match_id and state='draft';
+ return jsonb_build_object('schedule',to_jsonb(v_row),'conflicts',v_conflicts);
+end;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- Standings: seeding before the name as the last tie-break
+-- ---------------------------------------------------------------------------
+create or replace function public.standings_rows(p_tournament_id uuid, p_group_id uuid default null)
+returns table (
+  entry_id uuid,
+  display_name text,
+  played integer,
+  won integer,
+  drawn integer,
+  lost integer,
+  score_for integer,
+  score_against integer,
+  diff integer,
+  points integer,
+  rank integer,
+  games_for integer,
+  games_against integer,
+  games_diff integer
+)
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  v_sport sport;
+  v_cfg jsonb;
+  v_win integer;
+  v_draw integer;
+  v_loss integer;
+begin
+  select t.sport, coalesce(t.scoring_config, '{}'::jsonb)
+    into v_sport, v_cfg
+  from tournaments t
+  where t.id = p_tournament_id;
+  if v_sport is null then
+    raise exception 'Tournament not found';
+  end if;
+
+  -- points defaults: goals sports use 3/1/0, sets sports 1/0/0; scoring_config may override
+  if v_sport in ('tennis', 'padel') then
+    v_win := coalesce((v_cfg->>'points_win')::integer, 1);
+    v_draw := coalesce((v_cfg->>'points_draw')::integer, 0);
+    v_loss := coalesce((v_cfg->>'points_loss')::integer, 0);
+  else
+    v_win := coalesce((v_cfg->>'points_win')::integer, 3);
+    v_draw := coalesce((v_cfg->>'points_draw')::integer, 1);
+    v_loss := coalesce((v_cfg->>'points_loss')::integer, 0);
+  end if;
+
+  return query
+  with participants as (
+    select e.id, e.display_name, e.seed_order
+    from entries e
+    where e.tournament_id = p_tournament_id
+      and e.status = 'approved'
+      and (
+        p_group_id is null
+        or e.id in (select ge.entry_id from group_entries ge where ge.group_id = p_group_id)
+      )
+  ),
+  played_matches as (
+    select m.*
+    from matches m
+    where m.tournament_id = p_tournament_id
+      and m.status = 'finished'
+      and (p_group_id is null or m.group_id = p_group_id)
+      and m.side_a_entry_id is not null
+      and m.side_b_entry_id is not null
+  ),
+  -- Games per match for the sets family. A deciding match tie-break counts as
+  -- one game for its winner, the usual convention for game totals.
+  match_games as (
+    select ms.match_id,
+           sum(case when ms.score_kind = 'match_tiebreak'
+                    then case when coalesce(ms.side_a_tiebreak, 0) > coalesce(ms.side_b_tiebreak, 0) then 1 else 0 end
+                    else ms.side_a_games end)::integer as a_games,
+           sum(case when ms.score_kind = 'match_tiebreak'
+                    then case when coalesce(ms.side_b_tiebreak, 0) > coalesce(ms.side_a_tiebreak, 0) then 1 else 0 end
+                    else ms.side_b_games end)::integer as b_games
+    from match_sets ms
+    where ms.match_id in (select pm.id from played_matches pm)
+    group by ms.match_id
+  ),
+  sides as (
+    select pm.side_a_entry_id as eid,
+           coalesce(pm.side_a_score, 0) as gf,
+           coalesce(pm.side_b_score, 0) as ga,
+           coalesce(g.a_games, 0) as games_f,
+           coalesce(g.b_games, 0) as games_a,
+           pm.winner_entry_id
+    from played_matches pm left join match_games g on g.match_id = pm.id
+    union all
+    select pm.side_b_entry_id as eid,
+           coalesce(pm.side_b_score, 0) as gf,
+           coalesce(pm.side_a_score, 0) as ga,
+           coalesce(g.b_games, 0) as games_f,
+           coalesce(g.a_games, 0) as games_a,
+           pm.winner_entry_id
+    from played_matches pm left join match_games g on g.match_id = pm.id
+  ),
+  agg as (
+    select s.eid,
+           count(*)::integer as played,
+           count(*) filter (where s.winner_entry_id = s.eid)::integer as won,
+           count(*) filter (where s.winner_entry_id is null)::integer as drawn,
+           count(*) filter (where s.winner_entry_id is not null and s.winner_entry_id <> s.eid)::integer as lost,
+           coalesce(sum(s.gf), 0)::integer as score_for,
+           coalesce(sum(s.ga), 0)::integer as score_against,
+           coalesce(sum(s.games_f), 0)::integer as games_for,
+           coalesce(sum(s.games_a), 0)::integer as games_against
+    from sides s
+    group by s.eid
+  ),
+  merged as (
+    select p.id as entry_id,
+           p.display_name,
+           p.seed_order,
+           coalesce(a.played, 0) as played,
+           coalesce(a.won, 0) as won,
+           coalesce(a.drawn, 0) as drawn,
+           coalesce(a.lost, 0) as lost,
+           coalesce(a.score_for, 0) as score_for,
+           coalesce(a.score_against, 0) as score_against,
+           (coalesce(a.score_for, 0) - coalesce(a.score_against, 0)) as diff,
+           (coalesce(a.won, 0) * v_win + coalesce(a.drawn, 0) * v_draw + coalesce(a.lost, 0) * v_loss) as points,
+           coalesce(a.games_for, 0) as games_for,
+           coalesce(a.games_against, 0) as games_against,
+           (coalesce(a.games_for, 0) - coalesce(a.games_against, 0)) as games_diff
+    from participants p
+    left join agg a on a.eid = p.id
+  ),
+  -- Head-to-head points, counting only matches between entries tied on total points.
+  -- Breaks pairwise/group ties; a circular tie falls through to the differences.
+  h2h as (
+    select e.entry_id, coalesce(sum(e.pts), 0) as h2h_points
+    from (
+      select pm.side_a_entry_id as entry_id,
+             case when pm.winner_entry_id = pm.side_a_entry_id then v_win
+                  when pm.winner_entry_id is null then v_draw
+                  else v_loss end as pts
+      from played_matches pm
+      join merged ma on ma.entry_id = pm.side_a_entry_id
+      join merged mb on mb.entry_id = pm.side_b_entry_id
+      where ma.points = mb.points
+      union all
+      select pm.side_b_entry_id as entry_id,
+             case when pm.winner_entry_id = pm.side_b_entry_id then v_win
+                  when pm.winner_entry_id is null then v_draw
+                  else v_loss end as pts
+      from played_matches pm
+      join merged ma on ma.entry_id = pm.side_a_entry_id
+      join merged mb on mb.entry_id = pm.side_b_entry_id
+      where ma.points = mb.points
+    ) e
+    group by e.entry_id
+  )
+  select mg.entry_id,
+         mg.display_name,
+         mg.played,
+         mg.won,
+         mg.drawn,
+         mg.lost,
+         mg.score_for,
+         mg.score_against,
+         mg.diff,
+         mg.points,
+         (row_number() over (
+            order by mg.points desc, coalesce(h.h2h_points, 0) desc,
+                     mg.diff desc, mg.games_diff desc, mg.score_for desc, mg.games_for desc,
+                     mg.seed_order asc nulls last, mg.display_name asc, mg.entry_id asc
+         ))::integer as rank,
+         mg.games_for,
+         mg.games_against,
+         mg.games_diff
+  from merged mg
+  left join h2h h on h.entry_id = mg.entry_id
+  order by rank;
+end;
+$$;
+revoke execute on function public.standings_rows(uuid, uuid) from public, anon, authenticated;
+
+notify pgrst, 'reload schema';

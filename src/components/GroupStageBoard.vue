@@ -1,9 +1,13 @@
 <script setup>
+import { inject } from 'vue'
 import { useI18n } from 'vue-i18n'
 import StandingsTable from './StandingsTable.vue'
-import { entryMemberNames } from '../lib/entryDisplay'
+import { entryDisplayNames } from '../lib/entryDisplay'
 import { formatSetScore } from '../lib/tennisRules'
 import { normalizeTennisState, pointLabel, scoreLine } from '../lib/useTennisScoring'
+import { scheduleSummary } from '../lib/schedule'
+import { roundInGroup } from '../lib/groupsFlow'
+import { completedSetCount } from '../lib/bracketDisplay'
 
 const props = defineProps({
   groups: { type: Array, default: () => [] }, // [{ id, name, standings, rounds }]
@@ -13,14 +17,20 @@ const props = defineProps({
   liveScoresByMatch: { type: Object, default: () => ({}) },
 })
 const emit = defineEmits(['view-live'])
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
-// Group rounds are stored with an offset per group (group B starts at 1001),
-// so the label shows the round inside the group.
-const roundInGroup = round => (round > 1000 ? round % 1000 : round)
+// Provided by the tournament views: published rows for spectators, the draft
+// for organizers — the same court and time the bracket cards show.
+const scheduleView = inject('matchScheduleView', null)
+function scheduleLine(m) {
+  const view = scheduleView?.value
+  const row = view?.byMatch?.[m.id]
+  return row ? scheduleSummary(row, { courtsById: view.courtsById, t, locale: locale.value, timeZone: view.timeZone }) : ''
+}
+const scheduleIsDraft = m => Boolean(scheduleView?.value?.draftIds?.has(m.id))
 
 function name(id) {
-  const names = entryMemberNames(props.entriesMap[id])
+  const names = entryDisplayNames(props.entriesMap[id])
   return names.length ? names.join(' / ') : t('bracket.tbd')
 }
 const sets = m => [...(props.setsByMatch[m.id] || [])].sort((a, b) => a.set_index - b.set_index)
@@ -39,10 +49,13 @@ function sideGames(m, side) {
       { key: 'current', value: live.isMatchTiebreak ? live.tiebreakPoints?.[side] ?? 0 : live.games[side], current: true },
     ]
   }
-  return sets(m).map(s => ({
+  const completed = completedSetCount(m)
+  return sets(m).map((s, i) => ({
     key: s.set_index,
     value: s.score_kind === 'match_tiebreak' ? s[`side_${side}_tiebreak`] : s[`side_${side}_games`],
-    won: (s.score_kind === 'match_tiebreak'
+    // A set left open by a stopped live match is the current one, not a won set.
+    current: i >= completed,
+    won: i < completed && (s.score_kind === 'match_tiebreak'
       ? Number(s[`side_${side}_tiebreak`]) > Number(s[`side_${side === 'a' ? 'b' : 'a'}_tiebreak`])
       : Number(s[`side_${side}_games`]) > Number(s[`side_${side === 'a' ? 'b' : 'a'}_games`])),
   }))
@@ -63,7 +76,7 @@ const liveCount = g => g.rounds.reduce((n, r) => n + r.list.filter(isLive).lengt
 
       <div v-if="g.rounds.length" class="group-board__fixtures">
         <div v-for="grp in g.rounds" :key="grp.round" class="gs-round">
-          <h4 class="gs-round__title">{{ t('bracket.roundN', { n: roundInGroup(grp.round) }) }}</h4>
+          <h4 class="gs-round__title">{{ t('bracket.tourN', { n: roundInGroup(grp.round) }) }}</h4>
           <ul class="gs-list">
             <li
               v-for="m in grp.list"
@@ -92,6 +105,11 @@ const liveCount = g => g.rounds.reduce((n, r) => n + r.list.filter(isLive).lengt
                   <span v-else class="gs-match__pending">{{ t('tournament.notPlayed') }}</span>
                 </span>
               </component>
+              <p v-if="scheduleLine(m)" class="gs-match__schedule">
+                <span aria-hidden="true">🕒</span>
+                <span>{{ scheduleLine(m) }}</span>
+                <span v-if="scheduleIsDraft(m)" class="badge badge--warn">{{ t('schedule.draft') }}</span>
+              </p>
 
               <!-- Hover / focus card with the full score, tie-breaks included -->
               <div v-if="hasDetails(m)" class="gs-tip" role="tooltip">
@@ -176,6 +194,16 @@ button.gs-match__body { cursor: pointer; }
 .gs-set--current { color: var(--text); }
 .gs-set--point { color: var(--primary); font-weight: 700; }
 
+.gs-match__schedule {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 2px 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
 .gs-match__status { grid-column: 2; grid-row: 1 / span 2; justify-self: end; }
 .gs-match__pending { font-size: 0.8125rem; color: var(--muted); }
 

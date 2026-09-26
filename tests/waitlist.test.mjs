@@ -86,7 +86,7 @@ test('the waitlist flag is a validated setting and the forward chain replays cle
   const before = await snapshot(ctx)
   await assert.rejects(settings(t, { waitlist_enabled: null }), /Invalid settings/)
   assert.deepEqual(await snapshot(ctx), before)
-  await settings(t, { waitlist_enabled: true })
+  await settings(t, { registration_capacity: 2, waitlist_enabled: true })
   assert.equal((await state(t)).waitlist_enabled, true)
   const labels = (await ctx.db.query("select enumlabel from pg_enum e join pg_type t on t.oid=e.enumtypid where t.typname='registration_status' order by enumsortorder")).rows.map(r => r.enumlabel)
   assert.deepEqual(labels, ['pending', 'approved', 'rejected', 'waitlisted'])

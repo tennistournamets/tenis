@@ -1,6 +1,11 @@
 // Realtime is an invalidation signal. Only a complete server snapshot is applied.
 // A single flight coalesces bursts; events during a read invalidate that response.
-export function createSnapshotRefresh({ read, apply, onError, delay = 150, retryDelay = 2000 }) {
+// An invalidated response is discarded once. A second invalidated response, or one
+// that took longer than `slowReadMs`, is still applied (it is newer than what is on
+// screen) and followed by another read: on a slow link the 30 s poll alone would
+// otherwise invalidate every read and the page would never update.
+export function createSnapshotRefresh({ read, apply, onError, delay = 150, retryDelay = 2000,
+  slowReadMs = 10000, now = () => Date.now() }) {
   let version = 0, pending = false, disposed = false, timer = null, running = null
   function schedule(wait = delay) {
     if (!disposed && !timer && !running) timer = setTimeout(() => { timer = null; void run() }, wait)
@@ -10,13 +15,19 @@ export function createSnapshotRefresh({ read, apply, onError, delay = 150, retry
     if (running) return running
     clearTimeout(timer); timer = null
     running = (async () => {
+      let discarded = 0
       while (pending && !disposed) {
         pending = false
         const request = version
+        const started = now()
         try {
           const value = await read()
           if (disposed) return false
-          if (request !== version) { pending = true; continue }
+          if (request !== version) {
+            pending = true
+            if (discarded < 1 && now() - started < slowReadMs) { discarded++; continue }
+          }
+          discarded = 0
           apply(value)
         } catch (error) {
           if (disposed) return false

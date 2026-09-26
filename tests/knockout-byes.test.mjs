@@ -9,6 +9,8 @@ after(async()=>{await ctx?.db.close()})
 const stageRows=async(id,stage)=> (await matches(ctx,id)).filter(m=>m.stage===stage)
 const drop=async(id)=>ctx.db.query('delete from tournaments where id=$1',[id])
 const upperPower=n=>2**Math.ceil(Math.log2(n))
+// Standard seeded bracket: slot i holds seed positions[i]; seeds past the field are BYEs.
+const seededSlots=seeds=>{let p=[1];while(p.length<seeds.length)p=p.flatMap(s=>[s,2*p.length+1-s]);return p.map(s=>seeds[s-1]??null)}
 
 function checkDraw(rows,entries,label){
   const n=entries.length,b=upperPower(n)
@@ -94,14 +96,14 @@ test('known two-player double-elimination failure routes both finalists',async()
   await drop(t.id)
 })
 
-test('single elimination completes for every size 2–64, preserving order and exact played/BYE counts',async()=>{
+test('single elimination completes for every size 2–64, seeding the manual draw and keeping exact played/BYE counts',async()=>{
   for(let n=2;n<=64;n++){
     const sport=n%2?'tennis':'football'
     const t=await fixture(ctx,{count:n,sport})
     const mode=n%3?'manual':'auto-random'
     await asActor(ctx,n%2?'editor':'owner','select generate_bracket($1,$2,$3::uuid[])',[t.id,mode,mode==='manual'?t.entries:null])
     const roster=checkDraw(await stageRows(t.id,'main'),t.entries,`single ${n}`)
-    if(mode==='manual')assert.deepEqual(roster,t.entries,`single ${n}: input order changed`)
+    if(mode==='manual')assert.deepEqual(roster,seededSlots(t.entries).filter(Boolean),`single ${n}: seeds out of position`)
     const result=await complete(t.id,'main',sport,t.entries[n-1])
     assert.equal(result.played,n-1,`single ${n}`)
     assert.equal(result.rows.filter(m=>!m.side_a_entry_id||!m.side_b_entry_id).length,upperPower(n)-n)
@@ -135,14 +137,18 @@ test('six qualifiers from three groups retain group scores across playoff regene
   const originalGroups=await stageRows(t.id,'group')
   const originalSets=(await ctx.db.query('select * from match_sets where match_id=any($1::uuid[]) order by id',[originalGroups.map(m=>m.id)])).rows
   for(let run=0;run<2;run++){
+    // An unplayed playoff may be generated again; a played one only changes through a group correction.
+    await asActor(ctx,'editor','select generate_group_playoff($1)',[t.id])
     await asActor(ctx,'editor','select generate_group_playoff($1)',[t.id])
     const initial=await stageRows(t.id,'winners')
     const qualifiers=initial.filter(m=>m.round_number===1).flatMap(m=>[m.side_a_entry_id,m.side_b_entry_id].filter(Boolean))
     assert.equal(qualifiers.length,6)
     checkDraw(initial,qualifiers,'six qualifiers')
     assert.equal((await complete(t.id,'winners','tennis',qualifiers[0])).played,5)
+    await assertDeniedUnchanged(ctx,'editor','select generate_group_playoff($1)',[t.id],/groupsFlow\.playoffStarted/)
     assert.deepEqual(await stageRows(t.id,'group'),originalGroups)
     assert.deepEqual((await ctx.db.query('select * from match_sets where match_id=any($1::uuid[]) order by id',[originalGroups.map(m=>m.id)])).rows,originalSets)
+    await ctx.db.query("delete from matches where tournament_id=$1 and stage='winners'",[t.id])
   }
   await drop(t.id)
 })
@@ -153,7 +159,8 @@ test('unsupported double-elimination counts 3–63 fail before DELETE and preser
   await ctx.db.exec(`create function reject_test_delete() returns trigger language plpgsql as $$ begin raise exception 'DELETE before validation'; end $$;
     create trigger guard_test_delete_matches before delete on matches for each statement execute function reject_test_delete();
     create trigger guard_test_delete_sets before delete on match_sets for each statement execute function reject_test_delete();`)
-  const t=await fixture(ctx,{count:64,format:'double_elimination'})
+  // Before the start: a started tournament with a result is refused earlier (drafts.bracketResultsLocked).
+  const t=await fixture(ctx,{count:64,format:'double_elimination',status:'registration_closed'})
   try{
     // Privileged synthetic existing result, without invoking DELETE generators.
     const m=(await ctx.db.query("insert into matches(tournament_id,stage,round_number,match_number,side_a_entry_id,side_b_entry_id,status) values($1,'winners',1,1,$2,$3,'ready') returning *",[t.id,t.entries[0],t.entries[1]])).rows[0]
@@ -199,19 +206,22 @@ test('correction in a completed BYE bracket is blocked pending safe graph rollba
   await drop(t.id)
 })
 
-test('knockout migration is repeatable, matches canonical functions and preserves data, owners and ACLs',async()=>{
+test('historical knockout migration is repeatable and preserves data, owners and ACLs',async()=>{
   const t=await fixture(ctx,{count:4})
   await asActor(ctx,'owner','select generate_bracket($1)',[t.id])
   const m=(await matches(ctx,t.id)).find(m=>m.status==='ready')
   await save('editor',m,'tennis',m.side_a_entry_id)
   const before=await snapshot(ctx)
   const definitions=async()=>(await ctx.db.query("select oid::regprocedure::text as signature,pg_get_functiondef(oid) as body,proowner,proacl::text from pg_proc where pronamespace='public'::regnamespace order by oid")).rows
-  const functions=await definitions()
+  // Later migrations (bracket_fixes) replaced these generators, so the
+  // historical patch is compared with its own first application.
+  let functions
   const migration=await readFile(new URL('../supabase/upgrades/20260905205404_fix_knockout_byes.sql',import.meta.url),'utf8')
   for(let pass=0;pass<2;pass++){
     await ctx.db.exec(migration)
     assert.deepEqual(await snapshot(ctx),before)
-    assert.deepEqual(await definitions(),functions)
+    if(pass===0)functions=await definitions()
+    else assert.deepEqual(await definitions(),functions)
     const checks=await ctx.db.exec(await readFile(new URL('../supabase/checks/knockout_byes.sql',import.meta.url),'utf8'))
     assert.equal(checks[0].rows.length,3)
     assert.ok(checks[0].rows.every(r=>r.passed===true),JSON.stringify(checks[0].rows))

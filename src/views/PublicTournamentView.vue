@@ -14,8 +14,8 @@ import RegistrationForm from '../components/RegistrationForm.vue'
 import RegistrationConditions from '../components/RegistrationConditions.vue'
 import TournamentUnlock from '../components/TournamentUnlock.vue'
 import TournamentMatchList from '../components/TournamentMatchList.vue'
-import { entryMemberNames } from '../lib/entryDisplay'
-import { getSportConfig } from '../lib/sportConfig'
+import { entryDisplayNames } from '../lib/entryDisplay'
+import { categoryLabelKey, getSportConfig } from '../lib/sportConfig'
 import { useNarrowLayout } from '../lib/useNarrowLayout'
 import { useHeaderTitle } from '../lib/headerTitle'
 import { onTabKeydown } from '../lib/tabNavigation'
@@ -27,7 +27,8 @@ import { registrationDisplayState, closedReasonKey } from '../lib/registrationRu
 import { currentPlatform, hasVenue, venueRouteLinks } from '../lib/venue'
 import { effectiveSchedule, timezoneOf } from '../lib/schedule'
 import { clearAccessToken, isAccessExpiredError, readAccessToken, setRobotsMeta, storeAccessToken, visibilityOf } from '../lib/access'
-import { statusBadgeClass } from '../lib/tournamentStatus'
+import { displayStatus, statusBadgeClass } from '../lib/tournamentStatus'
+import TournamentChampion from '../components/TournamentChampion.vue'
 
 const props = defineProps({
   slug: {
@@ -72,6 +73,8 @@ provide('matchScheduleView', computed(() => ({
 const nowTick = ref(Date.now())
 let nowTimer = null
 const regState = computed(() => registrationDisplayState(registration.value, nowTick.value, tournament.value))
+// Past the deadline the badge says "Registration closed", like the form below it.
+const badgeStatus = computed(() => (regState.value.deadlinePassed && tournament.value?.status === 'registration_open' ? 'registration_closed' : displayStatus(tournament.value, nowTick.value)))
 const isRoundRobin = computed(() => tournament.value?.format === 'round_robin')
 const isGroupsPlayoff = computed(() => tournament.value?.format === 'groups_playoff')
 const isDoubleElim = computed(() => tournament.value?.format === 'double_elimination')
@@ -181,12 +184,13 @@ function teamLabel(entryId) {
   if (!entryId) {
     return t('bracket.tbd')
   }
-  const names = entryMemberNames(entriesMap.value[entryId])
+  const names = entryDisplayNames(entriesMap.value[entryId])
   return names.length ? names.join(' / ') : t('bracket.tbd')
 }
 
 
-const SPORT_ICONS = { tennis: '🎾', padel: '🏸', football: '⚽' }
+// No emoji exists for padel (the racket one is badminton): it gets the neutral trophy.
+const SPORT_ICONS = { tennis: '🎾', football: '⚽' }
 const heroIcon = computed(() => SPORT_ICONS[tournament.value?.sport] || '🏆')
 const heroChips = computed(() => {
   if (!tournament.value) return []
@@ -194,7 +198,8 @@ const heroChips = computed(() => {
     t(`sport.${tournament.value.sport}`),
     t(`tournamentFormat.${tournament.value.format}`),
   ]
-  if (sportCfg.value.supportsCategory) chips.push(t(`tournament.${tournament.value.category}`))
+  const category = categoryLabelKey(tournament.value.sport, tournament.value.category)
+  if (category) chips.push(t(category))
   // The count lives in the "Participants (N)" tab and the entries card; a chip
   // here only repeated it.
   return chips
@@ -452,8 +457,8 @@ onBeforeUnmount(() => {
         <div class="pub-hero__body">
           <div class="pub-hero__title-row">
             <h1 class="page-title" style="margin: 0">{{ tournament.name }}</h1>
-            <span class="badge" :class="statusBadgeClass(tournament.status)">
-              {{ t(`tournament.${tournament.status}`) }}
+            <span class="badge" :class="statusBadgeClass(badgeStatus)">
+              {{ t(`tournament.${badgeStatus}`) }}
             </span>
             <span v-if="liveMatchCount" class="badge badge--live pub-live-badge" :title="t('tournament.liveNowHint', { n: liveMatchCount })">
               {{ t('tournament.liveNow', { n: liveMatchCount }) }}
@@ -494,6 +499,14 @@ onBeforeUnmount(() => {
           </div>
         </div>
       </section>
+
+      <TournamentChampion
+        :format="tournament.format"
+        :status="tournament.status"
+        :matches="matches"
+        :standings="standings"
+        :entries-map="entriesMap"
+      />
 
       <details v-if="rulesRows.length" class="card pub-rules">
         <summary class="pub-rules__summary">
@@ -620,6 +633,7 @@ onBeforeUnmount(() => {
           <TournamentMatchList
             :format="tournament?.format"
             :matches="matches"
+            :groups="groups"
             :sets-by-match="setsByMatch"
             :entries-map="entriesMap"
             :live-scores-by-match="liveScoresByMatch"
@@ -665,7 +679,20 @@ onBeforeUnmount(() => {
             :live-scores-by-match="liveScoresByMatch"
             @view-live="openPublicLive"
           />
-        </div>      </template>
+        </div>
+        <!-- Court and time of every tour: the cross table has no room for the published schedule. -->
+        <div v-if="matches.length" class="card" style="margin-top: var(--space-4)">
+          <TournamentMatchList
+            :format="tournament?.format"
+            :matches="matches"
+            :groups="groups"
+            :sets-by-match="setsByMatch"
+            :entries-map="entriesMap"
+            :live-scores-by-match="liveScoresByMatch"
+            @view-live="openPublicLive"
+          />
+        </div>
+      </template>
 
       <template v-else-if="isGroupsPlayoff">
         <div v-if="groups.length" class="card">

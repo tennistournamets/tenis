@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { createTimeoutFetch } from './fetchTimeout'
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -14,4 +15,5 @@ export const supabase = createClient(supabaseUrl ?? '', supabaseAnonKey ?? '', {
     autoRefreshToken: true,
     detectSessionInUrl: true,
   },
+  global: { fetch: createTimeoutFetch((...args) => fetch(...args)) },
 })
