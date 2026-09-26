@@ -53,7 +53,8 @@ export const SERVER_ERRORS = [
   [/^(Manual order must contain unique approved entries|Participant does not belong to the approved entries|No groups found|Match( .*)? not found|Tournament not found)/, 'serverErrors.staleData'],
   ['A match cannot contain the same participant twice', 'serverErrors.sameParticipantTwice'],
   // Scores and live
-  ['Scoring rules are locked', 'tennisRules.locked'],
+  [/^Scoring rules are locked/, 'tennisRules.locked'],
+  [/^(Invalid tiebreak target|Tiebreak score|Tiebreak scores must|Too many sets|Each set must be|Set index)/, 'tennisRules.invalidScore'],
   [/^Invalid set or tiebreak/, 'tennisRules.invalidScore'],
   [/^Only the final entered set/, 'tennisRules.partialLast'],
   [/^No further sets/, 'tennisRules.matchOver'],

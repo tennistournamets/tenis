@@ -25,6 +25,8 @@ test('backlog D1 messages are translated, never shown raw', () => {
     'Tournament is private': 'serverErrors.tournamentPrivate',
     'All group matches must be finished first': 'serverErrors.groupsUnfinished',
     'Scoring rules are locked': 'tennisRules.locked',
+    'Scoring rules are locked after the tournament starts or scores exist': 'tennisRules.locked',
+    'Too many sets for this match format': 'tennisRules.invalidScore',
     'canceling statement due to statement timeout': 'serverErrors.timeout',
     'TypeError: Failed to fetch': 'serverErrors.network',
     'Load failed': 'serverErrors.network',
