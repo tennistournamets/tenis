@@ -151,9 +151,73 @@ test('changing the password or the mode revokes every token; expired tokens and 
   const locked = await unlockResult(t, 'new-secret')
   assert.deepEqual([locked.ok, locked.error], [false, 'access.locked'])
   assert.ok(locked.locked_until)
-  await ctx.db.query('update tournament_unlock_attempts set locked_until=now()-interval \'1 second\' where tournament_id=$1', [t.id])
+  await ctx.db.query('update tournament_unlock_client_attempts set locked_until=now()-interval \'1 second\' where tournament_id=$1', [t.id])
   assert.ok((await unlock(t, 'new-secret')).token)
-  assert.equal((await ctx.db.query('select count(*)::int n from tournament_unlock_attempts where tournament_id=$1', [t.id])).rows[0].n, 0)
+  // A successful unlock clears this browser's counter; the address keeps its own.
+  assert.deepEqual((await ctx.db.query('select failed_count from tournament_unlock_client_attempts where tournament_id=$1', [t.id])).rows.map(r => r.failed_count), [11])
+})
+
+// PostgREST hands the request headers to SQL as one JSON setting.
+async function fromClient(headers, fn) {
+  await ctx.db.query("select set_config('request.headers',$1,false)", [JSON.stringify(headers)])
+  try { return await fn() } finally { await ctx.db.query("select set_config('request.headers','',false)") }
+}
+const unlockFrom = (t, password, ip, client) => fromClient({ 'x-forwarded-for': `${ip}, 10.0.0.1` }, async () =>
+  (await asActor(ctx, 'anon', 'select unlock_tournament($1,$2,$3) r', [t.id, password, client])).rows[0].r)
+
+test('a visitor guessing the password is locked out alone; the page stays open for everyone else', async () => {
+  const t = await protectedTournament()
+  for (let i = 0; i < 10; i++) assert.equal((await unlockFrom(t, 'guess', '203.0.113.5', 'attacker')).error, 'access.wrongPassword')
+  const blocked = await unlockFrom(t, 'court-2026', '203.0.113.5', 'attacker')
+  assert.deepEqual([blocked.ok, blocked.error], [false, 'access.locked'])
+  // Another visitor, and another browser behind the same address, still get in.
+  assert.equal((await unlockFrom(t, 'court-2026', '198.51.100.7', 'guest')).ok, true)
+  assert.equal((await unlockFrom(t, 'court-2026', '203.0.113.5', 'neighbour')).ok, true)
+  // Rotating the browser id does not help: the address alone locks after 30 failures.
+  for (let i = 0; i < 20; i++) await unlockFrom(t, 'guess', '203.0.113.5', `rotated-${i}`)
+  assert.equal((await unlockFrom(t, 'court-2026', '203.0.113.5', 'fresh-browser')).error, 'access.locked')
+  assert.equal((await unlockFrom(t, 'court-2026', '198.51.100.8', 'other')).ok, true)
+  // Only hashes are stored: neither the address nor the browser id can be read back.
+  const rows = (await ctx.db.query('select client_hash from tournament_unlock_client_attempts where tournament_id=$1', [t.id])).rows
+  assert.ok(rows.length > 0)
+  for (const { client_hash } of rows) assert.match(client_hash, /^[0-9a-f]{64}$/)
+  assert.equal(JSON.stringify(rows).includes('203.0.113.5') || JSON.stringify(rows).includes('attacker'), false)
+  await assert.rejects(asActor(ctx, 'anon', 'select * from tournament_unlock_client_attempts'), /permission denied/)
+  await assert.rejects(asActor(ctx, 'owner', 'select * from tournament_unlock_client_attempts'), /permission denied/)
+  // A new password starts every counter from zero.
+  await setPassword(t, 'court-2027')
+  assert.equal((await unlockFrom(t, 'court-2027', '203.0.113.5', 'attacker')).ok, true)
+})
+
+test('the client address comes from the proxy headers; older two-argument calls keep working', async () => {
+  const ip = headers => fromClient(headers, async () => (await ctx.db.query('select request_client_ip() ip')).rows[0].ip)
+  assert.equal(await ip({ 'x-forwarded-for': '192.0.2.1, 10.0.0.1' }), '192.0.2.1')
+  assert.equal(await ip({ 'x-forwarded-for': '192.0.2.1', 'cf-connecting-ip': '192.0.2.9' }), '192.0.2.9')
+  assert.equal(await ip({ 'x-real-ip': '192.0.2.4' }), '192.0.2.4')
+  assert.equal(await ip({}), '')
+  assert.equal((await ctx.db.query('select request_client_ip() ip')).rows[0].ip, '')
+  await assert.rejects(asActor(ctx, 'anon', 'select request_client_ip()'), /permission denied/)
+  const t = await protectedTournament()
+  const named = (await asActor(ctx, 'anon', 'select unlock_tournament(p_slug => $1, p_password => $2) r', [t.id, 'court-2026'])).rows[0].r
+  assert.equal(named.ok, true)
+  const signatures = (await ctx.db.query("select p.oid::regprocedure::text s from pg_proc p where p.proname='unlock_tournament'")).rows.map(r => r.s)
+  assert.deepEqual(signatures, ['unlock_tournament(text,text,text)'])
+})
+
+test('the tournament-wide limit only slows attempts down for a minute, it never locks the page for long', async () => {
+  const t = await protectedTournament()
+  // Sixty failures from sixty addresses within one minute: no visitor is locked on its own.
+  for (let i = 0; i < 60; i++) assert.equal((await unlockFrom(t, 'guess', `198.18.0.${i}`, 'bot')).error, 'access.wrongPassword')
+  const slowed = await unlockFrom(t, 'court-2026', '198.51.100.20', 'guest')
+  assert.deepEqual([slowed.ok, slowed.error], [false, 'access.rateLimited'])
+  const wait = new Date(slowed.retry_at).getTime() - Date.now()
+  assert.ok(wait > 0 && wait <= 61_000, `retry in ${wait} ms`)
+  // Once the window is over the right password works again.
+  await ctx.db.query("update tournament_unlock_attempts set window_started_at=now()-interval '2 minutes', locked_until=now()-interval '1 minute' where tournament_id=$1", [t.id])
+  assert.equal((await unlockFrom(t, 'court-2026', '198.51.100.20', 'guest')).ok, true)
+  // A failure after the window starts a new one instead of extending the limit.
+  assert.equal((await unlockFrom(t, 'guess', '198.51.100.21', 'late')).error, 'access.wrongPassword')
+  assert.equal((await ctx.db.query('select failed_count from tournament_unlock_attempts where tournament_id=$1', [t.id])).rows[0].failed_count, 1)
 })
 
 test('older is_public writes keep the password mode hidden; the forward chain replays cleanly', async () => {
