@@ -159,28 +159,80 @@ export function scoringError(message, t) {
   return errorMessage(message, t, empty ? 'scoringFlow.unavailable' : 'errors.generic')
 }
 
-// Sets each side has clearly won in the typed rows, and how many a win needs.
-// Deliberately lenient (more games and at least the set target, or the match
-// tie-break target): it only answers "is there obviously no winner yet?" so the
-// form can explain itself; the server still validates the exact score.
+const num = value => (blank(value) ? null : Number(value))
+
+/**
+ * One typed set against its rule, like tennis_set_result in SQL: 1 — side A
+ * won it, 2 — side B, 0 — still open, -1 — impossible (8:6 with a tie-break at
+ * 6:6, 6:6 and a finished tie-break typed as 7:6 is settled first), null — not
+ * entered.
+ */
+export function setResult(typed, rule) {
+  const row = settleTiebreakGames(typed, rule)
+  const [a, b, ta, tb] = [row.side_a_games, row.side_b_games, row.side_a_tiebreak, row.side_b_tiebreak].map(num)
+  if (rule.kind === 'match_tiebreak') {
+    if (ta == null && tb == null) return null
+    if (ta == null || tb == null) return -1
+    return raceResult(ta, tb, rule.target, rule.margin)
+  }
+  if (a == null && b == null && ta == null && tb == null) return null
+  if (a == null || b == null || (ta == null) !== (tb == null) || [a, b, ta, tb].some(v => v != null && (!Number.isInteger(v) || v < 0))) return -1
+  const at = rule.at
+  let result
+  if (at != null && Math.max(a, b) === at + 1 && Math.min(a, b) === at) result = a > b ? 1 : 2
+  else if (at != null && Math.max(a, b) > at + 1) return -1
+  else {
+    result = raceResult(a, b, rule.games_to, 2)
+    if (at != null && Math.max(a, b) > at && result === 0) return -1
+    if (at != null && Math.min(a, b) >= at && result !== 0) return -1
+  }
+  if (ta != null) {
+    if (at == null) return -1
+    const tbResult = raceResult(ta, tb, rule.target, rule.margin)
+    if (a === at && b === at) { if (tbResult !== 0) return -1 }
+    else if (Math.max(a, b) === at + 1 && Math.min(a, b) === at) { if (tbResult !== result) return -1 }
+    else return -1
+  }
+  return result
+}
+
+/**
+ * The typed match as the server will judge it: sets in order without gaps,
+ * each possible under the rules, only the last one unfinished, nothing after
+ * the deciding set. `problem` names the first reason there is no result yet:
+ * 'invalidScore', 'setOrder', 'partialLast', 'matchOver' or 'needWinner'.
+ */
+export function matchScoreCheck(rows = [], config = {}, setFormat = 'best_of_3') {
+  const required = setFormat === 'best_of_5' ? 3 : 2
+  const wins = { a: 0, b: 0 }
+  let gap = false
+  let open = false
+  for (const typed of [...rows].sort((x, y) => x.set_index - y.set_index)) {
+    const result = setResult(typed, ruleForSet(config, typed.set_index, setFormat))
+    if (result === null) { gap = true; continue }
+    if (wins.a >= required || wins.b >= required) return { winner: false, problem: 'matchOver', ...wins, required }
+    if (gap) return { winner: false, problem: 'setOrder', ...wins, required }
+    if (open) return { winner: false, problem: 'partialLast', ...wins, required }
+    if (result === -1) return { winner: false, problem: 'invalidScore', ...wins, required }
+    if (result === 0) { open = true; continue }
+    wins[result === 1 ? 'a' : 'b'] += 1
+  }
+  const winner = !open && (wins.a >= required || wins.b >= required)
+  return { winner, problem: winner ? null : 'needWinner', ...wins, required }
+}
+
+// Sets each side has won in the typed rows (only sets that are complete and
+// possible under the rules), and how many a win needs.
 export function decidedSets(rows = [], config = {}, setFormat = 'best_of_3') {
   const wins = { a: 0, b: 0 }
   for (const typed of rows) {
-    const rule = ruleForSet(config, typed.set_index, setFormat)
-    const row = settleTiebreakGames(typed, rule)
-    const [a, b] = rule.kind === 'match_tiebreak'
-      ? [row.side_a_tiebreak, row.side_b_tiebreak]
-      : [row.side_a_games, row.side_b_games]
-    if (blank(a) || blank(b)) continue
-    const target = rule.kind === 'match_tiebreak' ? rule.target : rule.games_to
-    const [na, nb] = [Number(a), Number(b)]
-    if (Math.max(na, nb) < target || na === nb) continue
-    wins[na > nb ? 'a' : 'b'] += 1
+    const result = setResult(typed, ruleForSet(config, typed.set_index, setFormat))
+    if (result === 1) wins.a += 1
+    if (result === 2) wins.b += 1
   }
   return { ...wins, required: setFormat === 'best_of_5' ? 3 : 2 }
 }
 
 export function hasMatchWinner(rows, config, setFormat) {
-  const { a, b, required } = decidedSets(rows, config, setFormat)
-  return a >= required || b >= required
+  return matchScoreCheck(rows, config, setFormat).winner
 }

@@ -81,6 +81,12 @@ const isTournamentFinished = computed(() => props.tournament.status === 'complet
 const formDisabled = computed(() => settingsSaving.value || props.busy || !props.canManage)
 const structureDisabled = computed(() => isTournamentActive.value || isTournamentFinished.value || formDisabled.value)
 const sportCfg = computed(() => getSportConfig(props.tournament.sport || 'tennis'))
+// Padel keeps the tie-break target of the wizard (7 or 10) in scoring_config.
+const isPadel = computed(() => props.tournament.sport === 'padel')
+const padelTiebreak = computed({
+  get: () => (Number(settingsForm.scoring_config?.tiebreak_to) === 10 ? 10 : 7),
+  set: value => { settingsForm.scoring_config = { ...(settingsForm.scoring_config || {}), tiebreak_to: Number(value) } },
+})
 
 // Секции-аккордеон: по умолчанию раскрыто только «Основное». Состояние живёт в компоненте,
 // свёрнутая секция показывает короткую сводку своих значений.
@@ -107,6 +113,7 @@ const sectionMeta = computed(() => {
     game: joinMeta(
       sportCfg.value.supportsCategory ? t('tournament.' + f.category) : '',
       sportCfg.value.supportsSetFormat && f.set_format ? t('format.' + f.set_format) : '',
+      isPadel.value ? t(padelTiebreak.value === 10 ? 'admin.tiebreakTo10' : 'admin.tiebreakTo7') : '',
     ),
     rules: props.tournament.sport === 'tennis' ? tennisRulesSummary(f.scoring_config, t) : '',
     access: joinMeta(t('tournament.' + f.status), t('access.visibility.' + f.visibility)),
@@ -350,6 +357,13 @@ async function saveTournamentSettings() {
             <select id="adm-format" v-model="settingsForm.set_format" class="input" :disabled="structureDisabled">
               <option value="best_of_3">{{ t('format.best_of_3') }}</option>
               <option value="best_of_5">{{ t('format.best_of_5') }}</option>
+            </select>
+          </div>
+          <div v-if="isPadel" class="form-field">
+            <label for="adm-tiebreak">{{ t('admin.tiebreakTo') }}</label>
+            <select id="adm-tiebreak" v-model.number="padelTiebreak" class="input" :disabled="structureDisabled">
+              <option :value="7">{{ t('admin.tiebreakTo7') }}</option>
+              <option :value="10">{{ t('admin.tiebreakTo10') }}</option>
             </select>
           </div>
         </div>

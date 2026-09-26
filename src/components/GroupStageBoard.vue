@@ -7,6 +7,7 @@ import { formatSetScore } from '../lib/tennisRules'
 import { normalizeTennisState, pointLabel, scoreLine } from '../lib/useTennisScoring'
 import { scheduleSummary } from '../lib/schedule'
 import { roundInGroup } from '../lib/groupsFlow'
+import { completedSetCount } from '../lib/bracketDisplay'
 
 const props = defineProps({
   groups: { type: Array, default: () => [] }, // [{ id, name, standings, rounds }]
@@ -48,10 +49,13 @@ function sideGames(m, side) {
       { key: 'current', value: live.isMatchTiebreak ? live.tiebreakPoints?.[side] ?? 0 : live.games[side], current: true },
     ]
   }
-  return sets(m).map(s => ({
+  const completed = completedSetCount(m)
+  return sets(m).map((s, i) => ({
     key: s.set_index,
     value: s.score_kind === 'match_tiebreak' ? s[`side_${side}_tiebreak`] : s[`side_${side}_games`],
-    won: (s.score_kind === 'match_tiebreak'
+    // A set left open by a stopped live match is the current one, not a won set.
+    current: i >= completed,
+    won: i < completed && (s.score_kind === 'match_tiebreak'
       ? Number(s[`side_${side}_tiebreak`]) > Number(s[`side_${side === 'a' ? 'b' : 'a'}_tiebreak`])
       : Number(s[`side_${side}_games`]) > Number(s[`side_${side === 'a' ? 'b' : 'a'}_games`])),
   }))

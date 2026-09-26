@@ -190,9 +190,27 @@ const nameKey = name => String(name ?? '').trim().replace(/\s+/g, ' ').toLowerCa
 export function entryNamesError(entryType, memberOne, memberTwo, displayName = '') {
   const one = String(memberOne ?? '').trim()
   const two = String(memberTwo ?? '').trim()
+  // A name of spaces only is no name (the server says the same, less clearly).
+  if (!one) return 'registrationRules.errors.nameRequired'
   if (one.length > MEMBER_NAME_MAX || two.length > MEMBER_NAME_MAX || String(displayName ?? '').trim().length > DISPLAY_NAME_MAX) {
     return 'registrationRules.errors.nameTooLong'
   }
   if (entryType === 'doubles' && two && nameKey(one) === nameKey(two)) return 'registrationRules.errors.samePlayer'
+  return null
+}
+
+/**
+ * A typed member whose name (case and spaces ignored) already plays in an
+ * active entry. Organizers are warned, not blocked: two people can share a name.
+ */
+export function sameNameMember(entries = [], names = []) {
+  const typed = names.map(nameKey).filter(Boolean)
+  if (!typed.length) return null
+  for (const entry of entries) {
+    if (!['pending', 'approved', 'waitlisted'].includes(entry.status)) continue
+    for (const member of entry.entry_members || []) {
+      if (typed.includes(nameKey(member.member_name))) return String(member.member_name).trim()
+    }
+  }
   return null
 }

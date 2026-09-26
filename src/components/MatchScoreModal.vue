@@ -95,6 +95,11 @@ function clearScoreDraft() {
   draftRestored.value = false
 }
 useUnsavedChanges(() => dirty.value, () => saving.value, clearScoreDraft)
+// An error describes the score it was raised for; editing the score clears it
+// (a revision conflict stays until the result is reloaded).
+watch([setRows, goals], () => {
+  if (errorText.value && errorText.value !== t('scoringFlow.conflict') && !saving.value) errorText.value = ''
+}, { deep: true })
 watch([setRows, goals], () => {
   if (!draftEnabled.value) return
   if (savedFlash.value || !dirty.value) {

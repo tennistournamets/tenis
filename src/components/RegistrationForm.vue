@@ -152,7 +152,7 @@ async function submit() {
   <form class="card card--elevated stack stack--sm" @submit.prevent="submit">
     <div>
       <h3 class="section-title">{{ t('registrationForm.title') }}</h3>
-      <p v-if="showEntryType" class="muted reg-form__type">{{ isTeamSport ? t('registrationForm.teamNote') : t('registrationForm.doublesNote') }}</p>
+      <p v-if="showEntryType" class="muted reg-form__type">{{ isTeamSport ? t('registrationForm.teamNote') : t(showMemberTwoOptional ? 'registrationForm.doublesRandomNote' : 'registrationForm.doublesNote') }}</p>
       <p class="muted reg-form__legend"><span class="reg-form__req" aria-hidden="true">*</span> {{ t('registrationForm.requiredLegend') }}</p>
     </div>
 

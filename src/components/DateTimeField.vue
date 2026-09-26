@@ -68,6 +68,8 @@ const typed = ref('')
 const shown = computed(() => (editing.value ? typed.value : display.value))
 // A pick in the calendar (or "Now"/clear) while the input has focus replaces the text.
 watch(() => props.modelValue, () => {
+  // A value picked in the calendar clears a previous "required" message.
+  root.value?.querySelector('input')?.setCustomValidity('')
   if (editing.value && parseDateTimeText(typed.value) !== (props.modelValue || '')) typed.value = display.value
 })
 function tooEarly(model) {
@@ -79,6 +81,7 @@ function onFocus() {
   typed.value = display.value
 }
 function onTyped(event) {
+  event.target.setCustomValidity('')
   editing.value = true
   typed.value = event.target.value
   const parsed = parseDateTimeText(typed.value)
@@ -98,6 +101,26 @@ function onEnter(event, isMenuOpen, toggleMenu) {
   if (isMenuOpen) toggleMenu()
 }
 const isDark = computed(() => theme.value === 'dark')
+// The picker's own controls speak the page language, not English.
+const ariaLabels = computed(() => {
+  const dp = key => t(`actions.datePicker.${key}`)
+  const unit = type => dp(type)
+  return {
+    clearInput: t('actions.clear'), calendarIcon: t('actions.pickDateTime'), input: t('actions.pickDateTime'),
+    prevMonth: dp('prevMonth'), nextMonth: dp('nextMonth'), prevYear: dp('prevYear'), nextYear: dp('nextYear'),
+    openMonthsOverlay: dp('openMonths'), openYearsOverlay: dp('openYears'), toggleOverlay: dp('toggleOverlay'), menu: dp('menu'),
+    openTimePicker: dp('openTime'), closeTimePicker: dp('closeTime'), timePicker: dp('timePicker'),
+    incrementValue: type => t('actions.datePicker.increment', { unit: unit(type) }),
+    decrementValue: type => t('actions.datePicker.decrement', { unit: unit(type) }),
+    openTpOverlay: type => t('actions.datePicker.openUnit', { unit: unit(type) }),
+    timeOverlay: type => t('actions.datePicker.openUnit', { unit: unit(type) }),
+    monthPicker: () => dp('openMonths'), yearPicker: () => dp('openYears'),
+  }
+})
+// Native "required" bubbles use the browser language; give them the page's.
+function onInvalid(event) {
+  if (event.target.validity.valueMissing) event.target.setCustomValidity(t('actions.dateTimeRequired'))
+}
 const dpLocale = computed(() => DP_LOCALES[locale.value] || ru)
 const min = computed(() => (typeof props.minDate === 'string' ? parseLocal(props.minDate) || undefined : props.minDate))
 </script>
@@ -119,7 +142,7 @@ const min = computed(() => (typeof props.minDate === 'string' ? parseLocal(props
       auto-apply
       :action-row="{ showNow: true, showPreview: false, nowBtnLabel: t('actions.now') }"
       :placeholder="t('actions.pickDateTime')"
-      :aria-labels="{ clearInput: t('actions.clear'), calendarIcon: t('actions.pickDateTime') }"
+      :aria-labels="ariaLabels"
       @update:model-value="onUpdate"
     >
       <template #dp-input="{ isMenuOpen, toggleMenu, onClear }">
@@ -139,6 +162,7 @@ const min = computed(() => (typeof props.minDate === 'string' ? parseLocal(props
             aria-haspopup="dialog"
             @focus="onFocus"
             @input="onTyped"
+            @invalid="onInvalid"
             @keydown.enter="onEnter($event, isMenuOpen, toggleMenu)"
             @blur="commitTyped"
             @click="toggleMenu"

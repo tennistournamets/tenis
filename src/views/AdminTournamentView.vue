@@ -37,7 +37,7 @@ import { scoringError } from '../lib/tennisRules'
 import { registrationDisplayState, registrationError } from '../lib/registrationRules'
 import { sameForm, cloneForm, matchVersions } from '../lib/formDraft'
 import { useUnsavedChanges, confirmDiscard, withApprovedDeparture } from '../lib/unsavedChanges'
-import { entryDisplayNames, entryMemberNames } from '../lib/entryDisplay'
+import { customDisplayName, entryDisplayNames, entryMemberNames } from '../lib/entryDisplay'
 import { confirmDialog } from '../lib/confirmDialog'
 import { supabase } from '../lib/supabase'
 import { createSnapshotRefresh, subscribeTournament } from '../lib/tournamentSync'
@@ -49,7 +49,7 @@ import { useAuthStore } from '../stores/auth'
 import { useNarrowLayout } from '../lib/useNarrowLayout'
 import { useHeaderTitle } from '../lib/headerTitle'
 import { onTabKeydown as onSurfaceTabKeydown } from '../lib/tabNavigation'
-import { statusBadgeClass } from '../lib/tournamentStatus'
+import { displayStatus, statusBadgeClass } from '../lib/tournamentStatus'
 import { errorMessage } from '../lib/errorMessages'
 import { usePageAlerts } from '../lib/pageAlerts'
 import { pluralParams } from '../lib/plural'
@@ -299,6 +299,8 @@ const canEditScores = computed(() => scoreAccess.value.scores)
 const canUseLiveScoring = computed(() => scoreAccess.value.live)
 const canEditFinalScores = computed(() => scoreAccess.value.final)
 const regState = computed(() => registrationDisplayState(registration.value, Date.now(), tournament.value))
+// Past the deadline an open registration accepts nothing: the badge says closed.
+const badgeStatus = computed(() => (regState.value.deadlinePassed && tournament.value?.status === 'registration_open' ? 'registration_closed' : displayStatus(tournament.value)))
 const showDeadlineHint = computed(() => canManageTournament.value && regState.value.deadlinePassed && tournament.value?.status === 'registration_open')
 const waitlistSeatFree = computed(() => Boolean(registration.value?.capacity) && !registration.value.is_full && waitlistedEntries.value.length > 0)
 // Applicants' contacts: owners and editors only, re-read when the entry list changes.
@@ -1498,8 +1500,8 @@ onBeforeUnmount(() => {
           <div class="admin-tournament-overview__title-block stack stack--sm">
             <div class="admin-tournament-overview__title-row">
               <h1 id="adm-tournament-title" class="page-title">{{ tournament.name }}</h1>
-              <span class="badge" :class="statusBadgeClass(tournament.status)">
-                {{ t(`tournament.${tournament.status}`) }}
+              <span class="badge" :class="statusBadgeClass(badgeStatus)">
+                {{ t(`tournament.${badgeStatus}`) }}
               </span>
             </div>
             <p v-if="tournament.description" class="muted">{{ tournament.description }}</p>
@@ -1697,6 +1699,7 @@ onBeforeUnmount(() => {
 
           <ManualEntryForm
             :tournament="tournament"
+            :entries="entries"
             :busy="actionLoading || settingsSaving"
             :can-manage="canManageTournament"
             @update:busy="actionLoading = $event"
@@ -1724,13 +1727,13 @@ onBeforeUnmount(() => {
             <div v-if="pendingEntries.length" class="entry-list">
               <div v-for="entry in pendingEntries" :key="entry.id" class="participant-item">
                 <span class="entry-avatar">{{ entryInitials(entry) }}</span>
-                <strong class="entry-name">{{ entryLabel(entry) }}<EntryContact :contact="entryContacts[entry.id]" /></strong>
+                <strong class="entry-name">{{ entryLabel(entry) }}<span v-if="customDisplayName(entry)" class="entry-alias">{{ t('admin.shownAs', { name: customDisplayName(entry) }) }}</span><EntryContact :contact="entryContacts[entry.id]" /></strong>
                 <div class="entry-actions">
                   <button
                     class="entry-icon-btn entry-icon-btn--approve"
                     type="button"
                     :disabled="actionLoading"
-                    :aria-label="t('admin.approve')"
+                    :aria-label="t('a11y.entryAction', { action: t('admin.approve'), name: entryLabel(entry) })"
                     :title="t('admin.approve')"
                     @click="updateEntryStatus(entry.id, 'approved')"
                   >
@@ -1740,7 +1743,7 @@ onBeforeUnmount(() => {
                     class="entry-icon-btn entry-icon-btn--reject"
                     type="button"
                     :disabled="actionLoading"
-                    :aria-label="t('admin.reject')"
+                    :aria-label="t('a11y.entryAction', { action: t('admin.reject'), name: entryLabel(entry) })"
                     :title="t('admin.reject')"
                     @click="updateEntryStatus(entry.id, 'rejected')"
                   >
@@ -1762,13 +1765,13 @@ onBeforeUnmount(() => {
               <div class="entry-list">
                 <div v-for="(entry, index) in waitlistedEntries" :key="entry.id" class="participant-item">
                   <span class="entry-avatar" :aria-label="String(index + 1)">{{ index + 1 }}</span>
-                  <strong class="entry-name">{{ entryLabel(entry) }}<EntryContact :contact="entryContacts[entry.id]" /></strong>
+                  <strong class="entry-name">{{ entryLabel(entry) }}<span v-if="customDisplayName(entry)" class="entry-alias">{{ t('admin.shownAs', { name: customDisplayName(entry) }) }}</span><EntryContact :contact="entryContacts[entry.id]" /></strong>
                   <div class="entry-actions">
                     <button
                       class="entry-icon-btn entry-icon-btn--approve"
                       type="button"
                       :disabled="actionLoading"
-                      :aria-label="t('admin.approve')"
+                      :aria-label="t('a11y.entryAction', { action: t('admin.approve'), name: entryLabel(entry) })"
                       :title="t('admin.approve')"
                       @click="updateEntryStatus(entry.id, 'approved')"
                     >
@@ -1778,7 +1781,7 @@ onBeforeUnmount(() => {
                       class="entry-icon-btn entry-icon-btn--reject"
                       type="button"
                       :disabled="actionLoading"
-                      :aria-label="t('admin.reject')"
+                      :aria-label="t('a11y.entryAction', { action: t('admin.reject'), name: entryLabel(entry) })"
                       :title="t('admin.reject')"
                       @click="updateEntryStatus(entry.id, 'rejected')"
                     >
@@ -1797,7 +1800,7 @@ onBeforeUnmount(() => {
               <div class="entry-list rejected-entries__list">
                 <div v-for="entry in rejectedEntries" :key="entry.id" class="participant-item">
                   <span class="entry-avatar">{{ entryInitials(entry) }}</span>
-                  <strong class="entry-name">{{ entryLabel(entry) }}<EntryContact :contact="entryContacts[entry.id]" /></strong>
+                  <strong class="entry-name">{{ entryLabel(entry) }}<span v-if="customDisplayName(entry)" class="entry-alias">{{ t('admin.shownAs', { name: customDisplayName(entry) }) }}</span><EntryContact :contact="entryContacts[entry.id]" /></strong>
                   <button class="btn btn--ghost btn--sm" type="button" :disabled="actionLoading" @click="updateEntryStatus(entry.id, 'pending')">
                     {{ t('mobile.restoreEntry') }}
                   </button>
@@ -1841,7 +1844,7 @@ onBeforeUnmount(() => {
                   <span class="entry-avatars" :class="{ 'entry-avatars--pair': memberInitials(entry).length > 1 }" aria-hidden="true">
                     <span v-for="(initials, i) in memberInitials(entry)" :key="i" class="entry-avatar entry-avatar--ok">{{ initials }}</span>
                   </span>
-                  <strong class="entry-name">{{ entryLabel(entry) }}<EntryContact :contact="entryContacts[entry.id]" /></strong>
+                  <strong class="entry-name">{{ entryLabel(entry) }}<span v-if="customDisplayName(entry)" class="entry-alias">{{ t('admin.shownAs', { name: customDisplayName(entry) }) }}</span><EntryContact :contact="entryContacts[entry.id]" /></strong>
                   <KebabMenu
                     v-if="!isTournamentActive && !isTournamentFinished"
                     :aria-label="t('admin.rowActions', { name: entryLabel(entry) })"
@@ -2732,6 +2735,16 @@ onBeforeUnmount(() => {
   flex: 1;
   min-width: 0;
   font-size: 0.9375rem;
+}
+
+/* The chosen bracket name under the players' names (display_name). */
+.entry-alias {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--muted);
+  overflow-wrap: anywhere;
 }
 
 .entry-actions {

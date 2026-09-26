@@ -4,10 +4,13 @@ import { useI18n } from 'vue-i18n'
 import { scoringFamily } from '../../lib/sportConfig'
 import { useUnsavedChanges } from '../../lib/unsavedChanges'
 import { supabase } from '../../lib/supabase'
-import { entryNamesError, registrationError } from '../../lib/registrationRules'
+import { entryNamesError, registrationError, sameNameMember } from '../../lib/registrationRules'
+import { confirmDialog } from '../../lib/confirmDialog'
 
 const props = defineProps({
   tournament: { type: Object, required: true },
+  // The tournament's entries, to warn about a participant who is already there.
+  entries: { type: Array, default: () => [] },
   busy: Boolean,
   canManage: Boolean,
 })
@@ -86,6 +89,11 @@ async function addEntryManually() {
     addEntryError.value = t('registrationForm.invalidContact')
     return
   }
+
+  // Same name as someone already entered: usually a double click or a second
+  // form, sometimes a namesake. Ask, do not block.
+  const twin = sameNameMember(props.entries, [m1, category === 'doubles' ? m2 : ''])
+  if (twin && !(await confirmDialog(t('admin.addEntrySameName', { name: twin })))) return
 
   actionLoading.value = true
 

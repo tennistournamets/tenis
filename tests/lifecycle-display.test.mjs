@@ -99,6 +99,8 @@ test('entry names: length limits and the same player twice in a pair', () => {
   assert.equal(entryNamesError('doubles', 'Анна Петрова', ' анна   петрова ', ''), 'registrationRules.errors.samePlayer')
   assert.equal(entryNamesError('doubles', 'Анна Петрова', '', ''), null)
   assert.equal(entryNamesError('singles', 'Ann', 'ann', ''), null)
+  // R2-06: a name of spaces is reported as a missing name.
+  for (const type of ['singles', 'doubles']) assert.equal(entryNamesError(type, '   ', '', ''), 'registrationRules.errors.nameRequired')
 })
 
 test('organizer contacts, waitlist and fee rules mirror the server', () => {

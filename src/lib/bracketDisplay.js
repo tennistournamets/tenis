@@ -6,6 +6,16 @@ export function isByeMatch(match) {
     && match.winner_entry_id === (a || b)
 }
 
+/**
+ * Stored sets that are complete. A finished match: all of them. An unfinished
+ * one (live stopped mid-set) counts its sets won in the aggregate, so a partial
+ * 1:0 is the current set, not a set won 1:0.
+ */
+export function completedSetCount(match) {
+  if (match?.status === 'finished') return Infinity
+  return (Number(match?.side_a_score) || 0) + (Number(match?.side_b_score) || 0)
+}
+
 /** A match another match feeds (a semifinal, a lower-bracket round) fills itself from results. */
 export function isFedMatch(matches, matchId) {
   return matches.some(m => m.next_match_id === matchId || m.loser_next_match_id === matchId)

@@ -60,3 +60,14 @@ export function resolveCategory(sport, chosenCategory) {
   const cfg = getSportConfig(sport)
   return cfg.forcedCategory ?? chosenCategory
 }
+
+/**
+ * i18n key of the category worth showing next to a tournament: the picked one
+ * (tennis), or the fixed doubles of padel; null for a team sport, whose entry
+ * is always one team.
+ */
+export function categoryLabelKey(sport, category) {
+  const cfg = getSportConfig(sport)
+  const shown = cfg.supportsCategory ? category : cfg.forcedCategory === 'doubles' ? 'doubles' : null
+  return shown ? `tournament.${shown}` : null
+}
