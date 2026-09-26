@@ -445,6 +445,11 @@ async function loadMatchesAndSets() {
 async function loadTournament() { return loadMatchesAndSets() }
 async function loadEntries() { return loadMatchesAndSets() }
 
+function retryLoad() {
+  if (!tournament.value) errorText.value = ''
+  void loadAll().catch(() => {})
+}
+
 async function loadAll() {
   if (!auth.user || disposed) return
   if (!tournament.value) loading.value = true
@@ -1395,12 +1400,17 @@ onBeforeUnmount(() => {
       <p class="muted">{{ t('actions.loading') }}</p>
     </section>
 
-    <section v-else-if="errorText && !tournament" class="card">
+    <section v-else-if="errorText && !tournament" class="card stack stack--sm" role="alert">
       <p class="error-text">{{ errorText }}</p>
+      <p class="muted">{{ t('sync.loadFailedHint') }}</p>
+      <div><button class="btn btn--secondary" type="button" @click="retryLoad">{{ t('sync.retry') }}</button></div>
     </section>
 
     <template v-else-if="tournament && !loading">
-      <p v-if="syncFailed" class="alert alert--error" role="status">{{ t('sync.unavailable') }}</p>
+      <div v-if="syncFailed" class="alert alert--error" role="status">
+        {{ t('sync.unavailable') }}
+        <button class="btn btn--secondary btn--sm" type="button" @click="retryLoad">{{ t('sync.retry') }}</button>
+      </div>
       <div v-if="errorText" class="alert alert--error admin-page-alert" role="alert">
         {{ errorText }}
       </div>

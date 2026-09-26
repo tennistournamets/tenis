@@ -3,7 +3,7 @@ import { test } from 'node:test'
 import { nextTick } from 'vue'
 import { useFormDraft, cloneForm, sameForm } from '../src/lib/formDraft.js'
 import { registerUnsavedForm, hasUnsavedChanges, beforeUnload, confirmLeaveForms, withApprovedDeparture } from '../src/lib/unsavedChanges.js'
-import { confirmState, settleConfirm } from '../src/lib/confirmDialog.js'
+import { confirmDialog, confirmState, settleConfirm } from '../src/lib/confirmDialog.js'
 const initial = { name: 'Cup', public: false, rules: { deciding: 'set', target: 7 } }
 
 test('settings refresh preserves nested input and baseline; conflicts require explicit discard', () => {
@@ -55,9 +55,15 @@ test('route cancellation, confirmation and native reload protect all registered 
     const accepted = confirmLeaveForms(x => x); settleConfirm(true); assert.equal(await accepted, true)
     assert.equal(discarded, 1)
     busy = true; dirty = false
-    assert.equal(await confirmLeaveForms(x => x), false)
+    // A pending save asks instead of blocking silently (a stalled request must not trap the page).
+    const stay = confirmLeaveForms(x => x); assert.equal(confirmState.open, true)
+    assert.equal(confirmState.message, 'drafts.leaveSaving')
+    settleConfirm(false); assert.equal(await stay, false)
+    const leave = confirmLeaveForms(x => x); settleConfirm(true); assert.equal(await leave, true)
     assert.equal(await withApprovedDeparture(() => confirmLeaveForms(x => x)), true)
-    assert.equal(await confirmLeaveForms(x => x), false)
+    // An open confirmation (score correction) is never interrupted.
+    const open = confirmDialog('correction'); assert.equal(await confirmLeaveForms(x => x), false)
+    settleConfirm(false); await open
   } finally { unregister(); settleConfirm(false) }
   assert.equal(hasUnsavedChanges(), false)
   const event = { preventDefault() { this.prevented = true } }; beforeUnload(event)
