@@ -135,14 +135,18 @@ test('six qualifiers from three groups retain group scores across playoff regene
   const originalGroups=await stageRows(t.id,'group')
   const originalSets=(await ctx.db.query('select * from match_sets where match_id=any($1::uuid[]) order by id',[originalGroups.map(m=>m.id)])).rows
   for(let run=0;run<2;run++){
+    // An unplayed playoff may be generated again; a played one only changes through a group correction.
+    await asActor(ctx,'editor','select generate_group_playoff($1)',[t.id])
     await asActor(ctx,'editor','select generate_group_playoff($1)',[t.id])
     const initial=await stageRows(t.id,'winners')
     const qualifiers=initial.filter(m=>m.round_number===1).flatMap(m=>[m.side_a_entry_id,m.side_b_entry_id].filter(Boolean))
     assert.equal(qualifiers.length,6)
     checkDraw(initial,qualifiers,'six qualifiers')
     assert.equal((await complete(t.id,'winners','tennis',qualifiers[0])).played,5)
+    await assertDeniedUnchanged(ctx,'editor','select generate_group_playoff($1)',[t.id],/groupsFlow\.playoffStarted/)
     assert.deepEqual(await stageRows(t.id,'group'),originalGroups)
     assert.deepEqual((await ctx.db.query('select * from match_sets where match_id=any($1::uuid[]) order by id',[originalGroups.map(m=>m.id)])).rows,originalSets)
+    await ctx.db.query("delete from matches where tournament_id=$1 and stage='winners'",[t.id])
   }
   await drop(t.id)
 })
