@@ -453,7 +453,7 @@ async function saveTournamentSettings() {
     </div>
 
     <footer class="admin-settings-card__footer" :class="{ 'admin-settings-card__footer--dirty': canSaveSettings && !settingsConflict }">
-      <span class="admin-settings-card__footer-status" role="status">{{ canSaveSettings && !settingsConflict ? t('drafts.unsaved') : t('admin.noChanges') }}</span>
+      <span class="admin-settings-card__footer-status" role="status">{{ canSaveSettings ? t('drafts.unsaved') : t('admin.noChanges') }}</span>
       <button v-if="hasTournamentSettingsChanges && !settingsConflict" class="btn btn--ghost" type="button" :disabled="settingsSaving || busy" @click="reloadSettings">{{ t('drafts.reload') }}</button>
       <button
         class="btn btn--primary"

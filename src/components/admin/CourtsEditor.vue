@@ -53,14 +53,20 @@ function isDirtyRow(index) {
 }
 
 /** Empty, too long or repeated names are the same three rules the RPC enforces. */
-function rowError(index) {
+function rowProblem(index) {
   const row = draft.value[index]
   if (!row) return ''
   const name = row.name.trim()
-  if (!name || name.length > 60) return t('schedule.errors.invalidCourts')
+  if (!name) return 'courtNameEmpty'
+  if (name.length > 60) return 'courtNameTooLong'
   const clash = draft.value.some((other, i) => i !== index && other.name.trim().toLowerCase() === name.toLowerCase())
-  return clash ? t('schedule.errors.invalidCourts') : ''
+  return clash ? 'courtNameDuplicate' : ''
 }
+function rowError(index) {
+  return rowProblem(index) ? t('schedule.errors.invalidCourts') : ''
+}
+// The short label under the row names the actual problem (a long name is not "empty or repeated").
+const rowLabel = index => t(`schedule.errors.${rowProblem(index)}`)
 
 /** One message for the list: only an edited row can be invalid. */
 const listError = computed(() => {
@@ -191,7 +197,7 @@ function revertRow(index) {
         <div class="court-card__foot">
           <!-- Saving is offered only while the row differs from the stored court. -->
           <template v-if="isDirtyRow(index)">
-            <span class="court-card__keys" :class="{ 'court-card__keys--error': rowError(index) }">{{ rowError(index) ? t('schedule.errors.courtName') : t('schedule.courtKeysHint') }}</span>
+            <span class="court-card__keys" :class="{ 'court-card__keys--error': rowError(index) }">{{ rowError(index) ? rowLabel(index) : t('schedule.courtKeysHint') }}</span>
             <button
               class="court-card__save"
               type="button"
