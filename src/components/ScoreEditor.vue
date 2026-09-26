@@ -2,7 +2,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-import { entryMemberNames } from '../lib/entryDisplay'
+import { entryDisplayNames } from '../lib/entryDisplay'
 import { isByeMatch } from '../lib/bracketDisplay'
 import { supabase } from '../lib/supabase'
 import { useUnsavedChanges } from '../lib/unsavedChanges'
@@ -10,6 +10,7 @@ import { saveMatchResult } from '../lib/saveMatchResult'
 import { confirmDialog } from '../lib/confirmDialog'
 import TennisSetInputs from './TennisSetInputs.vue'
 import { knockoutTotals, matchRoundName } from '../lib/roundLabels'
+import { groupIndexOfRound, groupNamesById, groupRoundLabel, roundInGroup } from '../lib/groupsFlow'
 import { scoreRows, buildSetPayload, scoringError, hasMatchWinner } from '../lib/tennisRules'
 
 const props = defineProps({
@@ -46,6 +47,9 @@ const props = defineProps({
     type: Object,
     default: () => ({}),
   },
+  // Groups + playoff: group letters in round headings, "Playoff" for its knockout.
+  groups: { type: Array, default: () => [] },
+  format: { type: String, default: '' },
 })
 
 const emit = defineEmits(['saved', 'start-live'])
@@ -137,11 +141,14 @@ const matchesByRound = computed(() => {
   for (const m of visibleMatches.value) {
     if (!filterMatch(m)) continue
     const key = `${m.stage}:${m.round_number}`
-    if (!map.has(key)) map.set(key, { key, stage: m.stage, roundNumber: m.round_number, matches: [] })
+    if (!map.has(key)) map.set(key, { key, stage: m.stage, roundNumber: m.round_number, groupId: m.group_id, matches: [] })
     map.get(key).matches.push(m)
   }
+  // Group rounds carry a per-group offset: order them tour by tour, A before B.
+  const roundOrder = group => group.stage === 'group'
+    ? roundInGroup(group.roundNumber) * 1000 + groupIndexOfRound(group.roundNumber) : group.roundNumber
   return [...map.values()]
-    .sort((a, b) => (stageOrder[a.stage] ?? 9) - (stageOrder[b.stage] ?? 9) || a.roundNumber - b.roundNumber)
+    .sort((a, b) => (stageOrder[a.stage] ?? 9) - (stageOrder[b.stage] ?? 9) || roundOrder(a) - roundOrder(b))
     .map(group => ({ ...group, matches: group.matches.sort((a, b) => a.match_number - b.match_number || a.id.localeCompare(b.id)) }))
 })
 
@@ -149,6 +156,13 @@ const roundTotals = computed(() => knockoutTotals(props.matches))
 function roundLabel(roundNumber, stage) {
   if (!roundNumber) return ''
   return matchRoundName({ stage, round_number: roundNumber }, roundTotals.value, t)
+}
+const groupNames = computed(() => groupNamesById(props.groups))
+function roundHeading(group) {
+  if (group.stage === 'grand_final') return t('scoringFlow.stage_grand_final')
+  if (group.stage === 'group') return groupRoundLabel({ group_id: group.groupId, round_number: group.roundNumber }, groupNames.value, t)
+  const stage = group.stage === 'winners' && props.format === 'groups_playoff' ? t('admin.playoff') : t(`scoringFlow.stage_${group.stage}`)
+  return `${multipleStages.value ? `${stage} · ` : ''}${roundLabel(group.roundNumber, group.stage)}`
 }
 
 const isDoubles = computed(() => props.category === 'doubles')
@@ -158,7 +172,7 @@ function teamLabel(entryId, match) {
   if (!entryId) {
     return t(isByeMatch(match) ? 'bracket.bye' : 'bracket.tbd')
   }
-  const names = entryMemberNames(props.entriesMap[entryId])
+  const names = entryDisplayNames(props.entriesMap[entryId])
   return names.length ? names.join(' / ') : t('bracket.tbd')
 }
 
@@ -268,7 +282,7 @@ async function save(match) {
 
     <section v-for="group in matchesByRound" :key="group.key" class="se-round">
       <h3 class="se-round__title">
-        <span>{{ group.stage === 'grand_final' ? t('scoringFlow.stage_grand_final') : `${multipleStages ? `${t(`scoringFlow.stage_${group.stage}`)} · ` : ''}${roundLabel(group.roundNumber, group.stage)}` }}</span>
+        <span>{{ roundHeading(group) }}</span>
         <span class="se-count">{{ group.matches.length }}</span>
       </h3>
 

@@ -47,6 +47,9 @@ test('groups and their tables are replaced together on rebuild, with no orphan s
  await asActor(ctx,'owner','select update_match_sets($1,$2,$3)',[m.id,winningSets,m.score_revision])
  const s2=await state(t.id,'anon')
  assert.equal(s2.group_standings[m.group_id].reduce((n,r)=>n+r.played,0),2)
+ // A running tournament keeps its results; a stopped one may be rebuilt.
+ await assert.rejects(asActor(ctx,'owner','select generate_groups($1,$2)',[t.id,2]),/groupsFlow\.regenerateLocked/)
+ await ctx.db.query("update tournaments set status='registration_closed' where id=$1",[t.id])
  await asActor(ctx,'owner','select generate_groups($1,$2)',[t.id,2])
  const s3=await state(t.id,'anon')
  assert.ok(s3.groups.every(g=>!s1.groups.some(old=>old.id===g.id)))

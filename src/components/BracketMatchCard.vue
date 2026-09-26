@@ -3,7 +3,7 @@ import { computed, inject, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { scheduleSummary } from '../lib/schedule'
 
-import { entryMemberNames } from '../lib/entryDisplay'
+import { entryDisplayNames } from '../lib/entryDisplay'
 import { isByeMatch } from '../lib/bracketDisplay'
 import { formatSetScore } from '../lib/tennisRules'
 import { pointLabel, scoreLine } from '../lib/useTennisScoring'
@@ -55,7 +55,7 @@ function memberLines(entryId) {
   if (!entryId) {
     return [t(isByeMatch(props.match) ? 'bracket.bye' : 'bracket.tbd')]
   }
-  const names = entryMemberNames(props.entriesMap[entryId])
+  const names = entryDisplayNames(props.entriesMap[entryId])
   return names.length ? names : [t('bracket.tbd')]
 }
 

@@ -10,6 +10,7 @@ import { accessMessages } from './access'
 import { lifecycleMessages } from './lifecycle'
 import { serverErrorMessages } from './serverErrors'
 import { pluralMessages } from './plurals'
+import { groupsFlowMessages } from './groupsFlow'
 
 export const messages = {
   ru: {
@@ -70,6 +71,7 @@ export const messages = {
     lifecycle: lifecycleMessages.ru,
     serverErrors: serverErrorMessages.ru,
     plural: pluralMessages.ru,
+    groupsFlow: groupsFlowMessages.ru,
     app: {
       title: 'Bracketa',
       subtitle: 'Организация турниров, жеребьёвка и live-сетка',
@@ -937,6 +939,7 @@ export const messages = {
     lifecycle: lifecycleMessages.en,
     serverErrors: serverErrorMessages.en,
     plural: pluralMessages.en,
+    groupsFlow: groupsFlowMessages.en,
     app: {
       title: 'Bracketa',
       subtitle: 'Run tournaments, draws, and live brackets',
@@ -1804,6 +1807,7 @@ export const messages = {
     lifecycle: lifecycleMessages.lt,
     serverErrors: serverErrorMessages.lt,
     plural: pluralMessages.lt,
+    groupsFlow: groupsFlowMessages.lt,
     app: {
       title: 'Bracketa',
       subtitle: 'Turnyrai, burtai ir gyvas tinklelis',

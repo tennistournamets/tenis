@@ -37,7 +37,7 @@ import { scoringError } from '../lib/tennisRules'
 import { registrationDisplayState, registrationError } from '../lib/registrationRules'
 import { sameForm, cloneForm, matchVersions } from '../lib/formDraft'
 import { useUnsavedChanges, confirmDiscard, withApprovedDeparture } from '../lib/unsavedChanges'
-import { entryMemberNames } from '../lib/entryDisplay'
+import { entryDisplayNames, entryMemberNames } from '../lib/entryDisplay'
 import { confirmDialog } from '../lib/confirmDialog'
 import { supabase } from '../lib/supabase'
 import { createSnapshotRefresh, subscribeTournament } from '../lib/tournamentSync'
@@ -56,6 +56,7 @@ import { pluralParams } from '../lib/plural'
 import { bracketPlan, groupCountOptions, groupPlan, roundRobinPlan } from '../lib/formatPlan'
 import { isFedMatch, swapDraftSlots } from '../lib/bracketDisplay'
 import { readDrawMode, writeDrawMode } from '../lib/drawModePreference'
+import { advanceOptions, changesField, groupMatchProgress, groupsError, playoffPreviewItems, rosterMismatch } from '../lib/groupsFlow'
 
 const props = defineProps({
   id: {
@@ -106,6 +107,8 @@ const scheduleMatch = ref(null)
 const groups = ref([])
 const groupStandings = ref({}) // group_id -> standings rows
 const groupCount = ref(2)
+// How many leave each group; sent with generate_groups, which stores it.
+const groupAdvance = ref(2)
 const matchSets = ref([])
 const liveScores = ref([])
 const admins = ref([])
@@ -271,15 +274,19 @@ function teamLabel(entryId) {
   if (!entry) {
     return t('bracket.tbd')
   }
-  return entryLabel(entry)
+  // Matches show the chosen bracket name, like the group tables do.
+  return entryDisplayNames(entry).join(' / ') || entryLabel(entry)
 }
 
 const showPublicShareActions = computed(() => {
   return tournament.value?.status !== 'draft'
 })
 
+// Matches must cover exactly the approved field (every format): an approval,
+// rejection or reopening after generation leaves them stale until regenerated.
+const rosterState = computed(() => rosterMismatch(approvedEntries.value, matches.value))
 const canStartTournament = computed(
-  () => tournament.value?.status === 'registration_closed' && matches.value.length > 0,
+  () => tournament.value?.status === 'registration_closed' && matches.value.length > 0 && !rosterState.value.stale,
 )
 const isTournamentActive = computed(() => tournament.value?.status === 'in_progress')
 const isTournamentFinished = computed(() => tournament.value?.status === 'completed')
@@ -326,6 +333,7 @@ const showStartButton = computed(() => {
 const startBlockReason = computed(() => {
   if (canStartTournament.value) return null
   if (tournament.value?.status !== 'registration_closed') return t('admin.startNeedRegClosed')
+  if (matches.value.length && rosterState.value.stale) return t('groupsFlow.startNeedRegenerate')
   return t('admin.startNeedBracket')
 })
 
@@ -507,6 +515,9 @@ async function updateEntryStatus(entryId, status) {
   errorText.value = ''
   noticeText.value = ''
   try {
+    const entry = entries.value.find(e => e.id === entryId)
+    if (hasBracket.value && entry && changesField(entry.status, status)
+      && !(await confirmDialog(t('groupsFlow.rosterChangeConfirm')))) return
     // The capacity trigger rejects an approval beyond the limit with registration.full.
     const { error } = await supabase.from('entries').update({ status }).eq('id', entryId)
     if (error) throw error
@@ -523,7 +534,8 @@ async function approveAllPending() {
   }
   actionLoading.value = true
   try {
-    if (!(await confirmDialog(t('admin.approveAllConfirm')))) return
+    const confirmText = hasBracket.value ? `${t('admin.approveAllConfirm')}\n\n${t('groupsFlow.rosterChangeConfirm')}` : t('admin.approveAllConfirm')
+    if (!(await confirmDialog(confirmText))) return
     errorText.value = ''
     noticeText.value = ''
     const { data, error } = await supabase.rpc('approve_pending_entries', { p_tournament_id: props.id })
@@ -641,8 +653,15 @@ const groupOptions = computed(() => groupCountOptions(approvedEntries.value.leng
 watch(groupOptions, (options) => {
   if (options.length && !options.includes(Number(groupCount.value))) groupCount.value = options[0]
 }, { immediate: true })
+const advanceChoices = computed(() => advanceOptions(approvedEntries.value.length, groupCount.value))
+watch(() => tournament.value?.format_config?.advance_per_group, stored => {
+  if (stored) groupAdvance.value = Number(stored)
+}, { immediate: true })
+watch(advanceChoices, (options) => {
+  if (options.length && !options.includes(Number(groupAdvance.value))) groupAdvance.value = Math.min(2, options.at(-1))
+}, { immediate: true })
 const groupPlanText = computed(() => {
-  const plan = groupPlan(approvedEntries.value.length, groupCount.value, tournament.value?.format_config?.advance_per_group)
+  const plan = groupPlan(approvedEntries.value.length, groupCount.value, hasGroups.value ? tournament.value?.format_config?.advance_per_group : groupAdvance.value)
   return t('admin.groupPlan', pluralParams({
     groups: plan.groups,
     size: plan.minSize === plan.maxSize ? plan.minSize : `${plan.minSize}–${plan.maxSize}`,
@@ -677,6 +696,7 @@ const hasPlayoff = computed(() => playoffMatches.value.length > 0)
 const allGroupMatchesFinished = computed(
   () => groupMatches.value.length > 0 && groupMatches.value.every((m) => m.status === 'finished'),
 )
+const groupProgress = computed(() => groupMatchProgress(matches.value))
 const groupsView = computed(() =>
   buildGroupsView(groups.value, matches.value, groupStandings.value),
 )
@@ -955,26 +975,36 @@ async function generateGroups() {
     const { error } = await supabase.rpc('generate_groups', {
       p_tournament_id: props.id,
       p_group_count: Number(groupCount.value) || 2,
+      // Regenerating keeps the stored value; the selector exists only before the first draw.
+      p_advance_per_group: hasGroups.value ? null : Number(groupAdvance.value) || null,
     })
     if (error) throw error
     await loadAll()
   } catch (error) {
-    errorText.value = scoringError(error?.message, t)
+    errorText.value = groupsError(error?.message, t)
   } finally { actionLoading.value = false }
 }
 
+// The organizer confirms the first-round pairs the server will create.
 async function startPlayoff() {
   if (actionLoading.value) return
   actionLoading.value = true
   errorText.value = ''
   try {
+    const { data: preview, error: previewError } = await supabase.rpc('get_group_playoff_preview', { p_tournament_id: props.id })
+    if (previewError) throw previewError
+    const confirmed = await confirmDialog(t('groupsFlow.playoffConfirm'), {
+      confirmLabel: t('groupsFlow.playoffConfirmApply'),
+      details: { intro: t('groupsFlow.playoffIntro'), items: playoffPreviewItems(preview, t), warning: t('groupsFlow.playoffWarning') },
+    })
+    if (!confirmed) return
     const { error } = await supabase.rpc('generate_group_playoff', {
       p_tournament_id: props.id,
     })
     if (error) throw error
     await loadAll()
   } catch (error) {
-    errorText.value = scoringError(error?.message, t)
+    errorText.value = groupsError(error?.message, t)
   } finally { actionLoading.value = false }
 }
 
@@ -991,7 +1021,7 @@ async function generateSchedule() {
     if (error) throw error
     await loadAll()
   } catch (error) {
-    errorText.value = scoringError(error?.message, t)
+    errorText.value = groupsError(error?.message, t)
   } finally { actionLoading.value = false }
 }
 
@@ -1530,10 +1560,16 @@ onBeforeUnmount(() => {
         :approved-count="approvedEntries.length"
         :pending-count="pendingEntries.length"
         :matches-count="matches.length"
+        :roster-missing="rosterState.missing.length"
+        :roster-extra="rosterState.extra.length"
+        :group-matches-total="groupProgress.total"
+        :group-matches-done="groupProgress.done"
+        :has-playoff="hasPlayoff"
         :busy="actionLoading || settingsSaving"
         @go="setTab"
         @close-registration="closeRegistration"
         @start="startTournament"
+        @start-playoff="startPlayoff"
       />
 
       <TournamentChampion
@@ -2101,11 +2137,11 @@ onBeforeUnmount(() => {
         </template>
         <div id="admin-mobile-panel" :role="isNarrowLayout && isTournamentActive && matches.length ? 'tabpanel' : undefined" :aria-labelledby="isNarrowLayout && isTournamentActive && matches.length ? `admin-surface-${adminMobileBracketSurface}` : undefined">
           <section v-if="isNarrowLayout && isTournamentActive && matches.length && adminMobileBracketSurface === 'matches'" class="card mobile-score-center mt-3">
-            <TournamentMatchList :format="tournament.format" :matches="matches" :entries-map="entriesMap" :sets-by-match="setsByMatch" :live-scores-by-match="liveScoresByMatch" :can-edit-final="canEditFinalScores" :can-live-score="canUseLiveScoring" @edit-result="openRrMatch" @view-live="openLiveScoring" />
+            <TournamentMatchList :format="tournament.format" :matches="matches" :groups="groups" :entries-map="entriesMap" :sets-by-match="setsByMatch" :live-scores-by-match="liveScoresByMatch" :can-edit-final="canEditFinalScores" :can-live-score="canUseLiveScoring" @edit-result="openRrMatch" @view-live="openLiveScoring" />
           </section>
         <!-- Round-robin: schedule + standings + fixtures -->
         <template v-if="isRoundRobin">
-          <section v-if="canManageTournament && !isTournamentActive" class="card stack stack--sm">
+          <section v-if="canManageTournament && !isTournamentActive && !isTournamentFinished" class="card stack stack--sm">
             <h2 class="section-title">{{ t('standings.matchesTitle') }}</h2>
             <p class="muted">{{ t('standings.rrPlan', pluralParams(rrPlan, t, locale)) }}</p>
             <p v-if="hasBracket" class="muted">{{ t('standings.rrRegenerateWarn') }}</p>
@@ -2137,6 +2173,7 @@ onBeforeUnmount(() => {
           <section v-if="hasBracket && !isNarrowLayout" class="card mt-4">
             <TournamentMatchList
               :format="tournament.format"
+              :groups="groups"
               :matches="matches"
               :entries-map="entriesMap"
               :sets-by-match="setsByMatch"
@@ -2151,7 +2188,23 @@ onBeforeUnmount(() => {
 
         <!-- Groups + playoff -->
         <template v-else-if="isGroupsPlayoff">
-          <section v-if="canManageTournament && !isTournamentActive" class="card stack stack--sm">
+          <!-- Running tournament: the group stage leads straight to the playoff. -->
+          <section v-if="canManageTournament && isTournamentActive && hasGroups && !hasPlayoff" class="card stack stack--sm">
+            <h2 class="section-title">{{ t('groupsFlow.playoffSection') }}</h2>
+            <p class="muted">{{ t('groupsFlow.groupProgress', groupProgress) }}</p>
+            <p class="field-hint">{{ t(allGroupMatchesFinished ? 'groupsFlow.playoffReady' : 'groupsFlow.playoffWaitGroups') }}</p>
+            <div class="inline-actions">
+              <button
+                class="btn btn--primary btn--sm"
+                type="button"
+                :disabled="actionLoading || !allGroupMatchesFinished"
+                @click="startPlayoff"
+              >
+                {{ t('admin.startPlayoff') }}
+              </button>
+            </div>
+          </section>
+          <section v-if="canManageTournament && !isTournamentActive && !isTournamentFinished" class="card stack stack--sm">
             <h2 class="section-title">{{ t('admin.groupStage') }}</h2>
             <fieldset v-if="!hasGroups" class="group-setup">
               <legend class="group-setup__legend">{{ t('admin.groupCount') }}</legend>
@@ -2162,6 +2215,16 @@ onBeforeUnmount(() => {
                 </label>
               </div>
               <p v-else class="muted">{{ t('admin.groupNeedMore') }}</p>
+              <template v-if="groupOptions.length && advanceChoices.length">
+                <p id="grp-advance-label" class="group-setup__legend">{{ t('groupsFlow.advance') }}</p>
+                <div class="group-setup__options" role="radiogroup" aria-labelledby="grp-advance-label" aria-describedby="grp-advance-hint">
+                  <label v-for="a in advanceChoices" :key="a" class="group-setup__option" :class="{ 'is-active': Number(groupAdvance) === a }">
+                    <input v-model.number="groupAdvance" class="sr-only" type="radio" name="grp-advance" :value="a" />
+                    {{ a }}
+                  </label>
+                </div>
+                <p id="grp-advance-hint" class="field-hint">{{ t('groupsFlow.advanceHint') }}</p>
+              </template>
               <p v-if="groupOptions.length" class="format-plan">{{ groupPlanText }}</p>
               <p class="field-hint">{{ t('admin.groupSeedingHint') }}</p>
             </fieldset>
@@ -2350,6 +2413,7 @@ onBeforeUnmount(() => {
           v-if="activeTab === 'schedule'"
           :tournament="tournament"
           :matches="matches"
+          :groups="groups"
           :entries-map="entriesMap"
           :courts="courts"
           :schedule="schedule"
@@ -2385,6 +2449,7 @@ onBeforeUnmount(() => {
         <section v-else-if="isNarrowLayout" class="card mobile-score-center">
           <TournamentMatchList
             :format="tournament.format"
+            :groups="groups"
             :matches="matches"
             :entries-map="entriesMap"
             :sets-by-match="setsByMatch"
@@ -2432,6 +2497,8 @@ onBeforeUnmount(() => {
           :set-format="tournament.set_format"
           :scoring-config="tournament.scoring_config || {}"
           :category="tournament.category"
+          :groups="groups"
+          :format="tournament.format"
           :disabled="!canEditFinalScores"
           :can-live-score="canUseLiveScoring"
           :live-scores-by-match="liveScoresByMatch"
