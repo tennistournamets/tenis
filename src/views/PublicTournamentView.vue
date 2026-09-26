@@ -14,7 +14,7 @@ import RegistrationForm from '../components/RegistrationForm.vue'
 import RegistrationConditions from '../components/RegistrationConditions.vue'
 import TournamentUnlock from '../components/TournamentUnlock.vue'
 import TournamentMatchList from '../components/TournamentMatchList.vue'
-import { entryMemberNames } from '../lib/entryDisplay'
+import { entryDisplayNames } from '../lib/entryDisplay'
 import { getSportConfig } from '../lib/sportConfig'
 import { useNarrowLayout } from '../lib/useNarrowLayout'
 import { useHeaderTitle } from '../lib/headerTitle'
@@ -181,7 +181,7 @@ function teamLabel(entryId) {
   if (!entryId) {
     return t('bracket.tbd')
   }
-  const names = entryMemberNames(entriesMap.value[entryId])
+  const names = entryDisplayNames(entriesMap.value[entryId])
   return names.length ? names.join(' / ') : t('bracket.tbd')
 }
 
@@ -620,6 +620,7 @@ onBeforeUnmount(() => {
           <TournamentMatchList
             :format="tournament?.format"
             :matches="matches"
+            :groups="groups"
             :sets-by-match="setsByMatch"
             :entries-map="entriesMap"
             :live-scores-by-match="liveScoresByMatch"
@@ -665,7 +666,20 @@ onBeforeUnmount(() => {
             :live-scores-by-match="liveScoresByMatch"
             @view-live="openPublicLive"
           />
-        </div>      </template>
+        </div>
+        <!-- Court and time of every tour: the cross table has no room for the published schedule. -->
+        <div v-if="matches.length" class="card" style="margin-top: var(--space-4)">
+          <TournamentMatchList
+            :format="tournament?.format"
+            :matches="matches"
+            :groups="groups"
+            :sets-by-match="setsByMatch"
+            :entries-map="entriesMap"
+            :live-scores-by-match="liveScoresByMatch"
+            @view-live="openPublicLive"
+          />
+        </div>
+      </template>
 
       <template v-else-if="isGroupsPlayoff">
         <div v-if="groups.length" class="card">

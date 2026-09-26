@@ -7,6 +7,7 @@ import { tennisRuleMessages } from './tennisRules'
 import { registrationRuleMessages } from './registrationRules'
 import { scheduleMessages } from './schedule'
 import { accessMessages } from './access'
+import { groupsFlowMessages } from './groupsFlow'
 
 export const messages = {
   ru: {
@@ -64,6 +65,7 @@ export const messages = {
     registrationRules: registrationRuleMessages.ru,
     schedule: scheduleMessages.ru,
     access: accessMessages.ru,
+    groupsFlow: groupsFlowMessages.ru,
     app: {
       title: 'Bracketa',
       subtitle: 'Организация турниров, жеребьёвка и live-сетка',
@@ -927,6 +929,7 @@ export const messages = {
     registrationRules: registrationRuleMessages.en,
     schedule: scheduleMessages.en,
     access: accessMessages.en,
+    groupsFlow: groupsFlowMessages.en,
     app: {
       title: 'Bracketa',
       subtitle: 'Run tournaments, draws, and live brackets',
@@ -1790,6 +1793,7 @@ export const messages = {
     registrationRules: registrationRuleMessages.lt,
     schedule: scheduleMessages.lt,
     access: accessMessages.lt,
+    groupsFlow: groupsFlowMessages.lt,
     app: {
       title: 'Bracketa',
       subtitle: 'Turnyrai, burtai ir gyvas tinklelis',

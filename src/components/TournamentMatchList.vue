@@ -3,10 +3,11 @@ import { computed, inject, ref, useId, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { compareBySchedule, scheduleSummary } from '../lib/schedule'
 
-import { entryMemberNames } from '../lib/entryDisplay'
+import { entryDisplayNames } from '../lib/entryDisplay'
 import { formatSetScore } from '../lib/tennisRules'
 import { knockoutTotals, matchRoundName } from '../lib/roundLabels'
 import { pointLabel, scoreLine } from '../lib/useTennisScoring'
+import { compareGroupMatches, groupNamesById, groupRoundLabel } from '../lib/groupsFlow'
 
 const props = defineProps({
   matches: { type: Array, default: () => [] },
@@ -16,6 +17,7 @@ const props = defineProps({
   canEditFinal: { type: Boolean, default: false },
   canLiveScore: { type: Boolean, default: false },
   format: { type: String, default: '' },
+  groups: { type: Array, default: () => [] },
 })
 
 const emit = defineEmits(['edit-result', 'view-live'])
@@ -41,7 +43,7 @@ const stageOrder = { group: 0, winners: 1, main: 1, losers: 2, grand_final: 3, t
 
 function teamLabel(entryId) {
   if (!entryId) return t('bracket.tbd')
-  const names = entryMemberNames(props.entriesMap[entryId])
+  const names = entryDisplayNames(props.entriesMap[entryId])
   return names.length ? names.join(' / ') : t('bracket.tbd')
 }
 
@@ -60,9 +62,12 @@ function stateLabel(match) {
   return t(`mobile.matchStatus.${matchState(match)}`)
 }
 
+// A group playoff is one knockout, not the upper half of a double elimination.
 function stageLabel(stage) {
+  if (stage === 'winners' && props.format === 'groups_playoff') return t('admin.playoff')
   return t(`mobile.matchStage.${stage || 'main'}`)
 }
+const groupNames = computed(() => groupNamesById(props.groups))
 
 const roundTotals = computed(() => knockoutTotals(props.matches, props.format))
 function roundLabel(match) {
@@ -70,6 +75,14 @@ function roundLabel(match) {
   if (match.stage === 'third_place') return t('mobile.matchStage.third_place')
   const round = Number(match.round_number || 0)
   return round ? matchRoundName(match, roundTotals.value, t) : stageLabel(match.stage)
+}
+function matchHeading(match) {
+  if (match.stage === 'group') return groupRoundLabel(match, groupNames.value, t)
+  // An all-play-all has tours, not a "bracket" stage.
+  if (props.format === 'round_robin') return roundLabel(match)
+  const round = roundLabel(match)
+  const stage = stageLabel(match.stage)
+  return round !== stage ? `${stage} · ${round}` : stage
 }
 
 function finalScore(match) {
@@ -112,6 +125,7 @@ const visibleMatches = computed(() => {
       const stateOrder = { live: 0, ready: 1, waiting: 2, finished: 3 }
       return stateOrder[matchState(a)] - stateOrder[matchState(b)]
         || (stageOrder[a.stage] ?? 8) - (stageOrder[b.stage] ?? 8)
+        || (a.stage === 'group' && b.stage === 'group' ? compareGroupMatches(a, b) : 0)
         || (a.round_number || 0) - (b.round_number || 0)
         || (a.match_number || 0) - (b.match_number || 0)
     })
@@ -178,7 +192,7 @@ const visibleMatches = computed(() => {
       >
         <header class="mobile-match__meta">
           <span>
-            {{ stageLabel(match.stage) }}<template v-if="roundLabel(match) !== stageLabel(match.stage)"> · {{ roundLabel(match) }}</template>
+            {{ matchHeading(match) }}
           </span>
           <span class="mobile-match__status"><i aria-hidden="true"></i>{{ stateLabel(match) }}</span>
         </header>
