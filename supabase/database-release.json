@@ -82,6 +82,12 @@
       "sha256": "8039e678c924f7d4dff1df7f212f84d1b8b0e65300c6af887f5530f01a22bba4",
       "tenisAppliedVersion": null,
       "tenisNote": "Not applied to TENIS yet; apply via psql (session pooler) like the previous forward steps."
+    },
+    {
+      "path": "supabase/migrations/20260926085932_bracket_fixes.sql",
+      "sha256": "b7494ce4e09380b909bb976ef08d6cfdd712de59d02b24d584b3c2cbef66d046",
+      "tenisAppliedVersion": null,
+      "tenisNote": "Not applied to TENIS yet; apply via psql (session pooler) like the previous forward steps."
     }
   ],
   "baseline": {
