@@ -8,7 +8,7 @@ import { customDisplayName, entryDisplayNames } from '../src/lib/entryDisplay.js
 import { groupsFlowMessages } from '../src/i18n/groupsFlow.js'
 
 const t = (key, params = {}) => `${key}${Object.keys(params).length ? JSON.stringify(params) : ''}`
-const tLabels = (key, params = {}) => ({ 'admin.group': 'Group', 'bracket.roundN': `Round ${params.n}` }[key] ?? key)
+const tLabels = (key, params = {}) => ({ 'admin.group': 'Group', 'bracket.tourN': `Tour ${params.n}` }[key] ?? key)
 const match = (a, b, extra = {}) => ({ side_a_entry_id: a, side_b_entry_id: b, ...extra })
 
 test('B5: generated matches are stale when the approved field changes, in any format', () => {
@@ -29,8 +29,8 @@ test('B5: generated matches are stale when the approved field changes, in any fo
 
 test('B8: group matches carry their group letter and sort tour by tour', () => {
   const names = { g1: 'A', g2: 'B' }
-  assert.equal(groupRoundLabel({ group_id: 'g2', round_number: 1002 }, names, tLabels), 'Group B · Round 2')
-  assert.equal(groupRoundLabel({ group_id: 'x', round_number: 3 }, names, tLabels), 'Group · Round 3')
+  assert.equal(groupRoundLabel({ group_id: 'g2', round_number: 1002 }, names, tLabels), 'Group B · Tour 2')
+  assert.equal(groupRoundLabel({ group_id: 'x', round_number: 3 }, names, tLabels), 'Group · Tour 3')
   const rows = [
     { id: 'b1', round_number: 1001, match_number: 1 }, { id: 'a2', round_number: 2, match_number: 1 },
     { id: 'a1', round_number: 1, match_number: 1 }, { id: 'b2', round_number: 1002, match_number: 1 },

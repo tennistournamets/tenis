@@ -72,7 +72,7 @@ const liveCount = g => g.rounds.reduce((n, r) => n + r.list.filter(isLive).lengt
 
       <div v-if="g.rounds.length" class="group-board__fixtures">
         <div v-for="grp in g.rounds" :key="grp.round" class="gs-round">
-          <h4 class="gs-round__title">{{ t('bracket.roundN', { n: roundInGroup(grp.round) }) }}</h4>
+          <h4 class="gs-round__title">{{ t('bracket.tourN', { n: roundInGroup(grp.round) }) }}</h4>
           <ul class="gs-list">
             <li
               v-for="m in grp.list"

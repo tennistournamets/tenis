@@ -35,9 +35,9 @@ export function groupNamesById(groups = []) {
   return Object.fromEntries(groups.map(g => [g.id, g.name]))
 }
 
-/** "Group A · Round 2" for a group-stage match; the letter is omitted when unknown. */
+/** "Group A · Tour 2" for a group-stage match; the letter is omitted when unknown. */
 export function groupRoundLabel(match, groupNames, t) {
-  const round = t('bracket.roundN', { n: roundInGroup(match.round_number) })
+  const round = t('bracket.tourN', { n: roundInGroup(match.round_number) })
   const name = groupNames?.[match.group_id]
   return name ? `${t('admin.group')} ${name} · ${round}` : `${t('admin.group')} · ${round}`
 }
@@ -55,6 +55,24 @@ export function advanceOptions(n, groupCount, max = 4) {
   const g = Math.max(1, Number(groupCount) || 1)
   const smallest = Math.floor(count / g)
   return Array.from({ length: Math.max(0, Math.min(max, smallest)) }, (_, i) => i + 1)
+}
+
+/**
+ * "Advance per group" shown and sent before the first draw. The organizer's
+ * pick, else the stored wizard value, else 2 — never overwritten while the
+ * field is still too small for it: the largest option not above it is shown
+ * until enough entries are approved.
+ */
+export function effectiveAdvance(options = [], stored = null, picked = null) {
+  const preferred = Number(picked) || Number(stored) || 2
+  if (!options.length || options.includes(preferred)) return preferred
+  return options.filter(a => a <= preferred).at(-1) ?? options[0]
+}
+
+/** p_advance_per_group for generate_groups: null keeps the stored value on the server. */
+export function advanceToSend(options = [], stored = null, picked = null) {
+  const value = effectiveAdvance(options, stored, picked)
+  return picked != null || value !== Number(stored) ? value : null
 }
 
 export function groupMatchProgress(matches = []) {

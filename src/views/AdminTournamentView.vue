@@ -53,10 +53,10 @@ import { statusBadgeClass } from '../lib/tournamentStatus'
 import { errorMessage } from '../lib/errorMessages'
 import { usePageAlerts } from '../lib/pageAlerts'
 import { pluralParams } from '../lib/plural'
-import { bracketPlan, groupCountOptions, groupPlan, roundRobinPlan } from '../lib/formatPlan'
+import { bracketPlan, groupAdvanceWarning, groupCountOptions, groupPlan, roundRobinPlan } from '../lib/formatPlan'
 import { isFedMatch, swapDraftSlots } from '../lib/bracketDisplay'
 import { readDrawMode, writeDrawMode } from '../lib/drawModePreference'
-import { advanceOptions, changesField, groupMatchProgress, groupsError, playoffPreviewItems, rosterMismatch } from '../lib/groupsFlow'
+import { advanceOptions, advanceToSend, changesField, effectiveAdvance, groupMatchProgress, groupsError, playoffPreviewItems, rosterMismatch } from '../lib/groupsFlow'
 
 const props = defineProps({
   id: {
@@ -108,7 +108,8 @@ const groups = ref([])
 const groupStandings = ref({}) // group_id -> standings rows
 const groupCount = ref(2)
 // How many leave each group; sent with generate_groups, which stores it.
-const groupAdvance = ref(2)
+// The organizer's own pick of "advance per group"; null keeps the wizard value.
+const groupAdvancePicked = ref(null)
 const matchSets = ref([])
 const liveScores = ref([])
 const admins = ref([])
@@ -334,7 +335,8 @@ const startBlockReason = computed(() => {
   if (canStartTournament.value) return null
   if (tournament.value?.status !== 'registration_closed') return t('admin.startNeedRegClosed')
   if (matches.value.length && rosterState.value.stale) return t('groupsFlow.startNeedRegenerate')
-  return t('admin.startNeedBracket')
+  // Round robin and groups have matches, not a bracket.
+  return isRoundRobin.value || isGroupsPlayoff.value ? t('admin.startNeedMatches', { tab: bracketTabLabel.value }) : t('admin.startNeedBracket')
 })
 
 async function startTournament() {
@@ -363,7 +365,7 @@ async function finishTournament() {
   errorText.value = ''
   try {
     // Unplayed matches are listed explicitly before the tournament is closed for good.
-    const finish = finishConfirmation({ format: tournament.value.format, matches: matches.value, label: teamLabel, t })
+    const finish = finishConfirmation({ format: tournament.value.format, matches: matches.value, groups: groups.value, label: teamLabel, t })
     if (!(await confirmDialog(finish.message, finish.options))) return
     const { data, error } = await supabase.rpc('update_tournament_settings', {
       p_tournament_id: props.id, p_patch: { status: 'completed' }, p_expected_revision: revision,
@@ -654,14 +656,20 @@ watch(groupOptions, (options) => {
   if (options.length && !options.includes(Number(groupCount.value))) groupCount.value = options[0]
 }, { immediate: true })
 const advanceChoices = computed(() => advanceOptions(approvedEntries.value.length, groupCount.value))
-watch(() => tournament.value?.format_config?.advance_per_group, stored => {
-  if (stored) groupAdvance.value = Number(stored)
-}, { immediate: true })
-watch(advanceChoices, (options) => {
-  if (options.length && !options.includes(Number(groupAdvance.value))) groupAdvance.value = Math.min(2, options.at(-1))
-}, { immediate: true })
+// Shown value: the pick or the stored setting, clamped to the current field
+// without overwriting either (approving entries must not reset it to 1).
+const groupAdvance = computed({
+  get: () => effectiveAdvance(advanceChoices.value, tournament.value?.format_config?.advance_per_group, groupAdvancePicked.value),
+  set: value => { groupAdvancePicked.value = Number(value) || null },
+})
+const currentGroupPlan = computed(() => groupPlan(approvedEntries.value.length, groupCount.value, hasGroups.value ? tournament.value?.format_config?.advance_per_group : groupAdvance.value))
+const groupAdvanceWarningText = computed(() => {
+  const plan = currentGroupPlan.value
+  const kind = groupAdvanceWarning(plan)
+  return kind ? t(`groupsFlow.advanceWarning_${kind}`, { qualifiers: plan.qualifiers, n: plan.n }) : ''
+})
 const groupPlanText = computed(() => {
-  const plan = groupPlan(approvedEntries.value.length, groupCount.value, hasGroups.value ? tournament.value?.format_config?.advance_per_group : groupAdvance.value)
+  const plan = currentGroupPlan.value
   return t('admin.groupPlan', pluralParams({
     groups: plan.groups,
     size: plan.minSize === plan.maxSize ? plan.minSize : `${plan.minSize}–${plan.maxSize}`,
@@ -969,14 +977,14 @@ async function generateGroups() {
   if (actionLoading.value) return
   actionLoading.value = true
   try {
-    if (hasGroups.value && !(await confirmDialog(rebuildConfirmText('admin.rebuildConfirm')))) return
+    if (hasGroups.value && !(await confirmDialog(rebuildConfirmText('admin.rebuildMatchesConfirm')))) return
     errorText.value = ''
     if (!(await ensureRegistrationClosed())) return
     const { error } = await supabase.rpc('generate_groups', {
       p_tournament_id: props.id,
       p_group_count: Number(groupCount.value) || 2,
       // Regenerating keeps the stored value; the selector exists only before the first draw.
-      p_advance_per_group: hasGroups.value ? null : Number(groupAdvance.value) || null,
+      p_advance_per_group: hasGroups.value ? null : advanceToSend(advanceChoices.value, tournament.value?.format_config?.advance_per_group, groupAdvancePicked.value),
     })
     if (error) throw error
     await loadAll()
@@ -1012,7 +1020,7 @@ async function generateSchedule() {
   if (actionLoading.value) return
   actionLoading.value = true
   try {
-    if (hasBracket.value && !(await confirmDialog(rebuildConfirmText('admin.rebuildConfirm'), { danger: true }))) return
+    if (hasBracket.value && !(await confirmDialog(rebuildConfirmText('admin.rebuildMatchesConfirm'), { danger: true }))) return
     errorText.value = ''
     if (!(await ensureRegistrationClosed())) return
     const { error } = await supabase.rpc('generate_round_robin', {
@@ -2226,6 +2234,7 @@ onBeforeUnmount(() => {
                 <p id="grp-advance-hint" class="field-hint">{{ t('groupsFlow.advanceHint') }}</p>
               </template>
               <p v-if="groupOptions.length" class="format-plan">{{ groupPlanText }}</p>
+              <p v-if="groupOptions.length && groupAdvanceWarningText" class="alert alert--info" role="status">{{ groupAdvanceWarningText }}</p>
               <p class="field-hint">{{ t('admin.groupSeedingHint') }}</p>
             </fieldset>
             <div class="inline-actions">

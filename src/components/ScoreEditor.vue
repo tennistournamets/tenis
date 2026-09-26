@@ -9,8 +9,8 @@ import { useUnsavedChanges } from '../lib/unsavedChanges'
 import { saveMatchResult } from '../lib/saveMatchResult'
 import { confirmDialog } from '../lib/confirmDialog'
 import TennisSetInputs from './TennisSetInputs.vue'
-import { knockoutTotals, matchRoundName } from '../lib/roundLabels'
-import { groupIndexOfRound, groupNamesById, groupRoundLabel, roundInGroup } from '../lib/groupsFlow'
+import { knockoutTotals, matchRoundName, matchStageRoundLabel } from '../lib/roundLabels'
+import { groupIndexOfRound, groupNamesById, roundInGroup } from '../lib/groupsFlow'
 import { scoreRows, buildSetPayload, scoringError, hasMatchWinner } from '../lib/tennisRules'
 
 const props = defineProps({
@@ -135,7 +135,6 @@ function matchStatus(match) {
 }
 
 const stageOrder = { main: 0, group: 1, winners: 2, losers: 3, grand_final: 4 }
-const multipleStages = computed(() => new Set(props.matches.map(m => m.stage)).size > 1)
 const matchesByRound = computed(() => {
   const map = new Map()
   for (const m of visibleMatches.value) {
@@ -152,17 +151,18 @@ const matchesByRound = computed(() => {
     .map(group => ({ ...group, matches: group.matches.sort((a, b) => a.match_number - b.match_number || a.id.localeCompare(b.id)) }))
 })
 
-const roundTotals = computed(() => knockoutTotals(props.matches))
-function roundLabel(roundNumber, stage) {
-  if (!roundNumber) return ''
-  return matchRoundName({ stage, round_number: roundNumber }, roundTotals.value, t)
-}
+const roundTotals = computed(() => knockoutTotals(props.matches, props.format))
+const hasLosers = computed(() => props.matches.some(m => m.stage === 'losers'))
 const groupNames = computed(() => groupNamesById(props.groups))
+// Same names as the board, the schedule and the correction preview:
+// "Semifinal", "Upper bracket · Final", "Lower bracket · Round 2",
+// "Grand final", "Group A · Tour 1", "Tour 3" (round robin), "Playoff · Final".
 function roundHeading(group) {
-  if (group.stage === 'grand_final') return t('scoringFlow.stage_grand_final')
-  if (group.stage === 'group') return groupRoundLabel({ group_id: group.groupId, round_number: group.roundNumber }, groupNames.value, t)
-  const stage = group.stage === 'winners' && props.format === 'groups_playoff' ? t('admin.playoff') : t(`scoringFlow.stage_${group.stage}`)
-  return `${multipleStages.value ? `${stage} · ` : ''}${roundLabel(group.roundNumber, group.stage)}`
+  const match = { stage: group.stage, round_number: group.roundNumber, group_id: group.groupId }
+  if (group.stage === 'winners' && props.format === 'groups_playoff') {
+    return `${t('admin.playoff')} · ${matchRoundName(match, roundTotals.value, t)}`
+  }
+  return matchStageRoundLabel(match, { totals: roundTotals.value, hasLosers: hasLosers.value, groupNames: groupNames.value }, t)
 }
 
 const isDoubles = computed(() => props.category === 'doubles')

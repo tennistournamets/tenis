@@ -2,7 +2,7 @@
 // writes (winner_entry_id on the deciding match, or the ranking computed by
 // get_standings for an all-play-all), plus the matches still to be played
 // when the organizer finishes the tournament.
-import { knockoutTotals, matchRoundName } from './roundLabels.js'
+import { correctionMatchTitle } from './roundLabels.js'
 
 const KNOCKOUT_FORMATS = new Set(['single_elimination', 'double_elimination', 'groups_playoff'])
 const STAGE_ORDER = { group: 0, main: 1, winners: 2, losers: 3, third_place: 4, grand_final: 5 }
@@ -71,13 +71,15 @@ const SHOWN_UNPLAYED = 8
  * everything is played, otherwise an explicit warning with the unplayed
  * matches (the first few by name, then a count).
  */
-export function finishConfirmation({ format, matches = [], label = id => id || '', t }) {
+export function finishConfirmation({ format, matches = [], groups = [], label = id => id || '', t }) {
   const unplayed = unplayedMatches(format, matches)
   if (!unplayed.length) return { message: t('admin.finishTournamentConfirm'), options: {}, unplayed: 0 }
-  const totals = knockoutTotals(matches, format)
+  const groupNames = Object.fromEntries(groups.map(g => [g.id, g.name]))
   const items = unplayed.slice(0, SHOWN_UNPLAYED).map(m => ({
     id: m.id,
-    title: `${t(`scoringFlow.stage_${m.stage}`)} · ${matchRoundName(m, totals, t)} · №${m.match_number}`,
+    // The names of the board and the correction preview: "Semifinal · №1",
+    // "Upper bracket · Final · №1", "Group A · Tour 2 · №3", "Tour 3 · №2".
+    title: correctionMatchTitle(m, matches, t, { format, groupNames }),
     teams: `${label(m.side_a_entry_id)} — ${label(m.side_b_entry_id)}`,
     effect: t('lifecycle.unplayed'),
   }))

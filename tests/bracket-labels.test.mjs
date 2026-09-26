@@ -8,6 +8,7 @@ const t = (key, params = {}) => ({
   'bracket.semifinals': 'Semifinal',
   'bracket.quarterfinals': 'Quarterfinal',
   'bracket.roundN': `Round ${params.n}`,
+  'bracket.tourN': `Tour ${params.n}`,
   'bracket.fractionFinal': `1/${params.k}`,
   'mobile.matchStage.main': 'Bracket',
   'mobile.matchStage.winners': 'Upper bracket',
@@ -39,7 +40,11 @@ test('the correction preview names rounds like the bracket, with the stage only 
   // Group playoff: its knockout is stage "winners" without a lower bracket.
   const gp = [{ stage: 'group', round_number: 1001 }, { stage: 'winners', round_number: 1 }, { stage: 'winners', round_number: 2 }]
   assert.equal(correctionMatchTitle({ stage: 'winners', round_number: 2, match_number: 1 }, gp, t), 'Final · №1')
-  assert.equal(correctionMatchTitle({ stage: 'group', round_number: 1002, match_number: 2 }, gp, t), 'Group · Round 2 · №2')
+  assert.equal(correctionMatchTitle({ stage: 'group', round_number: 1002, match_number: 2 }, gp, t), 'Group · Tour 2 · №2')
+  assert.equal(correctionMatchTitle({ stage: 'group', group_id: 'g1', round_number: 1002, match_number: 2 }, gp, t, { groupNames: { g1: 'B' } }), 'Group B · Tour 2 · №2')
+  // Round robin: tours, no stage prefix.
+  const rr = [1, 1, 2, 2].map((round_number, i) => ({ stage: 'main', round_number, match_number: i + 1 }))
+  assert.equal(correctionMatchTitle({ stage: 'main', round_number: 2, match_number: 1 }, rr, t, { format: 'round_robin' }), 'Tour 2 · №1')
   // Without the bracket the round cannot be named from the final.
   assert.equal(correctionMatchTitle({ stage: 'main', round_number: 2, match_number: 1 }, [], t), 'Round 2 · №1')
 })

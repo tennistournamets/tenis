@@ -18,6 +18,16 @@ export function groupPlan(n, groupCount, advancePerGroup = 2) {
   return { n: count, groups: g, sizes, minSize: Math.min(...sizes), maxSize: Math.max(...sizes), matches, advance, qualifiers: g * advance }
 }
 
+/**
+ * The group stage barely filters when (almost) everyone advances, for example
+ * 8 of 9: 'all' when nobody is knocked out, 'almostAll' when one is.
+ */
+export function groupAdvanceWarning(plan) {
+  if (!plan || plan.n < 3 || !plan.qualifiers) return null
+  const out = plan.n - plan.qualifiers
+  return out <= 0 ? 'all' : out === 1 ? 'almostAll' : null
+}
+
 // generate_groups needs at least two entries per group.
 export function groupCountOptions(n, max = 8) {
   const count = Math.max(0, Number(n) || 0)
