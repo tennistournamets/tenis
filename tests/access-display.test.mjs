@@ -27,7 +27,7 @@ test('visibility falls back to is_public for rows without the column and maps co
   assert.equal(accessError('access.ownerOnly', t), 'access.errors.ownerOnly')
   assert.equal(accessError('schedule.conflict', t), 'schedule.errors.conflict')
   assert.equal(accessError('registration.full', t), 'registrationRules.errors.full')
-  assert.equal(accessError('User with email x not found', t), 'User with email x not found')
+  assert.equal(accessError('User with email x not found', t), 'access.errors.userNotFound')
 })
 
 test('the displayed role matrix agrees with the client scoring rules and with who may assign roles', () => {

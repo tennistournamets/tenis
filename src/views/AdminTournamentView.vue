@@ -46,6 +46,7 @@ import { useNarrowLayout } from '../lib/useNarrowLayout'
 import { useHeaderTitle } from '../lib/headerTitle'
 import { onTabKeydown as onSurfaceTabKeydown } from '../lib/tabNavigation'
 import { statusBadgeClass } from '../lib/tournamentStatus'
+import { errorMessage } from '../lib/errorMessages'
 import { bracketPlan, groupCountOptions, groupPlan, roundRobinPlan } from '../lib/formatPlan'
 
 const props = defineProps({
@@ -230,9 +231,7 @@ async function moveSeed(entry, delta) {
     if (error) throw error
     await loadAll(true)
   } catch (error) {
-    const message = error?.message || ''
-    errorText.value = message.startsWith('seeding.') ? t(message)
-      : error?.code === 'PGRST202' ? t('seeding.unavailable') : scoringError(message, t)
+    errorText.value = error?.code === 'PGRST202' ? t('seeding.unavailable') : errorMessage(error, t)
   } finally { actionLoading.value = false }
 }
 
@@ -434,7 +433,7 @@ const snapshotRefresh = createSnapshotRefresh({
   },
   onError: error => {
     syncFailed.value = true
-    if (!tournament.value) errorText.value = error.message || t('errors.generic')
+    if (!tournament.value) errorText.value = errorMessage(error, t)
   },
 })
 

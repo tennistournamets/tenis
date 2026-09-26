@@ -9,6 +9,7 @@ import AppIcon from '../components/AppIcon.vue'
 import { getSportConfig } from '../lib/sportConfig'
 import { useAuthStore } from '../stores/auth'
 import { statusBadgeClass } from '../lib/tournamentStatus'
+import { errorMessage } from '../lib/errorMessages'
 
 const { t, locale } = useI18n()
 const router = useRouter()
@@ -107,7 +108,7 @@ async function loadTournaments() {
       .eq('user_id', auth.user.id)
 
     if (error) {
-      loadError.value = error.message
+      loadError.value = errorMessage(error, t, 'drafts.unavailable')
       tournaments.value = []
       return
     }
@@ -120,7 +121,7 @@ async function loadTournaments() {
     tournaments.value = list
     await loadProgress(list.map(item => item.id))
   } catch (error) {
-    loadError.value = error?.message || t('drafts.unavailable')
+    loadError.value = errorMessage(error, t, 'drafts.unavailable')
     tournaments.value = []
   } finally {
     loading.value = false

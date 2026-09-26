@@ -1,13 +1,12 @@
 // Manual schedule helpers: the server owns conflicts and publication; the
 // client indexes rows, formats times in the tournament zone and maps codes.
-import { registrationError } from './registrationRules.js'
+import { errorMessage } from './errorMessages.js'
 
 export const TIME_KINDS = ['fixed', 'not_before']
 export const COMMON_TIMEZONES = ['Europe/Vilnius', 'Europe/Riga', 'Europe/Tallinn', 'Europe/Warsaw', 'Europe/Berlin', 'Europe/London', 'Europe/Kyiv', 'Europe/Moscow', 'UTC']
 
 export function scheduleError(message, t, fallbackKey = 'errors.generic') {
-  if (typeof message === 'string' && message.startsWith('schedule.')) return t(`schedule.errors.${message.slice('schedule.'.length)}`)
-  return registrationError(message, t, fallbackKey)
+  return errorMessage(message, t, fallbackKey)
 }
 
 /** { draft: { [matchId]: row }, published: { [matchId]: row } } */

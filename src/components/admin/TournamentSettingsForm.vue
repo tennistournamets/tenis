@@ -129,7 +129,7 @@ async function reloadSettings() {
     await nextTick()
     settingsDraft.discard()
     settingsError.value = ''
-  } catch (error) { settingsError.value = error.message || t('drafts.unavailable') }
+  } catch (error) { settingsError.value = accessError(error, t, 'drafts.unavailable') }
   finally { settingsSaving.value = false }
 }
 

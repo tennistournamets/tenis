@@ -17,7 +17,7 @@ test('server codes map to schedule translations and fall through to the other fa
   assert.equal(scheduleError('registration.full', t), 'registrationRules.errors.full')
   assert.equal(scheduleError('drafts.conflict', t), 'drafts.conflict')
   assert.equal(scheduleError('', t), 'errors.generic')
-  assert.equal(scheduleError('Not allowed', t), 'Not allowed')
+  assert.equal(scheduleError('Not allowed', t), 'serverErrors.notAllowed')
 })
 
 test('draft and published rows are indexed separately; organizers see the draft, spectators the publication', () => {
