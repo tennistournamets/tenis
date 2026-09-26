@@ -1,9 +1,11 @@
 import { supabase } from './supabase'
 import { confirmDialog } from './confirmDialog'
+import { correctionMatchTitle } from './roundLabels'
 
 // All score editors use the same correction flow. The original payload and
-// revision stay frozen while the organiser reviews the consequences.
-export async function saveMatchResult(rpcName, payload, t, { isCurrent = () => true } = {}) {
+// revision stay frozen while the organiser reviews the consequences. Pass the
+// tournament's matches so the preview names rounds like the bracket does.
+export async function saveMatchResult(rpcName, payload, t, { isCurrent = () => true, matches = [] } = {}) {
   try {
     if (!isCurrent()) return { cancelled: true }
     const frozen = JSON.parse(JSON.stringify(payload))
@@ -27,7 +29,7 @@ export async function saveMatchResult(rpcName, payload, t, { isCurrent = () => t
         warning: preview.blocked_live ? t('scoringFlow.correctionLive') : t('scoringFlow.correctionWarning'),
         items: preview.matches.map(m => ({
           id: m.id,
-          title: `${t(`scoringFlow.stage_${m.stage}`)} · ${t('bracket.roundN', { n: m.round_number > 1000 ? m.round_number % 1000 : m.round_number })} · №${m.match_number}`,
+          title: correctionMatchTitle(m, matches, t),
           teams: `${m.side_a_name || t('bracket.tbd')} — ${m.side_b_name || t('bracket.tbd')}`,
           effect: t(m.live_status === 'active' ? 'scoringFlow.correctionActive' : m.has_result ? 'scoringFlow.correctionReset' : 'scoringFlow.correctionEntrants'),
         })),

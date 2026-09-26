@@ -305,7 +305,7 @@ export const messages = {
       searchEntries: 'Найти участника',
       noSearchResults: 'Никого не найдено',
       drawRandomHint: 'Участники расставляются по сетке случайно. Порядок можно поменять перетаскиванием в ручном режиме.',
-      drawManualHint: 'Сетка создаётся по порядку заявок, затем пары меняются перетаскиванием.',
+      drawManualHint: 'Сетка строится по посеву: 1-й и 2-й номера в разных половинах, BYE получают верхние посевы. Затем участников можно поменять местами перетаскиванием.',
       bracketPlanSE: '{n} участников → сетка на {size}: {rounds} раунда, {matches} матчей.',
       bracketPlanByes: '{n} участников → сетка на {size}: {rounds} раунда, {byes} проходят первый раунд без игры.',
       bracketPlanDE: '{n} участников → верхняя сетка {upper} матчей, нижняя {lower}, финал. Проигравший в верхней переходит в нижнюю, два поражения — выбывание.',
@@ -347,6 +347,7 @@ export const messages = {
       generateRandom: 'Сгенерировать сетку',
       generateManual: 'Сгенерировать сетку',
       rebuild: 'Пересобрать в случайном порядке',
+      rebuildManual: 'Пересобрать по посеву',
       rebuildConfirm: 'Пересборка сетки удалит все текущие результаты. Продолжить?',
       resetBracket: 'Сбросить сетку',
       resetBracketConfirm: 'Сетка и все результаты будут удалены. Продолжить?',
@@ -384,7 +385,7 @@ export const messages = {
       noPending: 'Нет заявок в ожидании',
       noApproved: 'Нет подтверждённых участников',
       manualBracketDnDHint:
-        'Сетка создаётся со случайным посевом. Перетаскивайте участников между слотами, затем нажмите «Сохранить расстановку». Сыгранные матчи недоступны для переноса.',
+        'После генерации перетаскивайте участников между местами первого круга (включая BYE), затем нажмите «Сохранить расстановку». Сыгранные матчи недоступны для переноса.',
       saveBracketLayout: 'Сохранить расстановку',
       addEntryTitle: 'Добавить участника вручную',
       addEntryHint:
@@ -1169,7 +1170,7 @@ export const messages = {
       searchEntries: 'Find a player',
       noSearchResults: 'Nobody found',
       drawRandomHint: 'Players are placed at random. Switch to manual to rearrange by dragging.',
-      drawManualHint: 'The bracket follows the entry order, then you swap slots by dragging.',
+      drawManualHint: 'The bracket follows the seeding: seeds 1 and 2 in opposite halves, BYEs to the top seeds. Then you can swap players by dragging.',
       bracketPlanSE: '{n} entries → a {size}-draw: {rounds} rounds, {matches} matches.',
       bracketPlanByes: '{n} entries → a {size}-draw: {rounds} rounds, {byes} byes in round one.',
       bracketPlanDE: '{n} entries → upper bracket {upper} matches, lower {lower}, then the final. A loss drops to the lower bracket; two losses eliminate.',
@@ -1211,6 +1212,7 @@ export const messages = {
       generateRandom: 'Generate bracket',
       generateManual: 'Generate bracket',
       rebuild: 'Rebuild in random order',
+      rebuildManual: 'Rebuild by seeding',
       rebuildConfirm: 'Rebuilding will erase all current results. Continue?',
       resetBracket: 'Reset bracket',
       resetBracketConfirm: 'The bracket and all results will be deleted. Continue?',
@@ -1248,7 +1250,7 @@ export const messages = {
       noPending: 'No pending entries',
       noApproved: 'No approved participants yet',
       manualBracketDnDHint:
-        'The bracket is built with a random seed. Drag players between slots, then click "Save layout". Finished matches cannot be edited.',
+        'After the draw, drag players between first-round slots (BYEs included), then click "Save layout". Finished matches cannot be edited.',
       saveBracketLayout: 'Save layout',
       addEntryTitle: 'Add participant manually',
       addEntryHint:
@@ -2033,7 +2035,7 @@ export const messages = {
       searchEntries: 'Rasti dalyvį',
       noSearchResults: 'Nieko nerasta',
       drawRandomHint: 'Dalyviai išdėstomi atsitiktinai. Rankiniu režimu tvarką galima keisti tempiant.',
-      drawManualHint: 'Tinklelis sudaromas pagal paraiškų tvarką, po to vietos keičiamos tempiant.',
+      drawManualHint: 'Tinklelis sudaromas pagal reitingą: 1 ir 2 numeriai skirtingose pusėse, BYE gauna aukščiausi numeriai. Po to dalyvius galima sukeisti tempiant.',
       bracketPlanSE: '{n} dalyviai → {size} vietų tinklelis: {rounds} raundai, {matches} rungtynės.',
       bracketPlanByes: '{n} dalyviai → {size} vietų tinklelis: {rounds} raundai, {byes} praeina pirmą raundą be žaidimo.',
       bracketPlanDE: '{n} dalyviai → viršutinis tinklelis {upper} rungtynės, apatinis {lower}, finalas. Pralaimėjęs viršuje pereina į apačią, du pralaimėjimai — iškrenta.',
@@ -2075,6 +2077,7 @@ export const messages = {
       generateRandom: 'Generuoti tinklelį',
       generateManual: 'Generuoti tinklelį',
       rebuild: 'Perkurti atsitiktine tvarka',
+      rebuildManual: 'Perkurti pagal reitingą',
       rebuildConfirm: 'Perkūrimas ištrins visus esamus rezultatus. Tęsti?',
       resetBracket: 'Ištrinti tinklelį',
       resetBracketConfirm: 'Tinklelis ir visi rezultatai bus ištrinti. Tęsti?',
@@ -2112,7 +2115,7 @@ export const messages = {
       noPending: 'Nėra laukiančių paraiškų',
       noApproved: 'Nėra patvirtintų dalyvių',
       manualBracketDnDHint:
-        'Tinklelis sukuriamas su atsitiktiniu pasė. Vilkite dalyvius tarp vietų, tada spauskite „Išsaugoti išdėstymą". Baigtų mačų keisti negalima.',
+        'Sukūrę tinklelį, vilkite dalyvius tarp pirmojo rato vietų (įskaitant BYE), tada spauskite „Išsaugoti išdėstymą". Baigtų mačų keisti negalima.',
       saveBracketLayout: 'Išsaugoti išdėstymą',
       addEntryTitle: 'Pridėti dalyvį rankiniu būdu',
       addEntryHint:

@@ -51,6 +51,8 @@ import { useHeaderTitle } from '../lib/headerTitle'
 import { onTabKeydown as onSurfaceTabKeydown } from '../lib/tabNavigation'
 import { statusBadgeClass } from '../lib/tournamentStatus'
 import { bracketPlan, groupCountOptions, groupPlan, roundRobinPlan } from '../lib/formatPlan'
+import { isFedMatch, swapDraftSlots } from '../lib/bracketDisplay'
+import { readDrawMode, writeDrawMode } from '../lib/drawModePreference'
 
 const props = defineProps({
   id: {
@@ -116,7 +118,10 @@ function acceptTournament(data) {
   if (tournament.value && data.settings_revision < tournament.value.settings_revision) return
   tournament.value = data
 }
-const drawMode = ref('auto-random')
+// Remembered per tournament on this device, so a reload keeps a manual draw manual.
+const drawMode = ref(readDrawMode(props.id))
+watch(() => props.id, id => { drawMode.value = readDrawMode(id) })
+watch(drawMode, mode => writeDrawMode(props.id, mode))
 // Rearranging a built bracket is its own mode, switched on by a button (or right
 // after a manual draw) — not by the draw-mode select, which resets on reload.
 const arrangeMode = ref(false)
@@ -640,11 +645,13 @@ const groupPlanText = computed(() => {
     qualifiers: plan.qualifiers,
   })
 })
-const bracketPlanBlocked = computed(() => isDoubleElim.value && !hasBracket.value && !bracketPlan(approvedEntries.value.length, 'double_elimination').valid)
+// Double elimination (v1) needs a power-of-two field; any other count builds nothing.
+const doubleElimCountInvalid = computed(() => isDoubleElim.value && approvedEntries.value.length >= 2 && !bracketPlan(approvedEntries.value.length, 'double_elimination').valid)
+const bracketPlanBlocked = computed(() => doubleElimCountInvalid.value && !hasBracket.value)
 const bracketPlanText = computed(() => {
   const plan = bracketPlan(approvedEntries.value.length, tournamentFormat.value)
   if (plan.n < 2) return t('nextStep.entriesTooFew')
-  if (isDoubleElim.value) return t('admin.bracketPlanDE', plan)
+  if (isDoubleElim.value) return plan.valid ? t('admin.bracketPlanDE', plan) : ''
   return t(plan.byes ? 'admin.bracketPlanByes' : 'admin.bracketPlanSE', plan)
 })
 const slotsEditable = computed(() => canManageTournament.value && (arrangeMode.value || bracketEditing.value)
@@ -925,7 +932,11 @@ async function generateBracket() {
     arrangeMode.value = drawMode.value === 'manual'
     await loadAll()
   } catch (error) {
-    errorText.value = scoringError(error?.message, t)
+    // A parallel draw (another tab or organizer) may have changed the bracket:
+    // show what the server has now instead of a raw constraint error.
+    const message = error?.message || ''
+    errorText.value = /duplicate key|could not obtain lock|deadlock/i.test(message) ? t('drafts.structureConflict') : scoringError(message, t)
+    try { await loadAll() } catch { /* Keep the original error. */ }
   } finally { actionLoading.value = false }
 }
 
@@ -1037,26 +1048,19 @@ function swapBracketSlots(payload) {
     startBracketEditing()
   }
 
-  const arr = localMatches.value
-  const fromMatch = arr.find((m) => m.id === payload.fromMatchId)
-  const toMatch = arr.find((m) => m.id === payload.toMatchId)
-  if (!fromMatch || !toMatch) return
-  // Only first-round slots take players; a fed match fills itself from results.
-  const fed = id => arr.some(m => m.next_match_id === id || m.loser_next_match_id === id)
-  if (fed(fromMatch.id) || fed(toMatch.id)) return
-
-  const fromKey = payload.fromSide === 'a' ? 'side_a_entry_id' : 'side_b_entry_id'
-  const toKey = payload.toSide === 'a' ? 'side_a_entry_id' : 'side_b_entry_id'
-
-  const tmp = fromMatch[fromKey]
-  fromMatch[fromKey] = toMatch[toKey]
-  toMatch[toKey] = tmp
+  // Only first-round slots take players (a fed match fills itself from results)
+  // and no match may be left empty; a BYE's free pass follows its player.
+  const result = swapDraftSlots(localMatches.value, payload)
+  if (result === 'empty') errorText.value = t('drafts.bracketLayoutInvalid')
+  else if (result === 'ok' && errorText.value === t('drafts.bracketLayoutInvalid')) errorText.value = ''
 }
 
 async function saveBracketLayout() {
   if (actionLoading.value) return
   if (bracketConflict.value) { errorText.value = t('drafts.structureConflict'); return }
+  // Next-round slots only mirror the BYEs locally; the server advances them itself.
   const changed = localMatches.value.filter((lm) => {
+    if (isFedMatch(localMatches.value, lm.id)) return false
     const orig = bracketBaseline.value.find((m) => m.id === lm.id)
     if (!orig) return false
     return orig.side_a_entry_id !== lm.side_a_entry_id || orig.side_b_entry_id !== lm.side_b_entry_id
@@ -2184,8 +2188,8 @@ onBeforeUnmount(() => {
 
         <section v-if="!isRoundRobin && !isGroupsPlayoff && canManageTournament && !isTournamentActive" class="card stack stack--sm">
           <h2 class="section-title">{{ t('admin.drawSection') }}</h2>
-          <p class="muted format-plan">{{ bracketPlanText }}</p>
-          <p v-if="bracketPlanBlocked" class="alert alert--info" role="status">{{ t('admin.doubleElimNeedsPow2', { n: approvedEntries.length }) }}</p>
+          <p v-if="bracketPlanText" class="muted format-plan">{{ bracketPlanText }}</p>
+          <p v-if="doubleElimCountInvalid" class="alert alert--info" role="status">{{ t('admin.doubleElimNeedsPow2', { n: approvedEntries.length }) }}</p>
 
           <div class="form-field form-field--narrow">
             <label for="adm-draw">{{ t('admin.drawMode') }}</label>
@@ -2216,10 +2220,10 @@ onBeforeUnmount(() => {
               <button
                 class="btn btn--danger btn--sm"
                 type="button"
-                :disabled="actionLoading"
+                :disabled="actionLoading || doubleElimCountInvalid"
                 @click="generateBracket"
               >
-                {{ t('admin.rebuild') }}
+                {{ drawMode === 'manual' ? t('admin.rebuildManual') : t('admin.rebuild') }}
               </button>
               <button
                 class="btn btn--ghost btn--sm"

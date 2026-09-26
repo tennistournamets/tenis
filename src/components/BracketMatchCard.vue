@@ -79,6 +79,8 @@ function setsLabel(matchId) {
 }
 
 const matchFinished = () => props.match.status === 'finished'
+// A BYE is "finished" only by its free pass: its players can still be moved.
+const slotLocked = () => matchFinished() && !isByeMatch(props.match)
 const hasLiveScore = () => props.liveScore?.status === 'active'
 const canScoreMatch = () =>
   props.canLiveScore
@@ -91,7 +93,7 @@ function rowKey(side) {
 }
 
 function onDragStart(event, side, entryId) {
-  if (!props.editableSlots || matchFinished() || !entryId) {
+  if (!props.editableSlots || slotLocked() || !entryId) {
     event.preventDefault()
     return
   }
@@ -112,7 +114,7 @@ function onDragEnd() {
 }
 
 function onDragOver(event, side) {
-  if (!props.editableSlots || matchFinished()) {
+  if (!props.editableSlots || slotLocked()) {
     return
   }
   event.preventDefault()
@@ -131,7 +133,7 @@ function onDragLeave(event, side) {
 
 function onDrop(event, toSide) {
   dragOverKey.value = null
-  if (!props.editableSlots || matchFinished()) {
+  if (!props.editableSlots || slotLocked()) {
     return
   }
   event.preventDefault()
@@ -161,16 +163,16 @@ function rowClass(side, entryId, winner) {
   const k = rowKey(side)
   return {
     'match-card__row--winner': Boolean(entryId) && winner,
-    'match-card__row--slot-editable': props.editableSlots && !matchFinished(),
-    'match-card__row--drag-over': dragOverKey.value === k && props.editableSlots && !matchFinished(),
-    'match-card__row--draggable': props.editableSlots && !matchFinished() && Boolean(entryId),
+    'match-card__row--slot-editable': props.editableSlots && !slotLocked(),
+    'match-card__row--drag-over': dragOverKey.value === k && props.editableSlots && !slotLocked(),
+    'match-card__row--draggable': props.editableSlots && !slotLocked() && Boolean(entryId),
     'match-card__row--stacked': isStacked(entryId),
     'match-card__row--selected': props.selectedSlotKey === k,
   }
 }
 
 function selectSlot(event, side) {
-  if (!props.editableSlots || matchFinished()) return
+  if (!props.editableSlots || slotLocked()) return
   event.preventDefault()
   emit('select-slot', { matchId: props.match.id, side })
 }
@@ -198,10 +200,10 @@ function selectSlot(event, side) {
     <div
       class="match-card__row"
       :class="rowClass('a', match.side_a_entry_id, match.winner_entry_id === match.side_a_entry_id)"
-      :draggable="editableSlots && !matchFinished() && Boolean(match.side_a_entry_id)"
-      :role="editableSlots && !matchFinished() ? 'button' : undefined"
-      :tabindex="editableSlots && !matchFinished() ? 0 : undefined"
-      :aria-label="editableSlots && !matchFinished() ? t('mobile.selectBracketSlot', { name: memberLines(match.side_a_entry_id).join(' / ') }) : undefined"
+      :draggable="editableSlots && !slotLocked() && Boolean(match.side_a_entry_id)"
+      :role="editableSlots && !slotLocked() ? 'button' : undefined"
+      :tabindex="editableSlots && !slotLocked() ? 0 : undefined"
+      :aria-label="editableSlots && !slotLocked() ? t('mobile.selectBracketSlot', { name: memberLines(match.side_a_entry_id).join(' / ') }) : undefined"
       @dragstart="onDragStart($event, 'a', match.side_a_entry_id)"
       @dragend="onDragEnd"
       @dragover="onDragOver($event, 'a')"
@@ -219,10 +221,10 @@ function selectSlot(event, side) {
     <div
       class="match-card__row"
       :class="rowClass('b', match.side_b_entry_id, match.winner_entry_id === match.side_b_entry_id)"
-      :draggable="editableSlots && !matchFinished() && Boolean(match.side_b_entry_id)"
-      :role="editableSlots && !matchFinished() ? 'button' : undefined"
-      :tabindex="editableSlots && !matchFinished() ? 0 : undefined"
-      :aria-label="editableSlots && !matchFinished() ? t('mobile.selectBracketSlot', { name: memberLines(match.side_b_entry_id).join(' / ') }) : undefined"
+      :draggable="editableSlots && !slotLocked() && Boolean(match.side_b_entry_id)"
+      :role="editableSlots && !slotLocked() ? 'button' : undefined"
+      :tabindex="editableSlots && !slotLocked() ? 0 : undefined"
+      :aria-label="editableSlots && !slotLocked() ? t('mobile.selectBracketSlot', { name: memberLines(match.side_b_entry_id).join(' / ') }) : undefined"
       @dragstart="onDragStart($event, 'b', match.side_b_entry_id)"
       @dragend="onDragEnd"
       @dragover="onDragOver($event, 'b')"

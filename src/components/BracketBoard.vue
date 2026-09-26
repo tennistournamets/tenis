@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 
 import BracketMatchCard from './BracketMatchCard.vue'
 import InfiniteCanvas from './InfiniteCanvas.vue'
-import { knockoutRoundName } from '../lib/roundLabels'
+import { bracketRoundName } from '../lib/roundLabels'
 
 const props = defineProps({
   matches: {
@@ -189,9 +189,11 @@ const splitSectionsFlat = computed(() => {
   ]
 })
 
+// A board shows one stage; lower-bracket rounds are numbered, not named from the final.
+const boardStage = computed(() => props.matches[0]?.stage || 'main')
 function roundLabel(roundNumber) {
   if (totalRounds.value === 0) return ''
-  return knockoutRoundName(roundNumber, totalRounds.value, t)
+  return bracketRoundName(boardStage.value, roundNumber, totalRounds.value, t)
 }
 
 function getBox(el, container) {
