@@ -235,6 +235,7 @@ onMounted(async () => {
         type="button"
         class="filter-segment__btn"
         :class="{ 'filter-segment__btn--active': statusFilter === 'active' }"
+        :aria-pressed="statusFilter === 'active'"
         @click="statusFilter = 'active'"
       >
         {{ t('admin.filterActive') }}
@@ -243,6 +244,7 @@ onMounted(async () => {
         type="button"
         class="filter-segment__btn"
         :class="{ 'filter-segment__btn--active': statusFilter === 'completed' }"
+        :aria-pressed="statusFilter === 'completed'"
         @click="statusFilter = 'completed'"
       >
         {{ t('admin.filterCompleted') }}
@@ -251,6 +253,7 @@ onMounted(async () => {
         type="button"
         class="filter-segment__btn"
         :class="{ 'filter-segment__btn--active': statusFilter === 'all' }"
+        :aria-pressed="statusFilter === 'all'"
         @click="statusFilter = 'all'"
       >
         {{ t('admin.filterAll') }}

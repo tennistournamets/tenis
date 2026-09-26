@@ -1868,7 +1868,7 @@ onBeforeUnmount(() => {
                       <button
                         class="pair-slot__remove"
                         type="button"
-                        aria-label="Remove"
+                        :aria-label="t('actions.remove')"
                         @click.stop="removeFromSlot(idx, 'A')"
                       >&times;</button>
                     </template>
@@ -1898,7 +1898,7 @@ onBeforeUnmount(() => {
                       <button
                         class="pair-slot__remove"
                         type="button"
-                        aria-label="Remove"
+                        :aria-label="t('actions.remove')"
                         @click.stop="removeFromSlot(idx, 'B')"
                       >&times;</button>
                     </template>
@@ -1985,7 +1985,7 @@ onBeforeUnmount(() => {
                       <button
                         class="pair-slot__remove"
                         type="button"
-                        aria-label="Remove"
+                        :aria-label="t('actions.remove')"
                         @click.stop="removeFromSlot(idx, 'A')"
                       >&times;</button>
                     </template>
@@ -2015,7 +2015,7 @@ onBeforeUnmount(() => {
                       <button
                         class="pair-slot__remove"
                         type="button"
-                        aria-label="Remove"
+                        :aria-label="t('actions.remove')"
                         @click.stop="removeFromSlot(idx, 'B')"
                       >&times;</button>
                     </template>

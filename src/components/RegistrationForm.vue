@@ -218,9 +218,11 @@ async function submit() {
         autocomplete="tel"
         :disabled="loading"
         required
+        :aria-invalid="phoneInvalid || undefined"
+        :aria-describedby="phoneInvalid ? 'reg-phone-error' : undefined"
         @blur="phoneTouched = true"
       />
-      <p v-if="phoneInvalid" class="error-text" role="alert" style="margin: 4px 0 0">{{ t('registrationForm.invalidPhone') }}</p>
+      <p v-if="phoneInvalid" id="reg-phone-error" class="error-text" role="alert" style="margin: 4px 0 0">{{ t('registrationForm.invalidPhone') }}</p>
     </div>
 
     <div class="form-field">
@@ -235,10 +237,12 @@ async function submit() {
         autocomplete="email"
         :disabled="loading"
         required
+        :aria-invalid="emailInvalid || undefined"
+        :aria-describedby="emailInvalid ? 'reg-email-error reg-email-hint' : 'reg-email-hint'"
         @blur="emailTouched = true"
       />
-      <p v-if="emailInvalid" class="error-text" role="alert" style="margin: 4px 0 0">{{ t('registrationForm.invalidEmail') }}</p>
-      <p class="field-hint">{{ t('registrationForm.contactsPrivate') }}</p>
+      <p v-if="emailInvalid" id="reg-email-error" class="error-text" role="alert" style="margin: 4px 0 0">{{ t('registrationForm.invalidEmail') }}</p>
+      <p id="reg-email-hint" class="field-hint">{{ t('registrationForm.contactsPrivate') }}</p>
     </div>
 
     <button class="btn btn--primary" :disabled="loading || registrationClosed || conditionsChanged" type="submit">
