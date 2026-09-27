@@ -13,6 +13,8 @@ const props = defineProps({
   entriesMap: { type: Object, default: () => ({}) },
   liveScoresByMatch: { type: Object, default: () => ({}) },
   format: { type: String, default: 'americano' },
+  // King of the Court: the rounds planned before the start, shown as "round 3 of 6".
+  plannedRounds: { type: Number, default: null },
   canEditFinal: { type: Boolean, default: false },
   canLiveScore: { type: Boolean, default: false },
 })
@@ -61,7 +63,7 @@ function matchAria(match) {
     >
       <summary class="points-round__head">
         <svg class="points-round__chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
-        <h3 class="points-round__title">{{ t('bracket.roundN', { n: round.round }) }}</h3>
+        <h3 class="points-round__title">{{ plannedRounds ? t('pointsFormat.roundOf', { n: round.round, total: plannedRounds }) : t('bracket.roundN', { n: round.round }) }}</h3>
         <span class="points-round__state">{{ roundStateLabel(round) }}</span>
       </summary>
 

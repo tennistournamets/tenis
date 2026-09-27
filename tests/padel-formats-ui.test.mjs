@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { test } from 'node:test'
 import { getSportConfig, isDynamicFormat, isIndividualFormat, isPointsFormat, pointsTarget, pointsTargetOptions, scoringFamily } from '../src/lib/sportConfig.js'
-import { complementScore, currentRound, pointsPlan, pointsRoster, pointsRounds, roundMinutes } from '../src/lib/pointsFormat.js'
+import { complementScore, currentRound, kotcDefaultRounds, pointsPlan, pointsRoster, pointsRounds, restPoints, roundMinutes } from '../src/lib/pointsFormat.js'
 import { matchSideLabel, matchSidesReady, sideEntryIds } from '../src/lib/entryDisplay.js'
 import { rosterMismatch } from '../src/lib/groupsFlow.js'
 import { tournamentChampion, finishConfirmation } from '../src/lib/tournamentChampion.js'
@@ -44,12 +44,16 @@ test('plans mirror the generators: cycle, courts, rests and the King of the Cour
   assert.deepEqual(
     (({ valid, courts, rounds, matches, resting }) => ({ valid, courts, rounds, matches, resting }))(pointsPlan('americano', 8)),
     { valid: true, courts: 2, rounds: 7, matches: 14, resting: 0 })
+  // The full partner cycle: floor(n(n-1)/2 / (2 * courts)) rounds.
   const ten = pointsPlan('americano', 10)
-  assert.deepEqual([ten.rounds, ten.courts, ten.resting, ten.cycle], [9, 2, 2, 9])
+  assert.deepEqual([ten.rounds, ten.courts, ten.resting, ten.cycle, ten.full], [11, 2, 2, 9, 11])
+  assert.deepEqual([pointsPlan('americano', 6).rounds, pointsPlan('americano', 13).rounds, pointsPlan('americano', 13, { courts: 2 }).rounds, pointsPlan('americano', 10, { courts: 1 }).rounds], [7, 13, 19, 22])
   assert.deepEqual([pointsPlan('americano', 8, { courts: 1, rounds: 14 }).matches, pointsPlan('americano', 8, { courts: 1 }).resting], [14, 4])
   assert.equal(pointsPlan('americano', 3).reason, 'minPlayers')
   assert.equal(pointsPlan('king_of_court', 10).reason, 'kotcPlayers')
   assert.equal(pointsPlan('king_of_court', 12).courts, 3)
+  assert.deepEqual([pointsPlan('king_of_court', 8).rounds, pointsPlan('king_of_court', 16).rounds, pointsPlan('king_of_court', 8, { rounds: 9 }).rounds], [5, 7, 9])
+  assert.deepEqual([kotcDefaultRounds(2), kotcDefaultRounds(4), restPoints(24), restPoints(21), restPoints(16)], [5, 7, 12, 10, 8])
   assert.equal(pointsPlan('mexicano', 9).resting, 1)
   assert.equal(pointsPlan('mexicano', 9).dynamic, true)
   const team = pointsPlan('team_americano', 5)

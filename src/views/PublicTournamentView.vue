@@ -18,7 +18,7 @@ import { matchSideLabel } from '../lib/entryDisplay'
 import { categoryLabelKey, getSportConfig, isIndividualFormat, isPointsFormat, pointsTarget } from '../lib/sportConfig'
 import PointsRoundsBoard from '../components/PointsRoundsBoard.vue'
 import PointsStandingsTable from '../components/PointsStandingsTable.vue'
-import { pointsRoster, pointsRounds } from '../lib/pointsFormat'
+import { pointsRoster, pointsRounds, restPoints } from '../lib/pointsFormat'
 import { useNarrowLayout } from '../lib/useNarrowLayout'
 import { useHeaderTitle } from '../lib/headerTitle'
 import { onTabKeydown } from '../lib/tabNavigation'
@@ -197,6 +197,9 @@ function syncPublicLiveFromRoute() {
 // A side of a match: one entry, or both players in the points formats.
 const sideLabel = (match, side) => matchSideLabel(match, side, entriesMap.value, t('bracket.tbd'))
 const pointsRoundsList = computed(() => pointsRounds(matches.value, pointsRoster(tournament.value, approvedEntries.value)))
+const pointsMatchTarget = computed(() => pointsTarget(tournament.value))
+// King of the Court: the rounds planned before the start ("round 3 of 6").
+const plannedRounds = computed(() => (tournament.value?.format === 'king_of_court' ? Number(tournament.value?.format_config?.rounds) || null : null))
 
 
 
@@ -228,6 +231,11 @@ const rulesRows = computed(() => {
   const rows = []
   if (isPointsFormat(tr.format)) {
     rows.push({ label: t('pointsFormat.targetLabel'), value: String(pointsTarget(tr)) })
+    if (plannedRounds.value) rows.push({ label: t('pointsFormat.rounds'), value: String(plannedRounds.value) })
+    if (tr.format !== 'king_of_court') {
+      rows.push({ label: t('pointsFormat.rulesRest'), value: t('pointsFormat.rulesRestValue', { n: restPoints(pointsTarget(tr)) }) })
+      rows.push({ label: t('pointsFormat.rulesTiebreak'), value: t('pointsFormat.rulesTiebreakValue') })
+    }
   } else if (sportCfg.value.supportsSetFormat && tr.set_format) {
     rows.push({ label: t('admin.setFormat'), value: t(`format.${tr.set_format}`) })
   }
@@ -691,7 +699,7 @@ onBeforeUnmount(() => {
         <div id="pub-mobile-panel" role="tabpanel" :aria-labelledby="`pub-tab-${mobileSurface}`">
         <div v-if="mobileSurface === 'matches' && isPointsFmt" class="card">
           <h3 class="section-title">{{ t('pointsFormat.roundsTitle') }}</h3>
-          <PointsRoundsBoard :rounds="pointsRoundsList" :entries-map="entriesMap" :live-scores-by-match="liveScoresByMatch" :format="tournament.format" @view-live="openPublicLive" />
+          <PointsRoundsBoard :rounds="pointsRoundsList" :entries-map="entriesMap" :live-scores-by-match="liveScoresByMatch" :format="tournament.format" :planned-rounds="plannedRounds" @view-live="openPublicLive" />
         </div>
         <div v-else-if="mobileSurface === 'matches'" class="card mobile-match-card">
           <TournamentMatchList
@@ -707,7 +715,7 @@ onBeforeUnmount(() => {
 
         <div v-else-if="isPointsFmt" class="card">
           <h3 class="section-title">{{ pointsTableTitle }}</h3>
-          <PointsStandingsTable :rows="pointsStandings" :format="tournament.format" />
+          <PointsStandingsTable :rows="pointsStandings" :format="tournament.format" :target="pointsMatchTarget" />
         </div>
         <template v-else-if="isRoundRobin">
           <div v-if="standings.length" class="card">
@@ -735,11 +743,11 @@ onBeforeUnmount(() => {
       <template v-else-if="isPointsFmt">
         <div v-if="pointsStandings.length" class="card">
           <h3 class="section-title">{{ pointsTableTitle }}</h3>
-          <PointsStandingsTable :rows="pointsStandings" :format="tournament.format" />
+          <PointsStandingsTable :rows="pointsStandings" :format="tournament.format" :target="pointsMatchTarget" />
         </div>
         <div class="card" style="margin-top: var(--space-4)">
           <h3 class="section-title">{{ t('pointsFormat.roundsTitle') }}</h3>
-          <PointsRoundsBoard :rounds="pointsRoundsList" :entries-map="entriesMap" :live-scores-by-match="liveScoresByMatch" :format="tournament.format" @view-live="openPublicLive" />
+          <PointsRoundsBoard :rounds="pointsRoundsList" :entries-map="entriesMap" :live-scores-by-match="liveScoresByMatch" :format="tournament.format" :planned-rounds="plannedRounds" @view-live="openPublicLive" />
         </div>
       </template>
 

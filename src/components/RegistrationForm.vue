@@ -5,7 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { useUnsavedChanges, confirmDiscard } from '../lib/unsavedChanges'
 import { cloneForm, sameForm } from '../lib/formDraft'
 import { supabase } from '../lib/supabase'
-import { scoringFamily } from '../lib/sportConfig'
+import { isIndividualFormat, scoringFamily } from '../lib/sportConfig'
 import { registrationDisplayState, registrationError, closedReasonKey, entryNamesError } from '../lib/registrationRules'
 import { track } from '../lib/analytics'
 
@@ -24,9 +24,11 @@ const emit = defineEmits(['submitted', 'dirty'])
 const { t, locale } = useI18n()
 const entryType = computed(() => props.tournament.category)
 const isTeamSport = computed(() => scoringFamily(props.tournament.sport || 'tennis') === 'goals')
+// Americano, Mexicano, King of the Court: one player per entry, the partner changes every round.
+const isIndividual = computed(() => isIndividualFormat(props.tournament.format))
 const memberOneLabel = computed(() => {
   if (isTeamSport.value) return t('registrationForm.teamName')
-  return entryType.value === 'doubles' ? t('registrationForm.memberOne') : t('registrationForm.member')
+  return entryType.value === 'doubles' && !isIndividual.value ? t('registrationForm.memberOne') : t('registrationForm.member')
 })
 // «Тип участия» дублирует чипы в шапке для одиночного разряда — показываем
 // только там, где он несёт смысл (пары и командные виды).
@@ -36,7 +38,7 @@ const entryTypeLabel = computed(() =>
 )
 const pairingMode = computed(() => props.tournament.doubles_pairing_mode || 'pre_agreed')
 const showMemberTwo = computed(() => entryType.value === 'doubles' && pairingMode.value === 'pre_agreed')
-const showMemberTwoOptional = computed(() => entryType.value === 'doubles' && pairingMode.value === 'pick_random')
+const showMemberTwoOptional = computed(() => entryType.value === 'doubles' && pairingMode.value === 'pick_random' && !isIndividual.value)
 
 const form = reactive({
   displayName: '',
@@ -110,7 +112,7 @@ async function submit() {
     return
   }
 
-  const memberTwo = entryType.value === 'doubles' && form.memberTwo.trim()
+  const memberTwo = entryType.value === 'doubles' && !isIndividual.value && form.memberTwo.trim()
     ? form.memberTwo
     : null
 
@@ -155,7 +157,7 @@ async function submit() {
   <form class="card card--elevated stack stack--sm" @submit.prevent="submit">
     <div>
       <h3 class="section-title">{{ t('registrationForm.title') }}</h3>
-      <p v-if="showEntryType" class="muted reg-form__type">{{ isTeamSport ? t('registrationForm.teamNote') : t(showMemberTwoOptional ? 'registrationForm.doublesRandomNote' : 'registrationForm.doublesNote') }}</p>
+      <p v-if="showEntryType" class="muted reg-form__type">{{ isTeamSport ? t('registrationForm.teamNote') : isIndividual ? t('pointsFormat.individualHint') : t(showMemberTwoOptional ? 'registrationForm.doublesRandomNote' : 'registrationForm.doublesNote') }}</p>
       <p class="muted reg-form__legend"><span class="reg-form__req" aria-hidden="true">*</span> {{ t('registrationForm.requiredLegend') }}</p>
     </div>
 

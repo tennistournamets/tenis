@@ -140,6 +140,10 @@ test('finished and live matches cannot be moved; deleting matches removes their 
   await ctx.db.query("update matches set status='finished' where id=$1", [semis[1].id])
   await assert.rejects(setSchedule(semis[1], { court: courts[1].id, at: T2, kind: 'fixed' }), /schedule\.matchFinished/)
   assert.equal((await rows(t)).length, 1)
+  // A running tournament keeps its matches: the direct delete (UI "reset bracket") is refused.
+  await asActor(ctx, 'owner', 'delete from matches where tournament_id=$1', [t.id])
+  assert.equal((await rows(t)).length, 1)
+  await ctx.db.query("update tournaments set status='registration_closed' where id=$1", [t.id])
   await asActor(ctx, 'owner', 'delete from matches where tournament_id=$1', [t.id])
   assert.equal((await rows(t)).length, 0)
 })

@@ -45,10 +45,19 @@ export function currentRound(rounds = []) {
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value))
 
+/** Points a completed round of rest earns: half a match, rounded down (floor(N / 2)). */
+export const restPoints = target => Math.floor((Number(target) || 24) / 2)
+
+/** King of the Court: rounds planned by default, the number of courts + 3 and at least 5. */
+export const kotcDefaultRounds = courts => Math.max(5, (Number(courts) || 0) + 3)
+export const KOTC_ROUNDS = { min: 2, max: 30 }
+
 /**
  * What the generator will build for n approved entries.
- * { n, valid, reason, courts, maxCourts, rounds, maxRounds, perRound, resting, matches, dynamic }
+ * { n, valid, reason, courts, maxCourts, rounds, maxRounds, full, perRound, resting, matches, dynamic }
  * reason is an i18n key suffix (pointsFormat.*) when the field cannot be drawn.
+ * Americano plays a full partner cycle by default: floor(n(n-1)/2 / (2 * courts))
+ * rounds, every pair of players partners once as far as the courts allow.
  */
 export function pointsPlan(format, n, { courts = null, rounds = null } = {}) {
   const count = Math.max(0, Number(n) || 0)
@@ -70,13 +79,22 @@ export function pointsPlan(format, n, { courts = null, rounds = null } = {}) {
   const valid = !reason
   const c = format === 'king_of_court' ? maxCourts : clamp(Number(courts) || maxCourts, 1, Math.max(1, maxCourts))
   const cycle = count % 2 ? count : count - 1
-  const r = format === 'americano' ? clamp(Number(rounds) || cycle, 1, Math.max(1, 3 * cycle)) : null
+  const full = valid ? Math.floor((count * (count - 1)) / 2 / (2 * c)) : 0
+  let r = null
+  let maxRounds = null
+  if (format === 'americano') {
+    maxRounds = Math.max(3 * cycle, full)
+    r = clamp(Number(rounds) || full, 1, Math.max(1, maxRounds))
+  } else if (format === 'king_of_court') {
+    maxRounds = KOTC_ROUNDS.max
+    r = clamp(Number(rounds) || kotcDefaultRounds(c), KOTC_ROUNDS.min, KOTC_ROUNDS.max)
+  }
   return {
     n: count, valid, reason, dynamic,
     courts: valid ? c : 0, maxCourts,
-    rounds: valid ? r : null, maxRounds: format === 'americano' ? 3 * cycle : null, cycle,
+    rounds: valid ? r : null, maxRounds, cycle, full,
     perRound: valid ? c : 0, resting: valid ? count - 4 * c : 0,
-    matches: valid && r ? r * c : null,
+    matches: valid && r && format === 'americano' ? r * c : null,
   }
 }
 

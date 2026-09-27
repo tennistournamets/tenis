@@ -122,6 +122,12 @@
       "sha256": "74a7c85a405da623c58da447addd0f973abcd73635f47ddf6b2c464cd8235055",
       "tenisAppliedVersion": null,
       "tenisNote": "Not applied to TENIS yet (needs confirmation, backup first)."
+    },
+    {
+      "path": "supabase/migrations/20260927095123_points_format_rules.sql",
+      "sha256": "16fdca9ea252fee7012425de56de180f79899dc453531b2ee401b76d7de80a37",
+      "tenisAppliedVersion": null,
+      "tenisNote": "Not applied to TENIS yet (needs confirmation, backup first)."
     }
   ],
   "baseline": {

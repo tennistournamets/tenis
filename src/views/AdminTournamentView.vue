@@ -14,7 +14,7 @@ import DoubleElimBoard from '../components/DoubleElimBoard.vue'
 import { scoringFamily, getSportConfig, isDynamicFormat, isIndividualFormat, isPointsFormat, pointsTarget } from '../lib/sportConfig'
 import PointsRoundsBoard from '../components/PointsRoundsBoard.vue'
 import PointsStandingsTable from '../components/PointsStandingsTable.vue'
-import { currentRound, pointsPlan, pointsRoster, pointsRounds, roundMinutes } from '../lib/pointsFormat'
+import { currentRound, KOTC_ROUNDS, pointsPlan, pointsRoster, pointsRounds, restPoints, roundMinutes } from '../lib/pointsFormat'
 import { scoringAccess, matchScoringAction } from '../lib/scoringAccess'
 import LiveScoringModal from '../components/LiveScoringModal.vue'
 import TournamentQrModal from '../components/TournamentQrModal.vue'
@@ -733,28 +733,44 @@ const pointsRoundsList = computed(() => pointsRounds(matches.value, pointsRoster
 const pointsCurrent = computed(() => currentRound(pointsRoundsList.value))
 const pointsCourts = ref(null)
 const pointsRoundsWanted = ref(null)
+// Mexicano / King of the Court: round 1 is a random draw unless the organizer picks the seeding.
+const pointsFirstRound = ref('random')
 const pointsPlanNow = computed(() => pointsPlan(tournamentFormat.value, approvedEntries.value.length, { courts: pointsCourts.value, rounds: pointsRoundsWanted.value }))
 const courtOptions = computed(() => Array.from({ length: pointsPlanNow.value.maxCourts }, (_, i) => i + 1))
 const roundOptions = computed(() => {
   const plan = pointsPlanNow.value
   if (!plan.maxRounds) return []
-  const cycle = plan.cycle
-  return Array.from({ length: plan.maxRounds }, (_, i) => i + 1).filter(n => n <= cycle || n % cycle === 0 || n === plan.rounds)
+  if (tournamentFormat.value === 'king_of_court') return Array.from({ length: KOTC_ROUNDS.max - KOTC_ROUNDS.min + 1 }, (_, i) => i + KOTC_ROUNDS.min)
+  // Americano: up to the full partner cycle, then whole repeats of it.
+  const full = plan.full || plan.cycle
+  return Array.from({ length: plan.maxRounds }, (_, i) => i + 1).filter(n => n <= full || n % full === 0 || n === plan.rounds)
 })
+// A regeneration starts from what the last generation stored.
+watch(() => tournament.value?.id, () => {
+  const cfg = tournament.value?.format_config || {}
+  pointsFirstRound.value = cfg.first_round === 'seeded' ? 'seeded' : 'random'
+  pointsRoundsWanted.value = Number(cfg.rounds) || null
+  pointsCourts.value = Number(cfg.courts) || null
+})
+// King of the Court: the rounds planned before the start ("round 3 of 6").
+const plannedRounds = computed(() => (tournamentFormat.value === 'king_of_court' ? Number(tournament.value?.format_config?.rounds) || null : null))
 const pointsPlanLines = computed(() => {
   const plan = pointsPlanNow.value
   if (!plan.valid) return [t(`pointsFormat.errors.${plan.reason}`)]
   const lines = []
+  const firstRound = t(pointsFirstRound.value === 'seeded' ? 'pointsFormat.planFirstSeeded' : 'pointsFormat.planFirstRandom')
   if (tournamentFormat.value === 'team_americano') lines.push(t('pointsFormat.planTeam', plan))
-  else if (plan.dynamic) lines.push(t('pointsFormat.planDynamicField', plan), t(tournamentFormat.value === 'king_of_court' ? 'pointsFormat.planKotc' : 'pointsFormat.planMexicano'))
-  else lines.push(t('pointsFormat.planIndividual', plan), t('pointsFormat.planCycle', plan))
-  if (plan.resting) lines.push(t('pointsFormat.planRest', { n: plan.resting }))
+  else if (tournamentFormat.value === 'king_of_court') lines.push(t('pointsFormat.planDynamicField', plan), firstRound, t('pointsFormat.planKotc'), t('pointsFormat.planKotcRounds', plan))
+  else if (plan.dynamic) lines.push(t('pointsFormat.planDynamicField', plan), firstRound, t('pointsFormat.planMexicano'))
+  else lines.push(t('pointsFormat.planIndividual', plan), t(plan.resting ? 'pointsFormat.planCycleApprox' : 'pointsFormat.planCycle', { cycle: plan.full }))
+  if (plan.resting) lines.push(t('pointsFormat.planRest', { n: plan.resting, points: restPoints(matchTarget.value) }))
   lines.push(`${t('pointsFormat.target', { n: matchTarget.value })}. ${t('pointsFormat.planTime', { min: roundMinutes(matchTarget.value) })}`)
   return lines
 })
 // Mexicano / King of the Court: the next round, once every match of this one is played.
 const lastRound = computed(() => pointsRoundsList.value[pointsRoundsList.value.length - 1] || null)
-const canBuildNextRound = computed(() => isDynamicFmt.value && isTournamentActive.value && Boolean(lastRound.value?.finished))
+const allRoundsPlayed = computed(() => plannedRounds.value != null && (lastRound.value?.round || 0) >= plannedRounds.value && Boolean(lastRound.value?.finished))
+const canBuildNextRound = computed(() => isDynamicFmt.value && isTournamentActive.value && Boolean(lastRound.value?.finished) && !allRoundsPlayed.value)
 const canUndoRound = computed(() => isDynamicFmt.value && !isTournamentFinished.value && (lastRound.value?.round || 0) > 1
   && lastRound.value.matches.every(m => m.status !== 'finished' && m.side_a_score == null && !liveScoresByMatch.value[m.id]))
 const isGoalsSport = computed(() => tournamentScoringFamily.value === 'goals')
@@ -1114,8 +1130,9 @@ async function generatePointsSchedule() {
     const plan = pointsPlanNow.value
     const { error } = await supabase.rpc('generate_points_format', {
       p_tournament_id: props.id,
-      p_rounds: tournamentFormat.value === 'americano' ? plan.rounds : null,
+      p_rounds: ['americano', 'king_of_court'].includes(tournamentFormat.value) ? plan.rounds : null,
       p_courts: isIndividualFormat(tournamentFormat.value) && tournamentFormat.value !== 'king_of_court' ? plan.courts : null,
+      p_first_round: isDynamicFmt.value ? pointsFirstRound.value : null,
     })
     if (error) throw error
     if (firstDraw) track('draw_generated', { format: tournament.value?.format })
@@ -2280,7 +2297,7 @@ onBeforeUnmount(() => {
         <div id="admin-mobile-panel" :role="isNarrowLayout && isTournamentActive && matches.length ? 'tabpanel' : undefined" :aria-labelledby="isNarrowLayout && isTournamentActive && matches.length ? `admin-surface-${adminMobileBracketSurface}` : undefined">
           <section v-if="isNarrowLayout && isTournamentActive && matches.length && adminMobileBracketSurface === 'matches' && isPointsFmt" class="card stack stack--sm mt-3">
             <h2 class="section-title">{{ t('pointsFormat.roundsTitle') }}</h2>
-            <PointsRoundsBoard :rounds="pointsRoundsList" :entries-map="entriesMap" :live-scores-by-match="liveScoresByMatch" :format="tournament.format" :can-edit-final="canEditFinalScores" :can-live-score="canUseLiveScoring" @edit-result="openRrMatch" @view-live="openLiveScoring" />
+            <PointsRoundsBoard :rounds="pointsRoundsList" :entries-map="entriesMap" :live-scores-by-match="liveScoresByMatch" :format="tournament.format" :planned-rounds="plannedRounds" :can-edit-final="canEditFinalScores" :can-live-score="canUseLiveScoring" @edit-result="openRrMatch" @view-live="openLiveScoring" />
           </section>
           <section v-else-if="isNarrowLayout && isTournamentActive && matches.length && adminMobileBracketSurface === 'matches'" class="card mobile-score-center mt-3">
             <TournamentMatchList :format="tournament.format" :matches="matches" :groups="groups" :entries-map="entriesMap" :sets-by-match="setsByMatch" :live-scores-by-match="liveScoresByMatch" :can-edit-final="canEditFinalScores" :can-live-score="canUseLiveScoring" @edit-result="openRrMatch" @view-live="openLiveScoring" />
@@ -2289,8 +2306,8 @@ onBeforeUnmount(() => {
         <template v-if="isPointsFmt">
           <section v-if="canManageTournament && !isTournamentActive && !isTournamentFinished" class="card stack stack--sm">
             <h2 class="section-title">{{ t('pointsFormat.scheduleTitle') }}</h2>
-            <div v-if="pointsPlanNow.valid && tournament.format !== 'king_of_court' && tournament.format !== 'team_americano' && (courtOptions.length > 1 || roundOptions.length)" class="points-plan-fields">
-              <div v-if="courtOptions.length > 1" class="form-field form-field--narrow">
+            <div v-if="pointsPlanNow.valid && tournament.format !== 'team_americano'" class="points-plan-fields">
+              <div v-if="courtOptions.length > 1 && tournament.format !== 'king_of_court'" class="form-field form-field--narrow">
                 <label for="adm-points-courts">{{ t('pointsFormat.courts') }}</label>
                 <select id="adm-points-courts" :value="pointsPlanNow.courts" class="input" :disabled="actionLoading" @change="pointsCourts = Number($event.target.value)">
                   <option v-for="n in courtOptions" :key="n" :value="n">{{ n }}</option>
@@ -2300,6 +2317,13 @@ onBeforeUnmount(() => {
                 <label for="adm-points-rounds">{{ t('pointsFormat.rounds') }}</label>
                 <select id="adm-points-rounds" :value="pointsPlanNow.rounds" class="input" :disabled="actionLoading" @change="pointsRoundsWanted = Number($event.target.value)">
                   <option v-for="n in roundOptions" :key="n" :value="n">{{ n }}</option>
+                </select>
+              </div>
+              <div v-if="isDynamicFmt" class="form-field form-field--narrow">
+                <label for="adm-points-first">{{ t('pointsFormat.firstRound') }}</label>
+                <select id="adm-points-first" v-model="pointsFirstRound" class="input" :disabled="actionLoading">
+                  <option value="random">{{ t('pointsFormat.firstRoundRandom') }}</option>
+                  <option value="seeded">{{ t('pointsFormat.firstRoundSeeded') }}</option>
                 </select>
               </div>
             </div>
@@ -2320,7 +2344,9 @@ onBeforeUnmount(() => {
 
           <section v-if="canManageTournament && isDynamicFmt && isTournamentActive && hasBracket" class="card stack stack--sm">
             <h2 class="section-title">{{ t('pointsFormat.nextRound') }}</h2>
-            <p v-if="!canBuildNextRound" class="muted">{{ t('pointsFormat.nextRoundWait', { n: lastRound?.round || 1 }) }}</p>
+            <p v-if="plannedRounds" class="muted">{{ t('pointsFormat.roundOf', { n: lastRound?.round || 1, total: plannedRounds }) }}</p>
+            <p v-if="allRoundsPlayed" class="alert alert--info" role="status">{{ t('pointsFormat.lastRoundDone', { n: plannedRounds }) }}</p>
+            <p v-else-if="!canBuildNextRound" class="muted">{{ t('pointsFormat.nextRoundWait', { n: lastRound?.round || 1 }) }}</p>
             <div class="inline-actions">
               <button class="btn btn--primary btn--sm" type="button" :disabled="actionLoading || !canBuildNextRound" @click="buildNextRound">
                 {{ t('pointsFormat.nextRound') }}
@@ -2333,12 +2359,12 @@ onBeforeUnmount(() => {
 
           <section v-if="hasBracket && pointsStandings.length && showAdminBracketOverview" class="card stack stack--sm mt-4">
             <h2 class="section-title">{{ t(isIndividualFormat(tournament.format) ? 'pointsFormat.playersTable' : 'pointsFormat.pairsTable') }}</h2>
-            <PointsStandingsTable :rows="pointsStandings" :format="tournament.format" />
+            <PointsStandingsTable :rows="pointsStandings" :format="tournament.format" :target="matchTarget" />
           </section>
 
           <section v-if="hasBracket && (!isNarrowLayout || !isTournamentActive)" class="card stack stack--sm mt-4">
             <h2 class="section-title">{{ t('pointsFormat.roundsTitle') }}</h2>
-            <PointsRoundsBoard :rounds="pointsRoundsList" :entries-map="entriesMap" :live-scores-by-match="liveScoresByMatch" :format="tournament.format" :can-edit-final="canEditFinalScores" :can-live-score="canUseLiveScoring" @edit-result="openRrMatch" @view-live="openLiveScoring" />
+            <PointsRoundsBoard :rounds="pointsRoundsList" :entries-map="entriesMap" :live-scores-by-match="liveScoresByMatch" :format="tournament.format" :planned-rounds="plannedRounds" :can-edit-final="canEditFinalScores" :can-live-score="canUseLiveScoring" @edit-result="openRrMatch" @view-live="openLiveScoring" />
           </section>
         </template>
 
@@ -2471,7 +2497,8 @@ onBeforeUnmount(() => {
           </section>
         </template>
 
-        <section v-if="!isRoundRobin && !isGroupsPlayoff && canManageTournament && !isTournamentActive" class="card stack stack--sm">
+        <!-- Knockout draw: before the start only; points formats build their rounds above -->
+        <section v-if="!isRoundRobin && !isGroupsPlayoff && !isPointsFmt && canManageTournament && !isTournamentActive && !isTournamentFinished" class="card stack stack--sm">
           <h2 class="section-title">{{ t('admin.drawSection') }}</h2>
           <p v-if="bracketPlanText" class="muted format-plan">{{ bracketPlanText }}</p>
           <p v-if="doubleElimCountInvalid" class="alert alert--info" role="status">{{ t('admin.doubleElimNeedsPow2', { n: approvedEntries.length }) }}</p>
@@ -2534,9 +2561,9 @@ onBeforeUnmount(() => {
         </section>
 
         <section v-if="!isRoundRobin && !isGroupsPlayoff && !hasBracket && !canManageTournament" class="card empty-state">
-          <p class="empty-state__hint">{{ t('bracket.empty') }}</p>
+          <p class="empty-state__hint">{{ t(isPointsFmt ? 'pointsFormat.noRounds' : 'bracket.empty') }}</p>
         </section>
-        <section v-if="!isRoundRobin && !isGroupsPlayoff && hasBracket && showAdminBracketOverview" class="card stack stack--sm mt-4">
+        <section v-if="!isRoundRobin && !isGroupsPlayoff && !isPointsFmt && hasBracket && showAdminBracketOverview" class="card stack stack--sm mt-4">
           <DoubleElimBoard
             v-if="isDoubleElim"
             :matches="displayMatches"
@@ -2654,11 +2681,11 @@ onBeforeUnmount(() => {
         <template v-else-if="isPointsFmt">
           <section class="card stack stack--sm">
             <h2 class="section-title">{{ t('pointsFormat.roundsTitle') }}</h2>
-            <PointsRoundsBoard :rounds="pointsRoundsList" :entries-map="entriesMap" :live-scores-by-match="liveScoresByMatch" :format="tournament.format" :can-edit-final="canEditFinalScores" :can-live-score="canUseLiveScoring" @edit-result="openRrMatch" @view-live="openLiveScoring" />
+            <PointsRoundsBoard :rounds="pointsRoundsList" :entries-map="entriesMap" :live-scores-by-match="liveScoresByMatch" :format="tournament.format" :planned-rounds="plannedRounds" :can-edit-final="canEditFinalScores" :can-live-score="canUseLiveScoring" @edit-result="openRrMatch" @view-live="openLiveScoring" />
           </section>
           <section v-if="pointsStandings.length" class="card stack stack--sm mt-4">
             <h2 class="section-title">{{ t(isIndividualFormat(tournament.format) ? 'pointsFormat.playersTable' : 'pointsFormat.pairsTable') }}</h2>
-            <PointsStandingsTable :rows="pointsStandings" :format="tournament.format" />
+            <PointsStandingsTable :rows="pointsStandings" :format="tournament.format" :target="matchTarget" />
           </section>
         </template>
         <section v-else-if="isNarrowLayout" class="card mobile-score-center">
