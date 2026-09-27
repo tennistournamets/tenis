@@ -1,143 +1,181 @@
 {
-  "release": "2026-09-17-ownership-password",
+  "release": "2026-09-27-points-format-rules",
   "forwardMigrations": [
     {
       "path": "supabase/migrations/20260908120000_mobile_tournament_details.sql",
-      "sha256": "2e22f8e5537a52846ed06a9b56d67a8a2ed1df57eed2642af7a49e34411d2a3e"
+      "sha256": "2e22f8e5537a52846ed06a9b56d67a8a2ed1df57eed2642af7a49e34411d2a3e",
+      "tenisAppliedVersion": "20260908120000",
+      "tenisNote": "Applied to TENIS. History entry recorded 2026-09-27 (baseline adoption)."
     },
     {
       "path": "supabase/migrations/20260917203207_registration_rules.sql",
       "sha256": "31e34f9e6b1fb37f3b555591e4eacdfdb3fcdc9de266a040da249662358c916a",
-      "tenisAppliedVersion": null,
-      "tenisNote": "Applied 2026-09-18 via psql (session pooler) after logical backup; no migration history entry, like the mobile step."
+      "tenisAppliedVersion": "20260917203207",
+      "tenisNote": "Applied 2026-09-18 via psql (session pooler) after logical backup, like the mobile step. History entry recorded 2026-09-27 (baseline adoption)."
     },
     {
       "path": "supabase/migrations/20260917204636_waitlist_status.sql",
       "sha256": "155dbbafbda52f67c26c1c192d89aef705ad69c895c5eff2dd618a4cee2749d0",
-      "tenisAppliedVersion": null,
-      "tenisNote": "Applied 2026-09-18 via psql (session pooler) after logical backup; no migration history entry, like the mobile step."
+      "tenisAppliedVersion": "20260917204636",
+      "tenisNote": "Applied 2026-09-18 via psql (session pooler) after logical backup, like the mobile step. History entry recorded 2026-09-27 (baseline adoption)."
     },
     {
       "path": "supabase/migrations/20260917204637_waitlist.sql",
       "sha256": "e9e022eb8bd7d4d0e92d31dd0d85755ac657746237d64ee8f60dce767f6a6c4d",
-      "tenisAppliedVersion": null,
-      "tenisNote": "Applied 2026-09-18 via psql (session pooler) after logical backup; no migration history entry, like the mobile step."
+      "tenisAppliedVersion": "20260917204637",
+      "tenisNote": "Applied 2026-09-18 via psql (session pooler) after logical backup, like the mobile step. History entry recorded 2026-09-27 (baseline adoption)."
     },
     {
       "path": "supabase/migrations/20260917205649_manual_schedule.sql",
       "sha256": "937b3d71d2e6470344589814ba6559c8cfa0312ec8738d6adb3d900e27b5c6e7",
-      "tenisAppliedVersion": null,
-      "tenisNote": "Applied 2026-09-18 via psql (session pooler) after logical backup; no migration history entry, like the mobile step."
+      "tenisAppliedVersion": "20260917205649",
+      "tenisNote": "Applied 2026-09-18 via psql (session pooler) after logical backup, like the mobile step. History entry recorded 2026-09-27 (baseline adoption)."
     },
     {
       "path": "supabase/migrations/20260917211146_roles_and_visibility.sql",
       "sha256": "ef538f4a9af573c5db5ca6bac3db7049aa4162e75770ef92790d4306a66bc925",
-      "tenisAppliedVersion": null,
-      "tenisNote": "Applied 2026-09-18 via psql (session pooler) after logical backup; no migration history entry, like the mobile step."
+      "tenisAppliedVersion": "20260917211146",
+      "tenisNote": "Applied 2026-09-18 via psql (session pooler) after logical backup, like the mobile step. History entry recorded 2026-09-27 (baseline adoption)."
     },
     {
       "path": "supabase/migrations/20260917212258_ownership_and_password.sql",
       "sha256": "494232ad0a1ad128d8b5abd7ec37192848ece3bbba6c294f13566ca4a002d923",
-      "tenisAppliedVersion": null,
-      "tenisNote": "Applied 2026-09-18 via psql (session pooler) after logical backup; no migration history entry, like the mobile step."
+      "tenisAppliedVersion": "20260917212258",
+      "tenisNote": "Applied 2026-09-18 via psql (session pooler) after logical backup, like the mobile step. History entry recorded 2026-09-27 (baseline adoption)."
     },
     {
       "path": "supabase/migrations/20260918130934_schedule_queue_drag.sql",
       "sha256": "9263b09090f43e604a9a0ff3450d90f81c18f504518f1acc0fb69a03ff9f2f0c",
-      "tenisAppliedVersion": null,
-      "tenisNote": "Applied 2026-09-18 via psql (session pooler); no migration history entry, like the schedule step."
+      "tenisAppliedVersion": "20260918130934",
+      "tenisNote": "Applied 2026-09-18 via psql (session pooler), like the schedule step. History entry recorded 2026-09-27 (baseline adoption)."
     },
     {
       "path": "supabase/migrations/20260919194603_page_password_readable.sql",
       "sha256": "a0bb6aab721cbfaa0b9e6b9e31db92e07a539476110ae9f06eb757416174c53f",
-      "tenisAppliedVersion": null,
-      "tenisNote": "Applied 2026-09-19 via psql (session pooler); no migration history entry, like the schedule step."
+      "tenisAppliedVersion": "20260919194603",
+      "tenisNote": "Applied 2026-09-19 via psql (session pooler), like the schedule step. History entry recorded 2026-09-27 (baseline adoption)."
     },
     {
       "path": "supabase/migrations/20260920171949_owner_only_tournament_delete.sql",
       "sha256": "4262ecd9e97a8f53935ecc392c7944e577a0ed68e4224dbf701c8c3ba110a211",
-      "tenisAppliedVersion": null,
-      "tenisNote": "Applied 2026-09-26 via psql (session pooler, one transaction per file) after logical backup; no migration history entry. Catalog verified identical to the local chain."
+      "tenisAppliedVersion": "20260920171949",
+      "tenisNote": "Applied 2026-09-26 via psql (session pooler, one transaction per file) after logical backup. Catalog verified identical to the local chain. History entry recorded 2026-09-27 (baseline adoption)."
     },
     {
       "path": "supabase/migrations/20260920185917_feature_flags.sql",
       "sha256": "2d348b2f0d70a24ea76754f2d1af490007a79b1d71d41bb78934793be1e3ecc4",
-      "tenisAppliedVersion": null,
-      "tenisNote": "Applied to TENIS 2026-09-10 via psql (session pooler) as part of the feature branch; no migration history entry. Re-running is safe."
+      "tenisAppliedVersion": "20260920185917",
+      "tenisNote": "Applied to TENIS 2026-09-10 via psql (session pooler) as part of the feature branch. Re-running is safe. History entry recorded 2026-09-27 (baseline adoption)."
     },
     {
       "path": "supabase/migrations/20260921192934_entry_contact_split.sql",
       "sha256": "e41db6875a1909696caeceb4ff70e1053705a28bb2c5d53b72619a071c1e706f",
-      "tenisAppliedVersion": null,
-      "tenisNote": "Already present on TENIS (verified 2026-09-26 by catalog comparison); no migration history entry."
+      "tenisAppliedVersion": "20260921192934",
+      "tenisNote": "Already present on TENIS (verified 2026-09-26 by catalog comparison). History entry recorded 2026-09-27 (baseline adoption)."
     },
     {
       "path": "supabase/migrations/20260921210903_tournament_venue.sql",
       "sha256": "e63938743ca265aafb49661f2dfda905e30ddd2c2bfd695cdd49ed747513fb48",
-      "tenisAppliedVersion": null,
-      "tenisNote": "Already present on TENIS (verified 2026-09-26 by catalog comparison); no migration history entry."
+      "tenisAppliedVersion": "20260921210903",
+      "tenisNote": "Already present on TENIS (verified 2026-09-26 by catalog comparison). History entry recorded 2026-09-27 (baseline adoption)."
     },
     {
       "path": "supabase/migrations/20260924210822_entry_seed_order.sql",
       "sha256": "8039e678c924f7d4dff1df7f212f84d1b8b0e65300c6af887f5530f01a22bba4",
-      "tenisAppliedVersion": null,
-      "tenisNote": "Applied 2026-09-26 via psql (session pooler, one transaction per file) after logical backup; no migration history entry. Catalog verified identical to the local chain."
+      "tenisAppliedVersion": "20260924210822",
+      "tenisNote": "Applied 2026-09-26 via psql (session pooler, one transaction per file) after logical backup. Catalog verified identical to the local chain. History entry recorded 2026-09-27 (baseline adoption)."
     },
     {
       "path": "supabase/migrations/20260926085326_groups_rr_fixes.sql",
       "sha256": "595e935603db089b872f00c650578b52d20f1bac1f2a381afdc286f1c8e893ff",
-      "tenisAppliedVersion": null,
-      "tenisNote": "Applied 2026-09-26 via psql (session pooler, one transaction per file) after logical backup; no migration history entry. Catalog verified identical to the local chain."
+      "tenisAppliedVersion": "20260926085326",
+      "tenisNote": "Applied 2026-09-26 via psql (session pooler, one transaction per file) after logical backup. Catalog verified identical to the local chain. History entry recorded 2026-09-27 (baseline adoption)."
     },
     {
       "path": "supabase/migrations/20260926085610_lifecycle_access_fixes.sql",
       "sha256": "d764c289106daacdaf6a22917e3913be52a166456768b44364672fbce6d1e46c",
-      "tenisNote": "Applied 2026-09-26 via psql (session pooler, one transaction per file) after logical backup; no migration history entry. Catalog verified identical to the local chain."
+      "tenisNote": "Applied 2026-09-26 via psql (session pooler, one transaction per file) after logical backup. Catalog verified identical to the local chain. History entry recorded 2026-09-27 (baseline adoption).",
+      "tenisAppliedVersion": "20260926085610"
     },
     {
       "path": "supabase/migrations/20260926085932_bracket_fixes.sql",
       "sha256": "b7494ce4e09380b909bb976ef08d6cfdd712de59d02b24d584b3c2cbef66d046",
-      "tenisAppliedVersion": null,
-      "tenisNote": "Applied 2026-09-26 via psql (session pooler, one transaction per file) after logical backup; no migration history entry. Catalog verified identical to the local chain."
+      "tenisAppliedVersion": "20260926085932",
+      "tenisNote": "Applied 2026-09-26 via psql (session pooler, one transaction per file) after logical backup. Catalog verified identical to the local chain. History entry recorded 2026-09-27 (baseline adoption)."
     },
     {
       "path": "supabase/migrations/20260926123704_qa_round2_fixes.sql",
       "sha256": "3b516095af7830fd4c75e7fa06678a52de942552db9d39a9479cf316c21dbde1",
-      "tenisNote": "Applied 2026-09-26 via psql (session pooler, one transaction per file) after logical backup; no migration history entry. Catalog verified identical to the local chain."
+      "tenisNote": "Applied 2026-09-26 via psql (session pooler, one transaction per file) after logical backup. Catalog verified identical to the local chain. History entry recorded 2026-09-27 (baseline adoption).",
+      "tenisAppliedVersion": "20260926123704"
     },
     {
       "path": "supabase/migrations/20260926200333_participant_notifications.sql",
       "sha256": "dee9624d901fe544ba94bb61afa2add9efb569d8ef599b451a673c80247350d6",
-      "tenisAppliedVersion": null,
-      "tenisNote": "Applied 2026-09-27 via psql (session pooler, one transaction per file) after logical backup; no migration history entry."
+      "tenisAppliedVersion": "20260926200333",
+      "tenisNote": "Applied 2026-09-27 via psql (session pooler, one transaction per file) after logical backup. History entry recorded 2026-09-27 (baseline adoption)."
     },
     {
       "path": "supabase/migrations/20260926203851_padel_formats_enum.sql",
       "sha256": "9c8c405f1692f37919631943ec2cdcdeb37deaa50a6b506f11b69fe03b0e9e3e",
-      "tenisAppliedVersion": null,
-      "tenisNote": "Applied 2026-09-27 via psql (session pooler, one transaction per file) after logical backup; no migration history entry."
+      "tenisAppliedVersion": "20260926203851",
+      "tenisNote": "Applied 2026-09-27 via psql (session pooler, one transaction per file) after logical backup. History entry recorded 2026-09-27 (baseline adoption)."
     },
     {
       "path": "supabase/migrations/20260926203853_padel_points_formats.sql",
       "sha256": "74a7c85a405da623c58da447addd0f973abcd73635f47ddf6b2c464cd8235055",
-      "tenisAppliedVersion": null,
-      "tenisNote": "Applied 2026-09-27 via psql (session pooler, one transaction per file) after logical backup; no migration history entry."
+      "tenisAppliedVersion": "20260926203853",
+      "tenisNote": "Applied 2026-09-27 via psql (session pooler, one transaction per file) after logical backup. History entry recorded 2026-09-27 (baseline adoption)."
     },
     {
       "path": "supabase/migrations/20260927095123_points_format_rules.sql",
       "sha256": "16fdca9ea252fee7012425de56de180f79899dc453531b2ee401b76d7de80a37",
-      "tenisAppliedVersion": null,
-      "tenisNote": "Applied 2026-09-27 via psql (session pooler, one transaction per file) after logical backup; no migration history entry."
+      "tenisAppliedVersion": "20260927095123",
+      "tenisNote": "Applied 2026-09-27 via psql (session pooler, one transaction per file) after logical backup. History entry recorded 2026-09-27 (baseline adoption)."
     }
   ],
   "baseline": {
     "path": "supabase/migrations/20260906175207_current_model_baseline.sql",
-    "sha256": "1ee2c3e687208a9409b9cdd650468522feced9509e2203906397b71c55e7df3c"
+    "sha256": "1ee2c3e687208a9409b9cdd650468522feced9509e2203906397b71c55e7df3c",
+    "tenisAppliedVersion": "20260906175207",
+    "tenisNote": "TENIS adopted the baseline history on 2026-09-27: live catalog matched the canonical one, then migration repair (journal only, no DDL)."
   },
   "upgradeSource": {
     "path": "supabase/upgrades/pre-stabilization.sql",
     "sha256": "38c93578277b4add59de8f711dd19cc644a66ad01dc21043ed092b2c887aed6a",
     "gitRevision": "2863c88"
+  },
+  "tenisHistory": {
+    "adopted": "2026-09-27",
+    "method": "supabase migration repair --db-url: legacy versions reverted, baseline and every forward migration applied; journal only, no DDL",
+    "verifiedBy": "tests/helpers/catalog.sql on TENIS = canonical install (functions, ACL, policies, indexes, triggers, tables, enums, grants, publication); db push --dry-run: Remote database is up to date",
+    "revertedLegacyVersions": [
+      "20260501",
+      "20260502",
+      "20260503",
+      "20260504",
+      "20260505",
+      "20260506",
+      "20260507",
+      "20260508",
+      "20260509",
+      "20260510",
+      "20260511",
+      "20260512",
+      "20260513",
+      "20260905202103",
+      "20260905203428",
+      "20260905210400",
+      "20260905212151",
+      "20260906071725",
+      "20260906073711",
+      "20260906115845",
+      "20260906132026",
+      "20260906144655",
+      "20260906164230"
+    ],
+    "backup": "Journal exported to tenis-schema_migrations-20260927-pre-baseline.csv and schemas public + supabase_migrations to tenis-public-20260927-2002-pre-padel.dump (outside the repository)",
+    "nextReleases": "npx supabase db push --db-url <TENIS> after a backup; migration list must show every version on both sides"
   },
   "upgrades": [
     {

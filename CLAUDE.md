@@ -211,7 +211,6 @@ Planned/known gaps, roughly by priority. Not implemented yet.
 
 ### Platform
 - Super-admin dashboard (list all tournaments/users). Feature-flag toggles exist at `/admin/platform`; tournament/user listing does not.
-- Adoption of the migration baseline by the existing TENIS project (see `docs/RELEASE.md`); until then new forward migrations are applied to TENIS one by one.
 
 ## Dev Setup
 
@@ -224,7 +223,7 @@ npm run build    # Production build to dist/
 
 Growth/SEO setup (analytics id, domain, `SITE_URL`, Search Console) is in `docs/GROWTH.md`. `vercel.json` routes messenger crawler user agents on `/tournaments/:slug` to `api/preview`; keep that rewrite before the SPA fallback. `npm run build` also prerenders the landing (`scripts/prerender.mjs`): landing code must not touch `window`/`document` at import or setup beyond what `scripts/prerender-env.mjs` stubs, and the SPA shell is `dist/app.html`, served by `vercel.json` only for `/admin…`, `/tournaments/:slug`, `/embed/:slug` — a new top-level route needs a rewrite there, otherwise Vercel answers 404. Translations: keep `messages.js` plain data (no functions); set the language through `setAppLocale()` so its chunk is loaded first. Icons/preview images are re-rendered with `npm run icons` / `npm run og:image` (Google Chrome).
 
-DB changes follow `docs/RELEASE.md`: create a migration with `npx supabase migration new <name>` (redirect stdin from `/dev/null` in scripts, the CLI reads it), append the same SQL to `supabase/schema.sql` (canonical state), register the file with its SHA-256 in `supabase/database-release.json` (`forwardMigrations`), and keep `npm run test:sql` green in the `schema`, `fresh` and `upgrade` modes (`TENIS_TEST_INSTALL_MODE`). Every forward migration must be replayable (tests re-apply the whole chain). Never re-apply `schema.sql` to a working database. The free-tier project auto-pauses — resume it in the dashboard if connections fail.
+DB changes follow `docs/RELEASE.md`: create a migration with `npx supabase migration new <name>` (redirect stdin from `/dev/null` in scripts, the CLI reads it), append the same SQL to `supabase/schema.sql` (canonical state), register the file with its SHA-256 in `supabase/database-release.json` (`forwardMigrations`), and keep `npm run test:sql` green in the `schema`, `fresh` and `upgrade` modes (`TENIS_TEST_INSTALL_MODE`). TENIS adopted the baseline history on 2026-09-27: its `supabase_migrations` journal matches `supabase/migrations/`, so production releases go through `npx supabase db push --db-url <TENIS>` after a backup and a `--dry-run` (see `docs/RELEASE.md`), then `tenisAppliedVersion` in the manifest. Every forward migration must be replayable (tests re-apply the whole chain). Never re-apply `schema.sql` to a working database. The free-tier project auto-pauses — resume it in the dashboard if connections fail.
 
 ## General Rules
 
