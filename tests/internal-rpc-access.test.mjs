@@ -37,6 +37,12 @@ before(async () => {
     $$;
     grant usage on schema auth to anon, authenticated, service_role;
     create publication supabase_realtime;
+    create schema storage;
+    create table storage.buckets (id text primary key, name text not null, public boolean default false,
+      file_size_limit bigint, allowed_mime_types text[]);
+    create table storage.objects (id uuid primary key default gen_random_uuid(),
+      bucket_id text references storage.buckets (id), name text, owner uuid, metadata jsonb);
+    alter table storage.objects enable row level security;
     alter default privileges in schema public
       grant execute on functions to anon, authenticated, service_role;
     alter default privileges in schema public

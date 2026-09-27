@@ -1,5 +1,5 @@
 {
-  "release": "2026-09-27-sponsorship-owner-name",
+  "release": "2026-09-27-sponsorship-content",
   "forwardMigrations": [
     {
       "path": "supabase/migrations/20260908120000_mobile_tournament_details.sql",
@@ -150,6 +150,12 @@
       "sha256": "f0fd98035f76d39638edd0b964960e72a4942bbc93705efe337a80aa30428d45",
       "tenisAppliedVersion": "20260927184819",
       "tenisNote": "Applied 2026-09-27 with supabase db push --db-url (session pooler) right after 20260927182930, same backup; function replacement only."
+    },
+    {
+      "path": "supabase/migrations/20260927204037_sponsorship_content.sql",
+      "sha256": "e9b75892859a500f41973302a3334513e74b812ef17850d07c74154fe5d24c53",
+      "tenisAppliedVersion": "20260927204037",
+      "tenisNote": "Applied 2026-09-27 with supabase db push --db-url (session pooler) after logical backup (tenis-public-20260927-2351-pre-sponsorship-content.dump + migrations journal dump)."
     }
   ],
   "baseline": {
