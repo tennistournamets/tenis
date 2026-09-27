@@ -9,10 +9,10 @@ import SponsorshipAccessCard from './SponsorshipAccessCard.vue'
 import { errorMessage } from '../../lib/errorMessages'
 import { fetchSponsorshipRequest, requestSponsorship } from '../../lib/sponsorshipRequests'
 import { confirmDialog } from '../../lib/confirmDialog'
-import { deleteAsset } from '../../lib/sponsorAssets'
+import { useAuthStore } from '../../stores/auth'
 import {
-  BANNER_SLOTS, LOGO_SLOTS, PLACES, PLACE_GROUPS, applyDemo, moveSponsor,
-  removeSponsor, sponsorshipConfig, updateSponsorship,
+  PLACES, PLACE_GROUPS, applyDemo, clearSponsorship, moveSponsor,
+  removeSponsor, sponsorshipConfig, sponsorshipError, sponsorshipStatus,
 } from '../../lib/sponsorship'
 
 // "Sponsors" tab. The places on the pages are the entry point: open a place,
@@ -51,7 +51,11 @@ async function askForSponsorship(message) {
 onMounted(loadAccess)
 watch(() => props.tournament.id, loadAccess)
 
+const auth = useAuthStore()
+// The bundled demo set is a tool for the platform team, not for organizers.
+const canUseDemo = computed(() => props.canManage && auth.platformRole === 'superadmin')
 const config = computed(() => sponsorshipConfig(props.tournament.id))
+const status = computed(() => sponsorshipStatus(props.tournament.id))
 const sponsors = computed(() => config.value.sponsors)
 const sponsorsById = computed(() => Object.fromEntries(sponsors.value.map((s) => [s.id, s])))
 const error = ref('')
@@ -80,13 +84,12 @@ const groups = computed(() => PLACE_GROUPS.map((group) => ({
 })))
 const shownCount = computed(() => PLACES.filter((p) => { const s = placeState(p); return s.filled && s.enabled }).length)
 
-function guard(action) {
+async function guard(action) {
   error.value = ''
   try {
-    action()
+    await action()
   } catch (err) {
-    console.error(err)
-    error.value = t(err?.message === 'quota' ? 'sponsor.errors.quota' : 'sponsor.errors.save')
+    error.value = sponsorshipError(err, t)
   }
 }
 
@@ -95,34 +98,18 @@ async function deleteSponsor(sponsor) {
   if (ok) guard(() => removeSponsor(props.tournament.id, sponsor.id))
 }
 
-function allAssets(cfg) {
-  return [
-    ...cfg.sponsors.flatMap((s) => [s.logo, s.logoDark]),
-    ...BANNER_SLOTS.flatMap((key) => cfg.slots[key].banners.flatMap((b) => [b.image, b.imageMobile])),
-  ].filter((ref) => ref?.id)
-}
-
 async function fillDemo() {
   if (sponsors.value.length) {
     const ok = await confirmDialog(t('sponsor.demo.replaceConfirm'), { danger: true, confirmLabel: t('sponsor.demo.replace') })
     if (!ok) return
   }
-  const old = allAssets(config.value)
-  guard(() => applyDemo(props.tournament.id, t))
-  for (const ref of old) void deleteAsset(ref)
+  await guard(() => applyDemo(props.tournament.id, t))
 }
 
 async function resetAll() {
   const ok = await confirmDialog(t('sponsor.resetConfirm'), { danger: true, confirmLabel: t('sponsor.reset') })
   if (!ok) return
-  const old = allAssets(config.value)
-  guard(() => updateSponsorship(props.tournament.id, (cfg) => {
-    cfg.sponsors = []
-    for (const key of BANNER_SLOTS) cfg.slots[key].banners = []
-    for (const key of LOGO_SLOTS) cfg.slots[key].sponsorId = null
-    cfg.slots.partners.sponsorIds = null
-  }))
-  for (const ref of old) void deleteAsset(ref)
+  await guard(() => clearSponsorship(props.tournament.id))
 }
 
 // Where each sponsor is placed, for the list below.
@@ -155,7 +142,11 @@ const posterHref = computed(() => `/tournaments/${props.tournament.slug}/poster`
     />
     <p v-if="error" class="alert alert--error" role="alert" style="margin: 0">{{ error }}</p>
 
-    <template v-if="approved">
+    <p v-if="approved && status === 'loading'" class="muted" style="margin: 0">{{ t('actions.loading') }}</p>
+    <p v-else-if="approved && status === 'unavailable'" class="alert alert--info" role="status" style="margin: 0">{{ t('sponsor.access.unavailable') }}</p>
+    <p v-else-if="approved && status === 'error'" class="alert alert--error" role="alert" style="margin: 0">{{ t('sync.loadFailed') }}</p>
+
+    <template v-if="approved && status === 'ready'">
       <!-- 1. Places: the entry point. -->
       <section class="card stack stack--sm admin-settings-card" aria-labelledby="sp-places-title">
         <div class="settings-section__head">
@@ -210,7 +201,7 @@ const posterHref = computed(() => `/tournaments/${props.tournament.slug}/poster`
         <div class="settings-section__head">
           <h2 id="sp-list-title" class="section-title section-title--sm" style="margin: 0">{{ t('sponsor.list.title') }} · {{ sponsors.length }}</h2>
           <div class="row sponsors-tab__head-actions">
-            <button v-if="canManage" class="btn btn--ghost btn--sm" type="button" @click="fillDemo">{{ t('sponsor.demo.fill') }}</button>
+            <button v-if="canUseDemo" class="btn btn--ghost btn--sm" type="button" @click="fillDemo">{{ t('sponsor.demo.fill') }}</button>
             <button v-if="canManage" class="btn btn--outline btn--sm" type="button" @click="sponsorEditor = { sponsor: null }">+ {{ t('sponsor.list.add') }}</button>
           </div>
         </div>
@@ -230,7 +221,6 @@ const posterHref = computed(() => `/tournaments/${props.tournament.slug}/poster`
             </div>
           </li>
         </ul>
-        <p class="field-hint" style="margin: 0">{{ t('sponsor.prototypeNote') }}</p>
         <div v-if="canManage && sponsors.length" class="sponsors-tab__reset">
           <button class="btn btn--ghost btn--sm" type="button" @click="resetAll">{{ t('sponsor.reset') }}</button>
         </div>

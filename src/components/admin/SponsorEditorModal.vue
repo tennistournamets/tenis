@@ -5,7 +5,7 @@ import AppModal from '../AppModal.vue'
 import SponsorImageField from './SponsorImageField.vue'
 import SponsorLockup from '../sponsor/SponsorLockup.vue'
 import { createAssetDraft } from '../../lib/sponsorAssets'
-import { LOGO_MAX, SPONSOR_TIERS, emptySponsor, safeUrl, saveSponsor, clone } from '../../lib/sponsorship'
+import { LOGO_MAX, SPONSOR_TIERS, emptySponsor, safeUrl, saveSponsor, clone, sponsorshipError } from '../../lib/sponsorship'
 
 // Add or edit one sponsor: name, link, tier, caption and two logos
 // (for light and for dark backgrounds).
@@ -20,6 +20,7 @@ const original = props.sponsor ? clone(props.sponsor) : null
 const form = reactive(clone(props.sponsor || emptySponsor()))
 const draft = createAssetDraft()
 const error = ref('')
+const busy = ref(false)
 const urlInvalid = computed(() => Boolean(form.url.trim()) && !safeUrl(form.url))
 const preview = computed(() => ({ sponsor: { ...form, name: form.name || t('sponsor.editor.namePlaceholder') }, label: '', slot: 'hero' }))
 
@@ -28,16 +29,19 @@ function close() {
   emit('close')
 }
 
-function submit() {
+async function submit() {
   error.value = ''
-  if (!form.name.trim() || urlInvalid.value) return
+  if (!form.name.trim() || urlInvalid.value || busy.value) return
+  busy.value = true
   try {
-    saveSponsor(props.tournamentId, clone({ ...form }))
+    await saveSponsor(props.tournamentId, clone({ ...form }))
     draft.commit([original?.logo, original?.logoDark], [form.logo, form.logoDark])
     emit('saved', form.id)
     emit('close')
   } catch (err) {
-    error.value = t(err?.message === 'quota' ? 'sponsor.errors.quota' : 'sponsor.errors.save')
+    error.value = sponsorshipError(err, t)
+  } finally {
+    busy.value = false
   }
 }
 </script>
@@ -83,6 +87,7 @@ function submit() {
         :label="t('sponsor.editor.logo')"
         :hint="t('sponsor.editor.logoHint')"
         :max="LOGO_MAX"
+        :tournament-id="tournamentId"
         @uploaded="draft.track"
       />
       <SponsorImageField
@@ -90,6 +95,7 @@ function submit() {
         :label="t('sponsor.editor.logoDark')"
         :hint="t('sponsor.editor.logoDarkHint')"
         :max="LOGO_MAX"
+        :tournament-id="tournamentId"
         dark
         @uploaded="draft.track"
       />
@@ -106,7 +112,7 @@ function submit() {
       <p v-if="error" class="error-text" role="alert">{{ error }}</p>
       <footer class="sponsor-editor__foot">
         <button class="btn btn--ghost" type="button" @click="close">{{ t('actions.cancel') }}</button>
-        <button class="btn btn--primary" type="submit" :disabled="!form.name.trim() || urlInvalid">{{ t('sponsor.save') }}</button>
+        <button class="btn btn--primary" type="submit" :disabled="!form.name.trim() || urlInvalid || busy">{{ t('sponsor.save') }}</button>
       </footer>
     </form>
   </AppModal>

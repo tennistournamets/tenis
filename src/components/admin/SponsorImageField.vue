@@ -1,12 +1,13 @@
 <script setup>
 import { computed, ref, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ACCEPTED_TYPES, prepareImage, resolveAssetUrl, saveAsset } from '../../lib/sponsorAssets'
+import { ACCEPTED_TYPES, prepareImage, resolveAssetUrl, uploadAsset } from '../../lib/sponsorAssets'
 
 // One image of a sponsor or a banner: pick or drop a file, see it, replace or remove it.
-// Uploads are shrunk to `max` before they are stored.
+// Uploads are shrunk to `max` and stored in the tournament's Storage folder.
 const props = defineProps({
   modelValue: { type: Object, default: null },
+  tournamentId: { type: String, required: true }, // files go into this tournament's folder
   label: { type: String, required: true },
   hint: { type: String, default: '' },
   max: { type: Object, default: () => ({ maxWidth: 1600, maxHeight: 1600 }) },
@@ -28,12 +29,14 @@ async function accept(file) {
   error.value = ''
   busy.value = true
   try {
-    const asset = await saveAsset(await prepareImage(file, props.max))
+    const asset = await uploadAsset(props.tournamentId, await prepareImage(file, props.max))
     emit('uploaded', asset)
     emit('update:modelValue', asset)
   } catch (err) {
     const code = err?.message
-    error.value = t(code === 'type' ? 'sponsor.image.errorType' : code === 'size' ? 'sponsor.image.errorSize' : 'sponsor.image.errorGeneric')
+    error.value = t(code === 'type' ? 'sponsor.image.errorType'
+      : code === 'size' ? 'sponsor.image.errorSize'
+        : code === 'upload' ? 'sponsor.image.errorUpload' : 'sponsor.image.errorGeneric')
   } finally {
     busy.value = false
     if (input.value) input.value.value = ''

@@ -1,44 +1,19 @@
-// Sponsor images: uploads are downscaled in the browser and kept as blobs in
-// IndexedDB (a prototype stand-in for Supabase Storage). An asset reference is
-// `{ id, width, height }` for an upload or `{ url, width, height }` for a static
-// file (demo sponsors). resolveAssetUrl() is reactive: it returns '' until the
-// blob is read, then the object URL.
-import { reactive } from 'vue'
+// Sponsor images live in the public Storage bucket `sponsor-assets`, under the
+// tournament's folder: `<tournament id>/<uuid>.webp`. The browser shrinks every
+// upload first (and turns SVG into a picture — the bucket refuses SVG, which
+// could carry scripts). An asset reference in the config is `{ path, width,
+// height }` for an upload or `{ url, width, height }` for a bundled demo file.
+import { supabase } from './supabase'
 
-const DB_NAME = 'bracketa_sponsor_assets'
-const STORE = 'assets'
-const MAX_FILE_BYTES = 8 * 1024 * 1024
+export const SPONSOR_BUCKET = 'sponsor-assets'
+// What the file picker accepts; SVG is rasterized before upload.
 export const ACCEPTED_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml', 'image/gif']
-
-const urls = reactive({})
-const pending = new Set()
-let dbPromise = null
-
-function openDb() {
-  if (!dbPromise) {
-    dbPromise = new Promise((resolve, reject) => {
-      const request = globalThis.indexedDB?.open(DB_NAME, 1)
-      if (!request) { reject(new Error('indexeddb')); return }
-      request.onupgradeneeded = () => request.result.createObjectStore(STORE)
-      request.onsuccess = () => resolve(request.result)
-      request.onerror = () => reject(request.error)
-    })
-  }
-  return dbPromise
-}
-
-async function withStore(mode, action) {
-  const db = await openDb()
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE, mode)
-    const request = action(tx.objectStore(STORE))
-    tx.oncomplete = () => resolve(request?.result)
-    tx.onerror = () => reject(tx.error)
-  })
-}
+const MAX_SOURCE_BYTES = 8 * 1024 * 1024
+const MAX_UPLOAD_BYTES = 2 * 1024 * 1024 // bucket limit
+const EXTENSIONS = { 'image/webp': 'webp', 'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif' }
 
 function newId() {
-  return globalThis.crypto?.randomUUID?.() || `a${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`
+  return globalThis.crypto?.randomUUID?.() || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
 }
 
 function loadImage(src) {
@@ -50,74 +25,85 @@ function loadImage(src) {
   })
 }
 
+function encode(canvas, quality) {
+  return new Promise((resolve) => canvas.toBlob(resolve, 'image/webp', quality))
+}
+
 /**
- * Validates and shrinks an upload to fit `maxWidth`×`maxHeight`, re-encoding
- * raster images as WebP (PNG where the browser cannot encode WebP). SVG and GIF
- * are kept as they are (vector / animation).
+ * Validates and shrinks an upload to fit `maxWidth`×`maxHeight`, re-encoding it
+ * as WebP (PNG where the browser cannot encode WebP). Vector SVG is drawn at the
+ * full target size so it stays sharp; animated GIF is kept as it is.
  */
 export async function prepareImage(file, { maxWidth = 1600, maxHeight = 1600 } = {}) {
   if (!ACCEPTED_TYPES.includes(file.type)) throw new Error('type')
-  if (file.size > MAX_FILE_BYTES) throw new Error('size')
+  if (file.size > MAX_SOURCE_BYTES) throw new Error('size')
+  if (file.type === 'image/gif') {
+    if (file.size > MAX_UPLOAD_BYTES) throw new Error('size')
+    const url = URL.createObjectURL(file)
+    try {
+      const img = await loadImage(url)
+      return { blob: file, width: img.naturalWidth || 400, height: img.naturalHeight || 400 }
+    } finally {
+      URL.revokeObjectURL(url)
+    }
+  }
   const sourceUrl = URL.createObjectURL(file)
   try {
     const img = await loadImage(sourceUrl)
     const width = img.naturalWidth || 400
     const height = img.naturalHeight || 400
-    if (file.type === 'image/svg+xml' || file.type === 'image/gif') {
-      return { blob: file, width, height }
-    }
-    const scale = Math.min(1, maxWidth / width, maxHeight / height)
+    const vector = file.type === 'image/svg+xml'
+    // Raster images only shrink; a vector logo is drawn as large as allowed.
+    const fit = Math.min(maxWidth / width, maxHeight / height)
+    const scale = vector ? fit : Math.min(1, fit)
     const w = Math.max(1, Math.round(width * scale))
     const h = Math.max(1, Math.round(height * scale))
     const canvas = document.createElement('canvas')
     canvas.width = w
     canvas.height = h
     canvas.getContext('2d').drawImage(img, 0, 0, w, h)
-    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/webp', 0.9))
+    let blob = await encode(canvas, 0.9)
+    if (blob && blob.size > MAX_UPLOAD_BYTES) blob = await encode(canvas, 0.75)
     if (!blob) throw new Error('decode')
+    if (blob.size > MAX_UPLOAD_BYTES) throw new Error('size')
     return { blob, width: w, height: h }
   } finally {
     URL.revokeObjectURL(sourceUrl)
   }
 }
 
-/** Stores a prepared image; returns the asset reference to keep in the sponsorship config. */
-export async function saveAsset({ blob, width, height }) {
-  const id = newId()
-  await withStore('readwrite', (store) => store.put(blob, id))
-  urls[id] = URL.createObjectURL(blob)
-  return { id, width, height }
+/** Uploads a prepared image into the tournament's folder; returns the asset reference. */
+export async function uploadAsset(tournamentId, { blob, width, height }) {
+  const type = EXTENSIONS[blob.type] ? blob.type : 'image/webp'
+  const path = `${tournamentId}/${newId()}.${EXTENSIONS[type]}`
+  const { error } = await supabase.storage
+    .from(SPONSOR_BUCKET)
+    .upload(path, blob, { contentType: type, cacheControl: '31536000', upsert: false })
+  if (error) throw new Error('upload')
+  return { path, width, height }
 }
 
-export async function deleteAsset(ref) {
-  if (!ref?.id) return
+/** Best effort: a file left behind is only wasted space, never shown. */
+export async function deleteAssets(refs) {
+  const paths = refs.map((ref) => ref?.path).filter(Boolean)
+  if (!paths.length) return
   try {
-    await withStore('readwrite', (store) => store.delete(ref.id))
+    await supabase.storage.from(SPONSOR_BUCKET).remove(paths)
   } catch {
-    // Already gone or storage unavailable: nothing to clean up.
-  }
-  if (urls[ref.id]) URL.revokeObjectURL(urls[ref.id])
-  delete urls[ref.id]
-}
-
-async function loadAsset(id) {
-  pending.add(id)
-  try {
-    const blob = await withStore('readonly', (store) => store.get(id))
-    if (blob) urls[id] = URL.createObjectURL(blob)
-  } catch {
-    // Missing blob (other browser, cleared storage): the slot falls back to text.
-  } finally {
-    pending.delete(id)
+    // Offline or no longer allowed: nothing else to do.
   }
 }
 
+export function deleteAsset(ref) {
+  return deleteAssets([ref])
+}
+
+/** Public CDN address of an asset (files are immutable: a new upload = a new path). */
 export function resolveAssetUrl(ref) {
   if (!ref) return ''
   if (ref.url) return ref.url
-  if (!ref.id) return ''
-  if (!urls[ref.id] && !pending.has(ref.id)) void loadAsset(ref.id)
-  return urls[ref.id] || ''
+  if (!ref.path) return ''
+  return supabase.storage.from(SPONSOR_BUCKET).getPublicUrl(ref.path).data?.publicUrl || ''
 }
 
 /**
@@ -128,18 +114,22 @@ export function createAssetDraft() {
   const created = new Set()
   return {
     track(ref) {
-      if (ref?.id) created.add(ref.id)
+      if (ref?.path) created.add(ref.path)
       return ref
     },
     commit(before, after) {
-      const kept = new Set(after.filter(Boolean).map((ref) => ref.id).filter(Boolean))
-      for (const ref of before) if (ref?.id && !kept.has(ref.id)) void deleteAsset(ref)
-      for (const id of created) if (!kept.has(id)) void deleteAsset({ id })
+      const kept = new Set(after.filter(Boolean).map((ref) => ref.path).filter(Boolean))
+      const drop = [
+        ...before.filter((ref) => ref?.path && !kept.has(ref.path)),
+        ...[...created].filter((path) => !kept.has(path)).map((path) => ({ path })),
+      ]
       created.clear()
+      void deleteAssets(drop)
     },
     discard() {
-      for (const id of created) void deleteAsset({ id })
+      const drop = [...created].map((path) => ({ path }))
       created.clear()
+      void deleteAssets(drop)
     },
   }
 }

@@ -58,8 +58,8 @@ src/
     sportConfig.js            # Registry: sport -> capabilities (scoringFamily, forcedCategory, supports*)
     scoringEngines.js         # Registry: family (sets|goals|points) -> state/format helpers
     pointsFormat.js           # Points formats: rounds/rests from matches, plans mirroring the SQL generators
-    sponsorship.js            # Sponsorship config model (sponsors, logo/banner slots, partners) — prototype storage in localStorage, gated by approval
-    sponsorAssets.js          # Sponsor image uploads: downscale + IndexedDB blobs (prototype stand-in for Storage)
+    sponsorship.js            # Sponsorship model (sponsors, places, partners): cached per tournament from `tournament_sponsorship`, saved via save_sponsorship (revision CAS, queued, optimistic); public view gated by approval + feature flag
+    sponsorAssets.js          # Sponsor images: browser downscale to WebP (SVG rasterized), upload to Storage bucket `sponsor-assets` as `<tournament id>/<uuid>.webp`, public CDN URLs, draft cleanup
     sponsorshipRequests.js    # Paid-feature gate: request/list/decide RPCs, cached is_sponsorship_approved
     useTennisScoring.js       # Tennis scoring composable (sets family; reused by padel)
     entryDisplay.js           # Entry/member name display helper
@@ -131,7 +131,8 @@ supabase/
 - **match_sets** - per-set game scores (tennis/padel only)
 - **bracket_versions** - bracket snapshots for undo
 - **live_scores** - real-time point-by-point scoring state (JSON state/history/revision)
-- **sponsorship_requests** - paid-feature gate, one row per tournament: `status` pending/approved/rejected, `message`, `requested_by`, `decided_by/at`. Read: tournament admins + platform admin (RLS); no direct writes. Sponsor content itself is still client-side (prototype)
+- **sponsorship_requests** - paid-feature gate, one row per tournament: `status` pending/approved/rejected, `message`, `requested_by`, `decided_by/at`. Read: tournament admins + platform admin (RLS); no direct writes
+- **tournament_sponsorship** - one JSON document per tournament (sponsors, places, banners; shape in `src/lib/sponsorship.js`) + `revision`. Read: organizers always, others while the tournament is readable and sponsorship approved + `feature.sponsorship` on. Written only by `save_sponsorship()`. Images: public Storage bucket `sponsor-assets` (2 MB, webp/png/jpeg/gif, no SVG), upload/delete only by `can_manage_sponsorship()` of the folder's tournament
 - **notification_outbox** - participant emails queued by triggers on `entries` (received/waitlisted/approved/rejected) and by `enqueue_match_reminders()`; no addresses stored; closed to API roles. `entries.notify_locale` comes from the `x-bracketa-locale` request header (RegistrationForm sets it)
 
 ### Key PL/pgSQL Functions
@@ -159,7 +160,7 @@ supabase/
 - `add_tournament_admin_by_email()`, `remove_tournament_admin()` - co-organizer management
 - `is_tournament_admin()`, `can_live_score()`, `is_platform_admin()` - access checks
 - `is_feature_enabled(key)` / `set_feature_flag(key, enabled, description)` - feature flags; `create_tournament()` rejects a sport whose `sport.<x>` flag is off
-- Sponsorship: `request_sponsorship(tournament, message)` (owner only; approved stays approved, rejected → pending again), `decide_sponsorship_request(id, status)` and `list_sponsorship_requests()` (platform admin; owner name/email + tournament), `is_sponsorship_approved(tournament)` (anon ok; public sponsor slots render only when true)
+- Sponsorship: `request_sponsorship(tournament, message)` (owner only; approved stays approved, rejected → pending again), `decide_sponsorship_request(id, status)` and `list_sponsorship_requests()` (platform admin; owner name/email + tournament), `is_sponsorship_approved(tournament)` (anon ok; public sponsor slots render only when true); `can_manage_sponsorship(tournament)` (admin + approved + flag on), `save_sponsorship(tournament, config, expected_revision)` (validates http(s) links, own-folder/demo image refs, size; raises `Sponsorship changed` on a stale revision)
 - `claim_notifications(limit)`, `complete_notification(id, ok, error)`, `notifications_due()` - email sender (service_role only; `api/notifications.js`, triggered by pg_cron — setup in docs/GROWTH.md)
 
 ### Security

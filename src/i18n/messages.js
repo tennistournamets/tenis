@@ -97,7 +97,6 @@ export const messages = {
       partnersTitle: 'Партнёры турнира',
       save: 'Сохранить',
       edit: 'Изменить',
-      prototypeNote: 'Прототип: спонсоры и картинки пока хранятся только в этом браузере — зрители на других устройствах их не увидят.',
       reset: 'Удалить всех спонсоров и баннеры',
       resetConfirm: 'Удалить всех спонсоров, их логотипы и все баннеры этого турнира?',
       links: {
@@ -106,6 +105,10 @@ export const messages = {
         poster: 'Постер',
       },
       errors: {
+        conflict: 'Спонсоров только что изменил кто-то ещё — показаны свежие данные, повторите действие.',
+        image: 'Эту картинку нельзя использовать: загрузите файл заново.',
+        tooLarge: 'Слишком много спонсоров или баннеров.',
+        notAllowed: 'Нет прав: спонсорство должно быть одобрено и включено на платформе.',
         save: 'Не удалось сохранить изменения. Обновите страницу и попробуйте ещё раз.',
         quota: 'Не удалось сохранить: в браузере закончилось место. Удалите лишние картинки.',
         url: 'Нужна ссылка вида https://example.com',
@@ -263,12 +266,13 @@ export const messages = {
         showName: 'Писать название рядом с логотипом',
       },
       image: {
+        errorUpload: 'Не удалось загрузить файл. Проверьте интернет и попробуйте ещё раз.',
         drop: 'Перетащите картинку сюда',
         processing: 'Обрабатываем…',
         choose: 'Выбрать файл',
         replace: 'Заменить',
         errorType: 'Подойдут PNG, JPG, WebP, SVG или GIF.',
-        errorSize: 'Файл больше 8 МБ.',
+        errorSize: 'Файл больше 8 МБ или не сжимается до 2 МБ.',
         errorGeneric: 'Не удалось прочитать картинку.',
       },
       demo: {
@@ -1314,7 +1318,6 @@ export const messages = {
       partnersTitle: 'Tournament partners',
       save: 'Save',
       edit: 'Edit',
-      prototypeNote: 'Prototype: sponsors and images are stored in this browser only — spectators on other devices will not see them.',
       reset: 'Remove all sponsors and banners',
       resetConfirm: 'Remove every sponsor, their logos and all banners of this tournament?',
       links: {
@@ -1323,6 +1326,10 @@ export const messages = {
         poster: 'Poster',
       },
       errors: {
+        conflict: 'Someone else just changed the sponsors — the fresh data is shown, please repeat the action.',
+        image: 'This image cannot be used: upload the file again.',
+        tooLarge: 'Too many sponsors or banners.',
+        notAllowed: 'Not allowed: sponsorship must be approved and switched on for the platform.',
         save: 'Could not save the change. Reload the page and try again.',
         quota: 'Could not save: the browser is out of space. Remove some images.',
         url: 'Use a link like https://example.com',
@@ -1480,12 +1487,13 @@ export const messages = {
         showName: 'Write the name next to the logo',
       },
       image: {
+        errorUpload: 'Could not upload the file. Check the connection and try again.',
         drop: 'Drop an image here',
         processing: 'Processing…',
         choose: 'Choose file',
         replace: 'Replace',
         errorType: 'Use PNG, JPG, WebP, SVG or GIF.',
-        errorSize: 'The file is larger than 8 MB.',
+        errorSize: 'The file is over 8 MB or does not compress below 2 MB.',
         errorGeneric: 'Could not read the image.',
       },
       demo: {
@@ -2531,7 +2539,6 @@ export const messages = {
       partnersTitle: 'Turnyro partneriai',
       save: 'Išsaugoti',
       edit: 'Keisti',
-      prototypeNote: 'Prototipas: rėmėjai ir paveikslėliai kol kas saugomi tik šioje naršyklėje – kitų įrenginių žiūrovai jų nematys.',
       reset: 'Pašalinti visus rėmėjus ir reklamjuostes',
       resetConfirm: 'Pašalinti visus šio turnyro rėmėjus, jų logotipus ir reklamjuostes?',
       links: {
@@ -2540,6 +2547,10 @@ export const messages = {
         poster: 'Plakatas',
       },
       errors: {
+        conflict: 'Rėmėjus ką tik pakeitė kažkas kitas – rodomi nauji duomenys, pakartokite veiksmą.',
+        image: 'Šio paveikslėlio naudoti negalima: įkelkite failą iš naujo.',
+        tooLarge: 'Per daug rėmėjų arba reklamjuosčių.',
+        notAllowed: 'Neleidžiama: rėmimas turi būti patvirtintas ir įjungtas platformoje.',
         save: 'Nepavyko išsaugoti pakeitimo. Atnaujinkite puslapį ir bandykite dar kartą.',
         quota: 'Nepavyko išsaugoti: naršyklėje baigėsi vieta. Pašalinkite nereikalingus paveikslėlius.',
         url: 'Reikia nuorodos, pvz., https://example.com',
@@ -2697,12 +2708,13 @@ export const messages = {
         showName: 'Rašyti pavadinimą šalia logotipo',
       },
       image: {
+        errorUpload: 'Nepavyko įkelti failo. Patikrinkite ryšį ir bandykite dar kartą.',
         drop: 'Nutempkite paveikslėlį čia',
         processing: 'Apdorojama…',
         choose: 'Pasirinkti failą',
         replace: 'Pakeisti',
         errorType: 'Tinka PNG, JPG, WebP, SVG arba GIF.',
-        errorSize: 'Failas didesnis nei 8 MB.',
+        errorSize: 'Failas didesnis nei 8 MB arba nesuspaudžiamas iki 2 MB.',
         errorGeneric: 'Nepavyko nuskaityti paveikslėlio.',
       },
       demo: {

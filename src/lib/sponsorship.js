@@ -3,14 +3,15 @@
 //   logo slots   — a quiet "Presented by [logo] Name" line; one sponsor, own caption;
 //   banner slots — one or more banners (image, text, or text over an image), one shown per view;
 //   partners     — the logo wall at the bottom of the page, grouped by tier.
-// Prototype storage: the config lives in localStorage (images in IndexedDB, see
-// sponsorAssets.js), keyed by tournament id, so only this browser sees it.
-import { computed, inject, provide, ref, unref } from 'vue'
+// Storage: one JSON document per tournament in `tournament_sponsorship`, written
+// through save_sponsorship() with a revision check (images: sponsorAssets.js).
+import { computed, inject, provide, reactive, unref } from 'vue'
 import { track } from './analytics'
-import { deleteAsset } from './sponsorAssets'
+import { supabase } from './supabase'
+import { errorKey, errorMessage } from './errorMessages'
+import { deleteAssets } from './sponsorAssets'
 import { sponsorshipApproved, useSponsorshipFeature } from './sponsorshipRequests'
 
-const STORAGE_KEY = 'bracketa_sponsorship_v2'
 const SPONSORSHIP_KEY = Symbol('tournamentSponsorship')
 
 // Display order in the partners block, most prominent first.
@@ -120,43 +121,102 @@ function normalize(saved) {
   return { sponsors, slots }
 }
 
-function readStore() {
-  try {
-    return JSON.parse(globalThis.localStorage?.getItem(STORAGE_KEY) || '{}') || {}
-  } catch {
-    return {}
-  }
+// tournament id -> { config, revision, status: 'loading' | 'ready' | 'unavailable' | 'error' }
+const cache = reactive({})
+const inFlight = {}
+const queues = {}
+
+/** Reads the tournament's document (RLS decides who may see it). */
+export function loadSponsorship(tournamentId, { force = false } = {}) {
+  if (!tournamentId) return Promise.resolve()
+  if (!force && inFlight[tournamentId]) return inFlight[tournamentId]
+  if (!cache[tournamentId]) cache[tournamentId] = { config: null, revision: 0, status: 'loading' }
+  const request = (async () => {
+    try {
+      const { data, error } = await supabase
+        .from('tournament_sponsorship')
+        .select('config, revision')
+        .eq('tournament_id', tournamentId)
+        .maybeSingle()
+      if (error) {
+        const outdated = errorKey(error) === 'serverErrors.outdated'
+        cache[tournamentId] = { ...cache[tournamentId], status: outdated ? 'unavailable' : 'error' }
+        return
+      }
+      cache[tournamentId] = { config: data?.config ?? null, revision: data?.revision ?? 0, status: 'ready' }
+    } catch {
+      cache[tournamentId] = { ...cache[tournamentId], status: 'error' }
+    } finally {
+      delete inFlight[tournamentId]
+    }
+  })()
+  inFlight[tournamentId] = request
+  return request
 }
 
-const store = ref(readStore())
-
-// The admin tab and an open public tab stay in step.
-if (typeof window !== 'undefined') {
-  window.addEventListener('storage', (event) => {
-    if (event.key === STORAGE_KEY) store.value = readStore()
-  })
-}
-
+/** Reactive; empty until loaded. */
 export function sponsorshipConfig(tournamentId) {
-  return normalize(tournamentId ? store.value[tournamentId] : null)
+  if (!tournamentId) return normalize(null)
+  if (!cache[tournamentId]) void loadSponsorship(tournamentId)
+  return normalize(cache[tournamentId]?.config)
 }
 
-/** Applies `mutate(config)` to a copy and saves it. Throws 'quota' when the browser is full. */
+export function sponsorshipStatus(tournamentId) {
+  return cache[tournamentId]?.status || 'loading'
+}
+
+/**
+ * Applies `mutate(config)` to the latest state and saves it. Changes of one
+ * tournament run one after another; the screen shows the change at once and
+ * rolls it back if the save fails. Throws Error('conflict') when someone else
+ * saved in between (the fresh document is loaded).
+ */
 export function updateSponsorship(tournamentId, mutate) {
-  if (!tournamentId) return
-  const next = clone(sponsorshipConfig(tournamentId))
-  mutate(next)
-  const all = { ...store.value, [tournamentId]: next }
-  try {
-    globalThis.localStorage?.setItem(STORAGE_KEY, JSON.stringify(all))
-  } catch (error) {
-    throw new Error(error?.name === 'QuotaExceededError' ? 'quota' : 'save')
+  const run = async () => {
+    if (!cache[tournamentId] || cache[tournamentId].status !== 'ready') await loadSponsorship(tournamentId, { force: true })
+    const entry = cache[tournamentId]
+    if (entry.status !== 'ready') throw new Error('save')
+    const next = clone(normalize(entry.config))
+    mutate(next)
+    cache[tournamentId] = { ...entry, config: next }
+    const { data, error } = await supabase.rpc('save_sponsorship', {
+      p_tournament_id: tournamentId,
+      p_config: next,
+      p_expected_revision: entry.revision,
+    })
+    if (error) {
+      cache[tournamentId] = entry
+      if (/Sponsorship changed/.test(error.message || '')) {
+        await loadSponsorship(tournamentId, { force: true })
+        throw new Error('conflict')
+      }
+      throw error
+    }
+    cache[tournamentId] = { config: data.config, revision: data.revision, status: 'ready' }
   }
-  store.value = all
+  const queued = (queues[tournamentId] || Promise.resolve()).catch(() => {}).then(run)
+  queues[tournamentId] = queued
+  return queued
+}
+
+/** Message for a failed save or upload. */
+export function sponsorshipError(err, t) {
+  const text = String(err?.message || '')
+  if (text === 'conflict') return t('sponsor.errors.conflict')
+  if (text === 'upload') return t('sponsor.image.errorUpload')
+  if (/Invalid sponsor link/.test(text)) return t('sponsor.errors.url')
+  if (/Invalid sponsor image/.test(text)) return t('sponsor.errors.image')
+  if (/too large/.test(text)) return t('sponsor.errors.tooLarge')
+  if (/^Not allowed$/.test(text)) return t('sponsor.errors.notAllowed')
+  return errorMessage(err, t, 'sponsor.errors.save')
+}
+
+function assetsOf({ sponsors = [], banners = [] }) {
+  return [...sponsors.flatMap((s) => [s.logo, s.logoDark]), ...banners.flatMap((b) => [b.image, b.imageMobile])]
 }
 
 export function saveSponsor(tournamentId, sponsor) {
-  updateSponsorship(tournamentId, (config) => {
+  return updateSponsorship(tournamentId, (config) => {
     const clean = { ...sponsor, name: sponsor.name.trim(), url: safeUrl(sponsor.url), caption: sponsor.caption.trim() }
     const index = config.sponsors.findIndex((s) => s.id === sponsor.id)
     if (index >= 0) config.sponsors[index] = clean
@@ -164,21 +224,21 @@ export function saveSponsor(tournamentId, sponsor) {
   })
 }
 
-export function removeSponsor(tournamentId, sponsorId) {
+export async function removeSponsor(tournamentId, sponsorId) {
   const config = sponsorshipConfig(tournamentId)
   const sponsor = config.sponsors.find((s) => s.id === sponsorId)
   const banners = BANNER_SLOTS.flatMap((key) => config.slots[key].banners.filter((b) => b.sponsorId === sponsorId))
-  updateSponsorship(tournamentId, (next) => {
+  await updateSponsorship(tournamentId, (next) => {
     next.sponsors = next.sponsors.filter((s) => s.id !== sponsorId)
     for (const key of LOGO_SLOTS) if (next.slots[key].sponsorId === sponsorId) next.slots[key].sponsorId = null
     if (next.slots.partners.sponsorIds) next.slots.partners.sponsorIds = next.slots.partners.sponsorIds.filter((id) => id !== sponsorId)
     for (const key of BANNER_SLOTS) next.slots[key].banners = next.slots[key].banners.filter((b) => b.sponsorId !== sponsorId)
   })
-  for (const asset of [sponsor?.logo, sponsor?.logoDark, ...banners.flatMap((b) => [b.image, b.imageMobile])]) void deleteAsset(asset)
+  void deleteAssets(assetsOf({ sponsors: sponsor ? [sponsor] : [], banners }))
 }
 
 export function moveSponsor(tournamentId, sponsorId, delta) {
-  updateSponsorship(tournamentId, (config) => {
+  return updateSponsorship(tournamentId, (config) => {
     const i = config.sponsors.findIndex((s) => s.id === sponsorId)
     const j = i + delta
     if (i < 0 || j < 0 || j >= config.sponsors.length) return
@@ -187,7 +247,7 @@ export function moveSponsor(tournamentId, sponsorId, delta) {
 }
 
 export function saveBanner(tournamentId, slotKey, banner) {
-  updateSponsorship(tournamentId, (config) => {
+  return updateSponsorship(tournamentId, (config) => {
     const clean = {
       ...banner,
       url: safeUrl(banner.url),
@@ -200,17 +260,16 @@ export function saveBanner(tournamentId, slotKey, banner) {
   })
 }
 
-export function removeBanner(tournamentId, slotKey, bannerId) {
+export async function removeBanner(tournamentId, slotKey, bannerId) {
   const banner = sponsorshipConfig(tournamentId).slots[slotKey].banners.find((b) => b.id === bannerId)
-  updateSponsorship(tournamentId, (config) => {
+  await updateSponsorship(tournamentId, (config) => {
     config.slots[slotKey].banners = config.slots[slotKey].banners.filter((b) => b.id !== bannerId)
   })
-  void deleteAsset(banner?.image)
-  void deleteAsset(banner?.imageMobile)
+  void deleteAssets(assetsOf({ banners: banner ? [banner] : [] }))
 }
 
 export function patchSlot(tournamentId, slotKey, patch) {
-  updateSponsorship(tournamentId, (config) => {
+  return updateSponsorship(tournamentId, (config) => {
     config.slots[slotKey] = { ...config.slots[slotKey], ...patch }
   })
 }
@@ -328,10 +387,29 @@ export function demoSponsorship(t) {
   return config
 }
 
-export function applyDemo(tournamentId, t) {
+/** Every uploaded file of a config (to clean up after replacing or clearing it). */
+export function configAssets(config) {
+  return assetsOf({ sponsors: config.sponsors, banners: BANNER_SLOTS.flatMap((key) => config.slots[key].banners) })
+}
+
+export async function applyDemo(tournamentId, t) {
+  const old = configAssets(sponsorshipConfig(tournamentId))
   const demo = demoSponsorship(t)
-  updateSponsorship(tournamentId, (config) => {
+  await updateSponsorship(tournamentId, (config) => {
     config.sponsors = demo.sponsors
     config.slots = demo.slots
   })
+  void deleteAssets(old)
+}
+
+/** Removes every sponsor and banner (and their files); places keep their switches. */
+export async function clearSponsorship(tournamentId) {
+  const old = configAssets(sponsorshipConfig(tournamentId))
+  await updateSponsorship(tournamentId, (config) => {
+    config.sponsors = []
+    for (const key of BANNER_SLOTS) config.slots[key].banners = []
+    for (const key of LOGO_SLOTS) config.slots[key].sponsorId = null
+    config.slots.partners.sponsorIds = null
+  })
+  void deleteAssets(old)
 }

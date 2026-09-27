@@ -9,7 +9,7 @@ import SponsorMark from '../sponsor/SponsorMark.vue'
 import SponsorLockup from '../sponsor/SponsorLockup.vue'
 import SponsorBanner from '../sponsor/SponsorBanner.vue'
 import { confirmDialog } from '../../lib/confirmDialog'
-import { BANNER_FORMATS, PLACES, patchSlot, removeBanner, sponsorshipConfig } from '../../lib/sponsorship'
+import { BANNER_FORMATS, PLACES, patchSlot, removeBanner, sponsorshipConfig, sponsorshipError } from '../../lib/sponsorship'
 
 // One place on the page, and everything that goes into it: who is shown there,
 // with which caption, or which banners — plus a preview of the result.
@@ -32,12 +32,12 @@ const sponsorEditor = ref(null) // { sponsor } | null
 const bannerEditor = ref(null) // { banner } | null
 const layout = props.placeKey === 'registration' ? 'card' : 'wide'
 
-function save(patch) {
+async function save(patch) {
   error.value = ''
   try {
-    patchSlot(props.tournamentId, props.placeKey, patch)
+    await patchSlot(props.tournamentId, props.placeKey, patch)
   } catch (err) {
-    error.value = t(err?.message === 'quota' ? 'sponsor.errors.quota' : 'sponsor.errors.save')
+    error.value = sponsorshipError(err, t)
   }
 }
 
@@ -59,7 +59,13 @@ function togglePartner(id, on) {
 
 async function deleteBanner(banner) {
   const ok = await confirmDialog(t('sponsor.banner.deleteConfirm'), { danger: true, confirmLabel: t('actions.remove') })
-  if (ok) removeBanner(props.tournamentId, props.placeKey, banner.id)
+  if (!ok) return
+  error.value = ''
+  try {
+    await removeBanner(props.tournamentId, props.placeKey, banner.id)
+  } catch (err) {
+    error.value = sponsorshipError(err, t)
+  }
 }
 
 const previewLockup = computed(() => (selected.value ? { sponsor: selected.value, label: slot.value.label, slot: props.placeKey } : null))

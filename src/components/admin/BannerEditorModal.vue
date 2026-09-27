@@ -5,7 +5,7 @@ import AppModal from '../AppModal.vue'
 import SponsorImageField from './SponsorImageField.vue'
 import SponsorBanner from '../sponsor/SponsorBanner.vue'
 import { createAssetDraft } from '../../lib/sponsorAssets'
-import { BANNER_FORMATS, DEFAULT_BANNER_BG, bannerIsShowable, emptyBanner, safeUrl, saveBanner, clone } from '../../lib/sponsorship'
+import { BANNER_FORMATS, DEFAULT_BANNER_BG, bannerIsShowable, emptyBanner, safeUrl, saveBanner, clone, sponsorshipError } from '../../lib/sponsorship'
 
 // Add or edit a banner of one slot, with a live preview. A banner is a picture,
 // a text on a colour, or a text over a picture — whatever is filled in.
@@ -25,6 +25,7 @@ const original = props.banner ? clone(props.banner) : null
 const form = reactive(clone(props.banner || emptyBanner(props.sponsors[0]?.id || null)))
 const draft = createAssetDraft()
 const error = ref('')
+const busy = ref(false)
 
 const sponsor = computed(() => props.sponsors.find((s) => s.id === form.sponsorId) || null)
 const urlInvalid = computed(() => Boolean(form.url.trim()) && !safeUrl(form.url))
@@ -43,15 +44,18 @@ function close() {
   emit('close')
 }
 
-function submit() {
+async function submit() {
   error.value = ''
-  if (!showable.value || urlInvalid.value) return
+  if (!showable.value || urlInvalid.value || busy.value) return
+  busy.value = true
   try {
-    saveBanner(props.tournamentId, props.slotKey, clone({ ...form, bg: form.bg || DEFAULT_BANNER_BG }))
+    await saveBanner(props.tournamentId, props.slotKey, clone({ ...form, bg: form.bg || DEFAULT_BANNER_BG }))
     draft.commit([original?.image, original?.imageMobile], [form.image, form.imageMobile])
     emit('close')
   } catch (err) {
-    error.value = t(err?.message === 'quota' ? 'sponsor.errors.quota' : 'sponsor.errors.save')
+    error.value = sponsorshipError(err, t)
+  } finally {
+    busy.value = false
   }
 }
 </script>
@@ -88,6 +92,7 @@ function submit() {
           :label="t('sponsor.banner.image')"
           :hint="t('sponsor.banner.imageHint', { size: format.size })"
           :max="format.max"
+          :tournament-id="tournamentId"
           wide
           @uploaded="draft.track"
         />
@@ -98,6 +103,7 @@ function submit() {
           :label="t('sponsor.banner.imageMobile')"
           :hint="t('sponsor.banner.imageMobileHint', { size: format.mobileSize })"
           :max="format.max"
+          :tournament-id="tournamentId"
           wide
           @uploaded="draft.track"
         />
@@ -173,7 +179,7 @@ function submit() {
       <p v-if="error" class="error-text" role="alert">{{ error }}</p>
       <footer class="banner-editor__foot">
         <button class="btn btn--ghost" type="button" @click="close">{{ t('actions.cancel') }}</button>
-        <button class="btn btn--primary" type="submit" :disabled="!showable || urlInvalid">{{ t('sponsor.save') }}</button>
+        <button class="btn btn--primary" type="submit" :disabled="!showable || urlInvalid || busy">{{ t('sponsor.save') }}</button>
       </footer>
     </form>
   </AppModal>
