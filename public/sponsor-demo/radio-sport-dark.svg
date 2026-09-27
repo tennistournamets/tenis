@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 120" width="360" height="120">
+  <rect x="14" y="22" width="76" height="76" rx="18" fill="#E7222E"/>
+  <path d="M34 60 a18 18 0 0 1 36 0" fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round"/>
+  <path d="M42 60 a10 10 0 0 1 20 0" fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round"/>
+  <circle cx="52" cy="72" r="6" fill="#fff"/>
+  <text x="106" y="62" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="34" font-weight="800" fill="#FFFFFF">RADIO SPORT</text>
+  <text x="106" y="96" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="26" font-weight="700" fill="#E7222E">101.5 FM</text>
+</svg>

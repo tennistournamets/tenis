@@ -5,6 +5,8 @@ import { useI18n } from 'vue-i18n'
 import BracketMatchCard from './BracketMatchCard.vue'
 import InfiniteCanvas from './InfiniteCanvas.vue'
 import { bracketRoundName } from '../lib/roundLabels'
+import { injectSponsorship } from '../lib/sponsorship'
+import SponsorLockup from './sponsor/SponsorLockup.vue'
 
 const props = defineProps({
   matches: {
@@ -36,6 +38,9 @@ const props = defineProps({
 const emit = defineEmits(['swap-slots', 'view-live'])
 
 const { t } = useI18n()
+// Title partner line over the final (public page and organizer preview).
+const sponsorship = injectSponsorship()
+const finalLockup = computed(() => sponsorship.value.lockup('bracket'))
 
 const innerRef = ref(null)
 const canvasRef = ref(null)
@@ -327,6 +332,7 @@ watch(splitSectionsFlat, () => scheduleUpdate(), { deep: true })
           :class="{ 'bracket-round--final': sec.columnKind === 'final' }"
         >
           <h4 class="bracket-round__title">{{ roundLabel(sec.roundNumber) }}</h4>
+          <SponsorLockup v-if="sec.columnKind === 'final' && finalLockup" class="bracket-round__sponsor" :lockup="finalLockup" />
           <BracketMatchCard
             v-for="match in sec.matches"
             :key="match.id"
@@ -345,8 +351,9 @@ watch(splitSectionsFlat, () => scheduleUpdate(), { deep: true })
       </div>
 
       <div v-else class="bracket-columns">
-        <section v-for="round in rounds" :key="round.roundNumber" class="bracket-round">
+        <section v-for="(round, index) in rounds" :key="round.roundNumber" class="bracket-round">
           <h4 class="bracket-round__title">{{ roundLabel(round.roundNumber) }}</h4>
+          <SponsorLockup v-if="index === rounds.length - 1 && rounds.length > 1 && finalLockup" class="bracket-round__sponsor" :lockup="finalLockup" />
           <BracketMatchCard
             v-for="match in round.matches"
             :key="match.id"

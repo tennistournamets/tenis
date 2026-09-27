@@ -29,6 +29,9 @@ import ScheduleBoard from '../components/admin/ScheduleBoard.vue'
 import CourtsEditor from '../components/admin/CourtsEditor.vue'
 import MatchScheduleModal from '../components/admin/MatchScheduleModal.vue'
 import AccessMatrix from '../components/admin/AccessMatrix.vue'
+import SponsorsTab from '../components/admin/SponsorsTab.vue'
+import { provideSponsorship } from '../lib/sponsorship'
+import { useSponsorshipFeature } from '../lib/sponsorshipRequests'
 import TournamentNextStep from '../components/admin/TournamentNextStep.vue'
 import TournamentChampion from '../components/TournamentChampion.vue'
 import { finishConfirmation } from '../lib/tournamentChampion'
@@ -101,6 +104,11 @@ function setAdminMobileBracketSurface(surface) {
 }
 
 const tournament = ref(null)
+// The organizer sees the bracket, live window and champion banner as spectators do.
+provideSponsorship(tournament)
+// Sponsors tab exists only while the feature is on on the platform (flags loaded).
+const sponsorshipFeatureOn = useSponsorshipFeature()
+const sponsorsTabVisible = computed(() => sponsorshipFeatureOn())
 useHeaderTitle(() => tournament.value?.name)
 const entries = ref([])
 const matches = ref([])
@@ -1386,7 +1394,7 @@ async function deleteTournament() {
 }
 
 
-const TABS = ['entries', 'bracket', 'courts', 'schedule', 'scores', 'settings']
+const TABS = ['entries', 'bracket', 'courts', 'schedule', 'scores', 'sponsors', 'settings']
 
 // Организатору сетка нужна только с двумя одобренными участниками; до этого вкладка
 // заблокирована с подсказкой, как «Счёт» до старта. Роль «только результаты» не
@@ -1399,6 +1407,7 @@ function isTabEnabled(tab) {
   if (tab === 'bracket') return bracketTabEnabled.value
   // Managers always reach "Scores": before the start it explains when entry opens.
   if (tab === 'scores') return canEditScores.value || canManageTournament.value
+  if (tab === 'sponsors') return canManageTournament.value && sponsorsTabVisible.value
   return canManageTournament.value
 }
 
@@ -1427,6 +1436,12 @@ function setTab(tab) {
   const url = `${window.location.pathname}${window.location.search}#${tab}`
   history.replaceState({ ...(history.state || {}), current: url }, '', url)
 }
+
+// The flags arrive after the first render: honour a #sponsors link then, leave the tab if switched off.
+watch(sponsorsTabVisible, (visible) => {
+  if (visible && window.location.hash === '#sponsors') setTab('sponsors')
+  else if (!visible && activeTab.value === 'sponsors') setTab(defaultTab())
+})
 
 function syncTabFromHash() {
   const requestedTab = window.location.hash.replace('#', '')
@@ -1816,6 +1831,19 @@ onBeforeUnmount(() => {
             {{ t('admin.tabScores') }}
           </button>
         </span>
+        <button
+          v-if="canManageTournament && sponsorsTabVisible"
+          id="tab-sponsors"
+          role="tab"
+          class="tab"
+          :class="{ 'tab--active': activeTab === 'sponsors' }"
+          :aria-selected="activeTab === 'sponsors'"
+          :tabindex="activeTab === 'sponsors' ? 0 : -1"
+          aria-controls="panel-sponsors"
+          @click="setTab('sponsors')"
+        >
+          {{ t('sponsor.tab') }}
+        </button>
         <button
           v-if="canManageTournament"
           id="tab-settings"
@@ -2747,6 +2775,17 @@ onBeforeUnmount(() => {
           @saved="refreshScoreData"
           @start-live="openLiveScoring"
         />
+      </div>
+
+      <div
+        v-if="canManageTournament && sponsorsTabVisible"
+        id="panel-sponsors"
+        role="tabpanel"
+        aria-labelledby="tab-sponsors"
+        class="tab-panel"
+        :class="{ 'tab-panel--active': activeTab === 'sponsors' }"
+      >
+        <SponsorsTab :tournament="tournament" :can-manage="canManageTournament" :is-owner="currentUserRole === 'owner'" />
       </div>
 
       <div

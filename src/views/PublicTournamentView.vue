@@ -34,6 +34,10 @@ import { displayStatus, statusBadgeClass } from '../lib/tournamentStatus'
 import TournamentChampion from '../components/TournamentChampion.vue'
 import { applyTournamentHead, clearTournamentHead, scheduleSpan, tournamentImageUrl, tournamentJsonLd } from '../lib/seo'
 import { siteOrigin } from '../lib/siteOrigin'
+import { provideSponsorship } from '../lib/sponsorship'
+import SponsorLockup from '../components/sponsor/SponsorLockup.vue'
+import SponsorBannerSlot from '../components/sponsor/SponsorBannerSlot.vue'
+import SponsorPartners from '../components/sponsor/SponsorPartners.vue'
 
 const props = defineProps({
   slug: {
@@ -66,6 +70,10 @@ const mobileSurface = ref(publicSurfaceFromQuery(route.query.view))
 
 const tournament = ref(null)
 useHeaderTitle(() => tournament.value?.name)
+// Title partner for the boards and modals below (bracket, live, champion).
+const sponsorship = provideSponsorship(tournament)
+const lockup = slot => sponsorship.value.lockup(slot)
+const bannerItems = slot => sponsorship.value.banners(slot)
 const entries = ref([])
 const matches = ref([])
 const standings = ref([])
@@ -535,6 +543,7 @@ onBeforeUnmount(() => {
           <div class="pub-chips">
             <span v-for="(chip, i) in heroChips" :key="i" class="pub-chip">{{ chip }}</span>
           </div>
+          <SponsorLockup v-if="lockup('hero') && !embed" class="pub-hero__sponsor" :lockup="lockup('hero')" :campaign="tournament.slug" />
           <details
             v-if="tournament.description && !embed"
             class="pub-hero__details"
@@ -567,6 +576,8 @@ onBeforeUnmount(() => {
           </div>
         </div>
       </section>
+
+      <SponsorBannerSlot v-if="!embed" :items="bannerItems('top')" placement="top" :campaign="tournament.slug" />
 
       <TournamentChampion
         :format="tournament.format"
@@ -641,6 +652,7 @@ onBeforeUnmount(() => {
                 </div>
               </dl>
             </div>
+            <SponsorBannerSlot :items="bannerItems('registration')" layout="card" placement="registration" :campaign="tournament.slug" />
           </aside>
           <RegistrationForm
             v-if="regState.accepting || regState.waitlistOpen || registrationDirty"
@@ -714,12 +726,12 @@ onBeforeUnmount(() => {
         </div>
 
         <div v-else-if="isPointsFmt" class="card">
-          <h3 class="section-title">{{ pointsTableTitle }}</h3>
+          <div class="pub-table-head"><h3 class="section-title">{{ pointsTableTitle }}</h3><SponsorLockup v-if="lockup('standings')" :lockup="lockup('standings')" :campaign="tournament.slug" /></div>
           <PointsStandingsTable :rows="pointsStandings" :format="tournament.format" :target="pointsMatchTarget" />
         </div>
         <template v-else-if="isRoundRobin">
           <div v-if="standings.length" class="card">
-            <h3 class="section-title">{{ t('standings.title') }}</h3>
+            <div class="pub-table-head"><h3 class="section-title">{{ t('standings.title') }}</h3><SponsorLockup v-if="lockup('standings')" :lockup="lockup('standings')" :campaign="tournament.slug" /></div>
             <StandingsTable :rows="standings" :family="sportCfg.scoringFamily" />
           </div>
           <div v-if="matches.length" class="card rr-cross-card" style="margin-top: var(--space-4)">
@@ -728,7 +740,7 @@ onBeforeUnmount(() => {
           </div>
         </template>
         <template v-else-if="isGroupsPlayoff">
-          <div v-if="groups.length" class="card"><h3 class="section-title">{{ t('admin.groupStage') }}</h3><GroupStageBoard :groups="groupsView" :entries-map="entriesMap" :family="sportCfg.scoringFamily"  :sets-by-match="setsByMatch" :live-scores-by-match="liveScoresByMatch" @view-live="openPublicLive" /></div>
+          <div v-if="groups.length" class="card"><div class="pub-table-head"><h3 class="section-title">{{ t('admin.groupStage') }}</h3><SponsorLockup v-if="lockup('standings')" :lockup="lockup('standings')" :campaign="tournament.slug" /></div><GroupStageBoard :groups="groupsView" :entries-map="entriesMap" :family="sportCfg.scoringFamily"  :sets-by-match="setsByMatch" :live-scores-by-match="liveScoresByMatch" @view-live="openPublicLive" /></div>
           <div v-if="playoffMatches.length" class="card" style="margin-top: var(--space-4)"><h3 class="section-title">{{ t('admin.playoff') }}</h3><BracketBoard :matches="playoffMatches" :sets-by-match="setsByMatch" :entries-map="entriesMap" :live-scores-by-match="liveScoresByMatch" @view-live="openPublicLive" /></div>
         </template>
         <div v-else-if="isDoubleElim" class="card">
@@ -742,7 +754,7 @@ onBeforeUnmount(() => {
 
       <template v-else-if="isPointsFmt">
         <div v-if="pointsStandings.length" class="card">
-          <h3 class="section-title">{{ pointsTableTitle }}</h3>
+          <div class="pub-table-head"><h3 class="section-title">{{ pointsTableTitle }}</h3><SponsorLockup v-if="lockup('standings')" :lockup="lockup('standings')" :campaign="tournament.slug" /></div>
           <PointsStandingsTable :rows="pointsStandings" :format="tournament.format" :target="pointsMatchTarget" />
         </div>
         <div class="card" style="margin-top: var(--space-4)">
@@ -753,7 +765,7 @@ onBeforeUnmount(() => {
 
       <template v-else-if="isRoundRobin">
         <div v-if="standings.length" class="card">
-          <h3 class="section-title">{{ t('standings.title') }}</h3>
+          <div class="pub-table-head"><h3 class="section-title">{{ t('standings.title') }}</h3><SponsorLockup v-if="lockup('standings')" :lockup="lockup('standings')" :campaign="tournament.slug" /></div>
           <StandingsTable :rows="standings" :family="sportCfg.scoringFamily" />
         </div>
         <div v-if="matches.length" class="card rr-cross-card" style="margin-top: var(--space-4)">
@@ -783,7 +795,7 @@ onBeforeUnmount(() => {
 
       <template v-else-if="isGroupsPlayoff">
         <div v-if="groups.length" class="card">
-          <h3 class="section-title">{{ t('admin.groupStage') }}</h3>
+          <div class="pub-table-head"><h3 class="section-title">{{ t('admin.groupStage') }}</h3><SponsorLockup v-if="lockup('standings')" :lockup="lockup('standings')" :campaign="tournament.slug" /></div>
           <GroupStageBoard :groups="groupsView" :entries-map="entriesMap" :family="sportCfg.scoringFamily"  :sets-by-match="setsByMatch" :live-scores-by-match="liveScoresByMatch" @view-live="openPublicLive" />
         </div>
         <div v-if="playoffMatches.length" class="card" style="margin-top: var(--space-4)">
@@ -821,7 +833,11 @@ onBeforeUnmount(() => {
       </div>
       </div>
 
+      <SponsorBannerSlot v-if="!embed" :items="bannerItems('bottom')" placement="bottom" :campaign="tournament.slug" />
+      <SponsorPartners v-if="sponsorship.partners && !embed" :partners="sponsorship.partners" :campaign="tournament.slug" />
+
       <footer v-if="embed" class="pub-embed-footer">
+        <SponsorLockup v-if="lockup('embed')" :lockup="lockup('embed')" :campaign="tournament.slug" />
         <a :href="embedLink" target="_blank" rel="noopener">{{ t('share.embedOpen') }} <span aria-hidden="true">↗</span></a>
       </footer>
 
@@ -842,7 +858,10 @@ onBeforeUnmount(() => {
 .pub-hero--embed .pub-hero__icon { display: none; }
 .pub-embed-footer {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   justify-content: flex-end;
+  gap: 8px 16px;
   font-size: 0.8125rem;
 }
 .pub-embed-footer a {
@@ -854,6 +873,16 @@ onBeforeUnmount(() => {
   text-decoration: none;
 }
 .pub-embed-footer a:hover { color: var(--primary); }
+.pub-embed-footer .sponsor-lockup { margin-right: auto; }
+.pub-hero__sponsor { margin-top: 12px; }
+.pub-table-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 16px;
+}
+.pub-table-head .section-title { margin-bottom: var(--space-3); }
 .participant-item { flex-wrap: wrap; gap: 8px 12px; }
 .participant-item strong { flex: 1 1 180px; min-width: 0; overflow-wrap: anywhere; }
 .participant-item .badge { flex-shrink: 0; }

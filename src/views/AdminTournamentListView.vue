@@ -5,7 +5,7 @@ import { useI18n } from 'vue-i18n'
 
 import { supabase } from '../lib/supabase'
 import CopyTournamentLink from '../components/CopyTournamentLink.vue'
-import AppIcon from '../components/AppIcon.vue'
+import TournamentProgressIcon from '../components/TournamentProgressIcon.vue'
 import { categoryLabelKey } from '../lib/sportConfig'
 import { useAuthStore } from '../stores/auth'
 import { displayStatus, statusBadgeClass } from '../lib/tournamentStatus'
@@ -63,12 +63,19 @@ async function loadProgress(ids) {
   try {
     const [entries, matchRows, live] = await Promise.all([
       supabase.from('entries').select('tournament_id,status').in('tournament_id', ids),
-      supabase.from('matches').select('tournament_id').in('tournament_id', ids),
+      supabase.from('matches').select('tournament_id,status,side_a_entry_id,side_b_entry_id').in('tournament_id', ids),
       supabase.from('live_scores').select('tournament_id,status').in('tournament_id', ids).eq('status', 'active'),
     ])
-    const next = Object.fromEntries(ids.map(id => [id, { approved: 0, pending: 0, matches: 0, live: 0 }]))
+    const next = Object.fromEntries(ids.map(id => [id, { approved: 0, pending: 0, matches: 0, played: 0, byes: 0, live: 0 }]))
     for (const e of entries.data || []) if (next[e.tournament_id] && (e.status === 'approved' || e.status === 'pending')) next[e.tournament_id][e.status] += 1
-    for (const m of matchRows.data || []) if (next[m.tournament_id]) next[m.tournament_id].matches += 1
+    for (const m of matchRows.data || []) {
+      const p = next[m.tournament_id]
+      if (!p) continue
+      p.matches += 1
+      // A finished match with an empty side is a BYE: not a match to play.
+      if (m.status === 'finished' && (!m.side_a_entry_id || !m.side_b_entry_id)) p.byes += 1
+      else if (m.status === 'finished') p.played += 1
+    }
     for (const l of live.data || []) if (next[l.tournament_id]) next[l.tournament_id].live += 1
     progress.value = next
   } catch { progress.value = {} }
@@ -102,6 +109,7 @@ async function loadTournaments() {
           doubles_pairing_mode,
           visibility,
           registration_deadline,
+          registration_capacity,
           created_at
         )
       `,
@@ -191,10 +199,34 @@ function nextStep(item) {
   }
 }
 
+// Ring fill and its words: seats while registering, matches once the draw exists.
+function itemProgress(item) {
+  const p = progress.value[item.id]
+  const status = displayStatus(item)
+  if (!p) return { value: null, text: '' }
+  const toPlay = p.matches - p.byes
+  if ((status === 'in_progress' || status === 'completed') && toPlay > 0) {
+    return { value: p.played / toPlay, text: t('admin.listMetaMatches', { n: p.played, total: toPlay }) }
+  }
+  if (item.registration_capacity && status !== 'completed') {
+    return { value: p.approved / item.registration_capacity, text: t('admin.listMetaSeats', { n: p.approved, total: item.registration_capacity }) }
+  }
+  return { value: null, text: '' }
+}
+
+function iconLabel(item) {
+  const parts = [t(`sport.${item.sport}`), t(`tournament.${displayStatus(item)}`)]
+  const { text } = itemProgress(item)
+  if (text) parts.push(text)
+  return parts.join(', ')
+}
+
 function itemMeta(item) {
   const parts = [itemSubtitle(item)]
   const p = progress.value[item.id]
-  if (p?.approved) parts.push(t('admin.listMetaEntries', { n: p.approved }))
+  const { text } = itemProgress(item)
+  if (text) parts.push(text)
+  else if (p?.approved) parts.push(t('admin.listMetaEntries', { n: p.approved }))
   parts.push(t('admin.listMetaCreated', { date: formatDate(item.created_at) }))
   return parts.join(' · ')
 }
@@ -275,7 +307,12 @@ onMounted(async () => {
         @keydown.enter="router.push(tournamentTarget(item))"
       >
         <div class="t-card__main">
-          <span class="t-card__icon"><AppIcon :name="item.sport" :size="22" /></span>
+          <TournamentProgressIcon
+            :sport="item.sport"
+            :status="displayStatus(item)"
+            :value="itemProgress(item).value"
+            :label="iconLabel(item)"
+          />
           <div class="t-card__info">
             <div class="t-card__title-row">
               <h2 class="t-card__title">{{ item.name }}</h2>
@@ -343,18 +380,6 @@ onMounted(async () => {
   gap: var(--space-3);
 }
 
-.t-card__icon {
-  flex-shrink: 0;
-  width: 44px;
-  height: 44px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--primary);
-  border-radius: 12px;
-  background: var(--primary-muted);
-}
-
 .t-card__info { flex: 1; min-width: 0; }
 
 .t-card__title-row {
@@ -410,7 +435,7 @@ onMounted(async () => {
 
 @media (max-width: 560px) {
   .t-card__main { align-items: flex-start; flex-wrap: wrap; }
-  .t-card__copy { width: 100%; padding-left: 56px; }
+  .t-card__copy { width: 100%; padding-left: 64px; }
   .t-card__copy :deep(.btn:not(.btn--icon)) { min-height: 44px; flex: 1 1 120px; }
 }
 </style>

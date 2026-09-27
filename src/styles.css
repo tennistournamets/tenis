@@ -2753,6 +2753,14 @@ html.ic-pseudo-fullscreen-open body {
   flex-shrink: 0;
 }
 
+/* Title partner under the final: out of flow so the final card stays centred on its connectors. */
+.bracket-round__sponsor {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+}
+
 .bracket-round__title {
   font-family: var(--font-display);
   font-size: 0.8125rem;
