@@ -9,6 +9,8 @@ import { displaySides, useDeferredChangeover } from '../lib/liveSides'
 import { GLB_TIMEOUT_MS, maxNetworkTier, withTimeout } from '../lib/rally3d/networkTier'
 
 import LiveRallyAnimation from './LiveRallyAnimation.vue'
+import SponsorLockup from './sponsor/SponsorLockup.vue'
+import { injectSponsorship } from '../lib/sponsorship'
 
 // 3D court is a lazy chunk (three.js); the 2D SVG scene renders instantly and
 // stays as the floor for reduced-motion, missing WebGL, slow networks, or a
@@ -80,6 +82,8 @@ const props = defineProps({
 const emit = defineEmits(['close'])
 
 const { t } = useI18n()
+const sponsorship = injectSponsorship()
+const liveLockup = computed(() => sponsorship.value.lockup('live'))
 
 const state = computed(() => props.liveScore?.state || null)
 // Padel points formats: a rally counter up to the total, no court animation.
@@ -143,6 +147,18 @@ function teamName(side) {
         <p class="live-scoreboard__sets">{{ scoreLine(state) }}</p>
         <div v-if="liveRuleHint(state, t)" class="alert alert--info" role="status">{{ liveRuleHint(state, t) }}</div>
       </template>
+      <div v-if="liveLockup" class="live-modal__sponsor">
+        <SponsorLockup :lockup="liveLockup" />
+      </div>
     </div>
   </AppModal>
 </template>
+
+<style scoped>
+.live-modal__sponsor {
+  display: flex;
+  justify-content: center;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+</style>

@@ -1,15 +1,35 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { SPORTS, sportFlagKey } from '../lib/sportConfig'
 import { useFeatureFlagsStore } from '../stores/featureFlags'
 import AppIcon from '../components/AppIcon.vue'
+import { onTabKeydown } from '../lib/tabNavigation'
+import SponsorshipRequestsPanel from '../components/admin/SponsorshipRequestsPanel.vue'
+import { SPONSORSHIP_FLAG } from '../lib/sponsorshipRequests'
 
 const { t, locale } = useI18n()
 const flags = useFeatureFlagsStore()
 
 const loading = ref(true)
+
+// Tabs: sponsorship requests (the daily work) and platform feature flags.
+const TABS = ['sponsorship', 'features']
+const readHashTab = () => {
+  const hash = window.location.hash.replace('#', '')
+  return TABS.includes(hash) ? hash : TABS[0]
+}
+const activeTab = ref(readHashTab())
+const pendingRequests = ref(0)
+const syncTabFromHash = () => { activeTab.value = readHashTab() }
+window.addEventListener('hashchange', syncTabFromHash)
+onBeforeUnmount(() => window.removeEventListener('hashchange', syncTabFromHash))
+function setTab(tab) {
+  activeTab.value = tab
+  const url = `${window.location.pathname}${window.location.search}#${tab}`
+  history.replaceState({ ...(history.state || {}), current: url }, '', url)
+}
 const loadError = ref('')
 const saveError = ref('')
 const pending = ref(new Set())
@@ -28,9 +48,16 @@ const sportRows = computed(() => SPORTS.map((sport) => {
   }
 }))
 
+// Platform features with their own switch (row may not exist yet = off).
+const FEATURES = [{ key: SPONSORSHIP_FLAG, name: 'sponsorship' }]
+const featureRows = computed(() => FEATURES.map((feature) => {
+  const row = flags.flags[feature.key]
+  return { ...feature, enabled: Boolean(row?.enabled), updatedAt: row?.updated_at ?? null, missing: !row }
+}))
+
 // Non-sport flags (anything else the platform may gate later).
 const otherRows = computed(() => Object.values(flags.flags)
-  .filter((row) => !row.key.startsWith('sport.'))
+  .filter((row) => !row.key.startsWith('sport.') && !FEATURES.some((f) => f.key === row.key))
   .sort((a, b) => a.key.localeCompare(b.key)))
 
 const enabledSportCount = computed(() => sportRows.value.filter((r) => r.enabled).length)
@@ -75,7 +102,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="stack" style="max-width: 720px">
+  <div class="stack" style="max-width: 960px">
     <div>
       <RouterLink class="admin-back-link" :to="{ name: 'admin-tournaments' }">
       {{ t('admin.backToList') }}
@@ -86,6 +113,73 @@ onMounted(async () => {
 
     <div v-if="loadError" class="alert alert--error" role="alert">{{ loadError }}</div>
     <div v-if="saveError" class="alert alert--error" role="alert">{{ saveError }}</div>
+
+    <div class="tab-group" role="tablist" :aria-label="t('admin.platformTitle')" @keydown="onTabKeydown">
+      <button
+        v-for="tab in TABS"
+        :id="`platform-tab-${tab}`"
+        :key="tab"
+        type="button"
+        role="tab"
+        class="tab"
+        :class="{ 'tab--active': activeTab === tab }"
+        :aria-selected="activeTab === tab"
+        :aria-controls="`platform-panel-${tab}`"
+        :tabindex="activeTab === tab ? 0 : -1"
+        @click="setTab(tab)"
+      >
+        {{ t(`admin.platformTabs.${tab}`) }}
+        <span v-if="tab === 'sponsorship' && pendingRequests" class="tab__badge">{{ pendingRequests }}</span>
+      </button>
+    </div>
+
+    <div
+      v-show="activeTab === 'sponsorship'"
+      id="platform-panel-sponsorship"
+      role="tabpanel"
+      aria-labelledby="platform-tab-sponsorship"
+    >
+      <SponsorshipRequestsPanel @pending-count="pendingRequests = $event" />
+    </div>
+
+    <div
+      v-show="activeTab === 'features'"
+      id="platform-panel-features"
+      role="tabpanel"
+      aria-labelledby="platform-tab-features"
+      class="stack"
+    >
+    <section class="card stack stack--sm">
+      <div class="platform-section__head">
+        <h2 class="section-title">{{ t('admin.platformFeatures') }}</h2>
+      </div>
+      <p class="muted platform-hint">{{ t('admin.platformFeaturesHint') }}</p>
+      <ul class="flag-list" :aria-busy="loading">
+        <li v-for="row in featureRows" :key="row.key" class="flag-row">
+          <span class="flag-row__icon" aria-hidden="true"><AppIcon name="trophy" :size="22" /></span>
+          <div class="flag-row__text">
+            <span class="flag-row__name">{{ t(`admin.platformFeature.${row.name}.title`) }}</span>
+            <span class="flag-row__meta">{{ t(`admin.platformFeature.${row.name}.hint`) }}</span>
+            <span class="flag-row__meta">
+              <code>{{ row.key }}</code>
+              <template v-if="row.updatedAt"> · {{ t('admin.platformUpdated', { date: formatDate(row.updatedAt) }) }}</template>
+              <template v-else-if="row.missing"> · {{ t('admin.platformNoRow') }}</template>
+            </span>
+          </div>
+          <label class="switch" :class="{ 'switch--busy': isPending(row.key) }">
+            <input
+              type="checkbox"
+              :checked="row.enabled"
+              :disabled="loading || isPending(row.key)"
+              :aria-label="t(`admin.platformFeature.${row.name}.title`)"
+              @change="toggle(row.key, $event.target.checked)"
+            />
+            <span class="switch__track"><span class="switch__thumb"></span></span>
+            <span class="switch__label">{{ row.enabled ? t('admin.platformOn') : t('admin.platformOff') }}</span>
+          </label>
+        </li>
+      </ul>
+    </section>
 
     <section class="card stack stack--sm">
       <div class="platform-section__head">
@@ -143,6 +237,7 @@ onMounted(async () => {
         </li>
       </ul>
     </section>
+    </div>
   </div>
 </template>
 

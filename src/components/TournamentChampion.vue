@@ -4,6 +4,8 @@ import { useI18n } from 'vue-i18n'
 import AppIcon from './AppIcon.vue'
 import { entryDisplayNames } from '../lib/entryDisplay'
 import { tournamentChampion } from '../lib/tournamentChampion'
+import { injectSponsorship } from '../lib/sponsorship'
+import SponsorLockup from './sponsor/SponsorLockup.vue'
 
 // The tournament's outcome, shared by the admin page and the public page: the
 // champion once the deciding match is played (or the all-play-all is over),
@@ -19,6 +21,8 @@ const props = defineProps({
 })
 const emit = defineEmits(['finish'])
 const { t } = useI18n()
+const sponsorship = injectSponsorship()
+const prizeLockup = computed(() => sponsorship.value.lockup('champion'))
 
 const champion = computed(() => tournamentChampion({
   format: props.format, status: props.status, matches: props.matches, standings: props.standings,
@@ -49,6 +53,9 @@ const eyebrow = computed(() => {
       </p>
       <p v-else class="champion-banner__hint">{{ t('lifecycle.noChampion') }}</p>
       <p v-if="offerFinish" class="champion-banner__hint">{{ t('lifecycle.finishHint') }}</p>
+      <p v-if="champion && prizeLockup" class="champion-banner__prize">
+        <SponsorLockup :lockup="prizeLockup" />
+      </p>
     </div>
     <button v-if="offerFinish" class="btn btn--primary btn--sm champion-banner__action" type="button" :disabled="busy" @click="emit('finish')">
       {{ t('admin.finishTournament') }}
@@ -74,6 +81,7 @@ const eyebrow = computed(() => {
 .champion-banner__eyebrow { margin: 0; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
 .champion-banner__name { margin: 0; font-size: 1.125rem; color: var(--heading); overflow-wrap: anywhere; }
 .champion-banner__label { margin-right: 6px; font-weight: 500; color: var(--text); }
+.champion-banner__prize { margin: 4px 0 0; }
 .champion-banner__hint { margin: 0; font-size: 0.875rem; line-height: 1.4; color: var(--muted); }
 @media (max-width: 560px) {
   .champion-banner { grid-template-columns: auto minmax(0, 1fr); }

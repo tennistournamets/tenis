@@ -12,6 +12,8 @@ import { taggedUrl } from '../lib/shareChannels'
 import { LABELS, formatDateRange, scheduleSpan } from '../lib/seo'
 import { setRobotsMeta } from '../lib/access'
 import { useHeaderTitle } from '../lib/headerTitle'
+import { useSponsorship } from '../lib/sponsorship'
+import SponsorMark from '../components/sponsor/SponsorMark.vue'
 
 const props = defineProps({ slug: { type: String, required: true } })
 const { t, locale } = useI18n()
@@ -21,6 +23,8 @@ const span = ref({ starts_at: null, ends_at: null })
 const state = ref('loading')
 const qrSrc = ref('')
 useHeaderTitle(() => tournament.value?.name)
+const sponsorship = useSponsorship(tournament)
+const posterLockup = computed(() => sponsorship.value.lockup('poster'))
 
 const pageUrl = computed(() => tournamentShareUrl(props.slug))
 const printedUrl = computed(() => pageUrl.value.replace(/^https?:\/\//, ''))
@@ -88,7 +92,14 @@ function print() {
     </section>
 
     <article v-else class="poster" :lang="locale">
-      <header class="poster__brand"><BrandLogo :size="44" /><span>Bracketa</span></header>
+      <header class="poster__brand">
+        <BrandLogo :size="44" /><span>Bracketa</span>
+        <span v-if="posterLockup" class="poster__partner">
+          <span class="poster__partner-role">{{ posterLockup.label || t('sponsor.slot.poster.default') }}</span>
+          <SponsorMark :sponsor="posterLockup.sponsor" :height="48" :on-dark="false" />
+          <strong v-if="posterLockup.sponsor.showName && posterLockup.sponsor.logo" class="poster__partner-name">{{ posterLockup.sponsor.name }}</strong>
+        </span>
+      </header>
       <div class="poster__body">
         <p class="poster__kicker">{{ t('poster.kicker') }}</p>
         <h1 class="poster__title">{{ tournament.name }}</h1>
@@ -224,6 +235,15 @@ function print() {
 }
 
 .poster__note { margin: 3mm 0 0; text-align: center; font-size: 20px; color: #3D4A43; }
+
+.poster__partner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+}
+.poster__partner-role { font: 600 13px/1.2 var(--font-body); max-width: 110px; text-align: right; letter-spacing: 0.06em; text-transform: uppercase; color: #5E6B64; }
+.poster__partner-name { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 26px; letter-spacing: 0.02em; }
 
 .poster__footer {
   display: flex;

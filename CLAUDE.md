@@ -44,6 +44,9 @@ src/
     MadeWithBracketa.vue      # "Made with Bracketa" footer on public pages (growth link with utm)
     EmbedCodeModal.vue        # "Website code" for club sites (snippet from lib/embedCode.js + public/embed.js)
     ShareTournamentModal.vue  # WhatsApp/Telegram/Viber/email share, opened after create (?created=1) and after start
+    sponsor/                  # Public sponsor units: SponsorMark (logo, dark variant), SponsorLockup ("Presented by"), SponsorBanner(+Slot), SponsorPartners
+    admin/SponsorsTab.vue     # "Sponsors" tab: access request card, then ad places (cards with PlacementDiagram) as the entry point → PlacementEditorModal (who/caption, banners, partners); sponsor list is secondary (+ SponsorEditorModal, BannerEditorModal, SponsorImageField, SponsorshipAccessCard)
+    admin/SponsorshipRequestsPanel.vue  # Super-admin table of sponsorship requests (in AdminPlatformView)
   i18n/
     index.js                  # Vue I18n config; loads only the active locale (setAppLocale / loadLocaleMessages)
     messages.js               # All translation strings (ru/en/lt) — source of truth; the build splits it per locale
@@ -55,6 +58,9 @@ src/
     sportConfig.js            # Registry: sport -> capabilities (scoringFamily, forcedCategory, supports*)
     scoringEngines.js         # Registry: family (sets|goals|points) -> state/format helpers
     pointsFormat.js           # Points formats: rounds/rests from matches, plans mirroring the SQL generators
+    sponsorship.js            # Sponsorship config model (sponsors, logo/banner slots, partners) — prototype storage in localStorage, gated by approval
+    sponsorAssets.js          # Sponsor image uploads: downscale + IndexedDB blobs (prototype stand-in for Storage)
+    sponsorshipRequests.js    # Paid-feature gate: request/list/decide RPCs, cached is_sponsorship_approved
     useTennisScoring.js       # Tennis scoring composable (sets family; reused by padel)
     entryDisplay.js           # Entry/member name display helper
     shareLink.js              # Tournament link generation
@@ -69,9 +75,9 @@ src/
     AdminLayout.vue           # Admin wrapper with nav
     AdminTournamentListView.vue
     AdminTournamentCreateView.vue  # 6-step create wizard (draft kept in sessionStorage)
-    AdminTournamentView.vue   # Main admin page (6 tabs: Entries, Bracket/Stage, Courts, Schedule, Scores, Settings) - LARGEST FILE
+    AdminTournamentView.vue   # Main admin page (7 tabs: Entries, Bracket/Stage, Courts, Schedule, Scores, Sponsors, Settings) - LARGEST FILE
     AdminSettingsView.vue     # User settings
-    AdminPlatformView.vue     # Super-admin only: feature flags (sport toggles)
+    AdminPlatformView.vue     # Super-admin only: sponsorship requests + feature flags (sport toggles)
     PublicTournamentView.vue  # Public tournament page (registration + bracket/standings/groups)
   App.vue                     # Root component
   main.js                     # App entry point
@@ -104,7 +110,7 @@ supabase/
 | `/admin/tournaments/new` | AdminTournamentCreateView | Yes |
 | `/admin/tournaments/:id` | AdminTournamentView | Yes |
 | `/admin/settings` | AdminSettingsView | Yes |
-| `/admin/platform` | AdminPlatformView | Yes + `platform_admins` row (else redirect to list) |
+| `/admin/platform` | AdminPlatformView (sponsorship requests, feature flags) | Yes + `platform_admins` row (else redirect to list) |
 
 ## Database (Supabase PostgreSQL)
 
@@ -125,6 +131,7 @@ supabase/
 - **match_sets** - per-set game scores (tennis/padel only)
 - **bracket_versions** - bracket snapshots for undo
 - **live_scores** - real-time point-by-point scoring state (JSON state/history/revision)
+- **sponsorship_requests** - paid-feature gate, one row per tournament: `status` pending/approved/rejected, `message`, `requested_by`, `decided_by/at`. Read: tournament admins + platform admin (RLS); no direct writes. Sponsor content itself is still client-side (prototype)
 - **notification_outbox** - participant emails queued by triggers on `entries` (received/waitlisted/approved/rejected) and by `enqueue_match_reminders()`; no addresses stored; closed to API roles. `entries.notify_locale` comes from the `x-bracketa-locale` request header (RegistrationForm sets it)
 
 ### Key PL/pgSQL Functions
@@ -152,6 +159,7 @@ supabase/
 - `add_tournament_admin_by_email()`, `remove_tournament_admin()` - co-organizer management
 - `is_tournament_admin()`, `can_live_score()`, `is_platform_admin()` - access checks
 - `is_feature_enabled(key)` / `set_feature_flag(key, enabled, description)` - feature flags; `create_tournament()` rejects a sport whose `sport.<x>` flag is off
+- Sponsorship: `request_sponsorship(tournament, message)` (owner only; approved stays approved, rejected → pending again), `decide_sponsorship_request(id, status)` and `list_sponsorship_requests()` (platform admin; owner name/email + tournament), `is_sponsorship_approved(tournament)` (anon ok; public sponsor slots render only when true)
 - `claim_notifications(limit)`, `complete_notification(id, ok, error)`, `notifications_due()` - email sender (service_role only; `api/notifications.js`, triggered by pg_cron — setup in docs/GROWTH.md)
 
 ### Security

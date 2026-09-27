@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="200" height="200">
+  <defs><path id="arc" d="M 14.5 50 A 35.5 35.5 0 0 1 85.5 50"/></defs>
+  <circle cx="50" cy="50" r="39" fill="none" stroke="#111" stroke-width="18"/>
+  <circle cx="50" cy="50" r="30" fill="#fff"/>
+  <path d="M50 50 L50 20 A30 30 0 0 0 20 50 Z" fill="#1C69D4"/>
+  <path d="M50 50 L50 80 A30 30 0 0 0 80 50 Z" fill="#1C69D4"/>
+  <circle cx="50" cy="50" r="48.2" fill="none" stroke="#c9ccd1" stroke-width="1.6"/>
+  <circle cx="50" cy="50" r="30" fill="none" stroke="#c9ccd1" stroke-width="1.4"/>
+  <g font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="14" font-weight="700" fill="#fff">
+    <text><textPath href="#arc" startOffset="21%" text-anchor="middle">B</textPath></text>
+    <text><textPath href="#arc" startOffset="50%" text-anchor="middle">M</textPath></text>
+    <text><textPath href="#arc" startOffset="79%" text-anchor="middle">W</textPath></text>
+  </g>
+</svg>

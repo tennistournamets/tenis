@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 120" width="360" height="120">
+  <path d="M60 18 C60 18 30 56 30 76 a30 30 0 0 0 60 0 C90 56 60 18 60 18 Z" fill="#12A4D9"/>
+  <path d="M46 78 a14 14 0 0 0 14 14" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round"/>
+  <text x="104" y="72" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="44" font-weight="700" fill="#FFFFFF" letter-spacing="-1">aqua</text>
+  <text x="212" y="72" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="44" font-weight="300" fill="#12A4D9" letter-spacing="-1">vita</text>
+  <text x="106" y="96" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="14" font-weight="600" fill="#A9CFE6" letter-spacing="4">MINERAL WATER</text>
+</svg>

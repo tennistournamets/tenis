@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 400" width="1600" height="400">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#07111F"/><stop offset=".6" stop-color="#10284A"/><stop offset="1" stop-color="#0A1A30"/></linearGradient>
+    <radialGradient id="glow" cx=".78" cy=".35" r=".55"><stop offset="0" stop-color="#1C69D4" stop-opacity=".75"/><stop offset="1" stop-color="#1C69D4" stop-opacity="0"/></radialGradient>
+    <linearGradient id="body" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#E9EEF5"/><stop offset="1" stop-color="#8FA3BD"/></linearGradient>
+  </defs>
+  <rect width="1600" height="400" fill="url(#bg)"/>
+  <rect width="1600" height="400" fill="url(#glow)"/>
+  <g transform="skewX(-20)"><rect x="1330" y="0" width="22" height="120" fill="#81C4FF"/><rect x="1362" y="0" width="22" height="120" fill="#16588E"/><rect x="1394" y="0" width="22" height="120" fill="#E7222E"/></g>
+  <!-- stylised SUV silhouette -->
+  <g transform="translate(860 120)">
+    <ellipse cx="300" cy="238" rx="330" ry="16" fill="#000" opacity=".45"/>
+    <path d="M20 190 C24 150 60 134 120 126 L210 70 C240 52 280 44 330 44 L430 44 C480 44 520 60 560 92 L610 128 C650 136 672 156 676 190 L676 214 L20 214 Z" fill="url(#body)"/>
+    <path d="M232 80 C252 66 282 60 318 60 L360 60 L360 124 L170 124 Z" fill="#1B2D46"/>
+    <path d="M378 60 L430 60 C470 60 500 74 530 98 L556 124 L378 124 Z" fill="#1B2D46"/>
+    <rect x="608" y="146" width="56" height="12" rx="6" fill="#CFE6FF"/>
+    <circle cx="160" cy="212" r="46" fill="#0B0F16"/><circle cx="160" cy="212" r="26" fill="#56647A"/>
+    <circle cx="536" cy="212" r="46" fill="#0B0F16"/><circle cx="536" cy="212" r="26" fill="#56647A"/>
+  </g>
+  <g font-family="Helvetica Neue, Helvetica, Arial, sans-serif" fill="#fff">
+    <text x="96" y="150" font-size="30" font-weight="600" letter-spacing="6" fill="#81C4FF">BMW iX</text>
+    <text x="96" y="222" font-size="68" font-weight="700">Electric. Pure. Joy.</text>
+    <text x="96" y="276" font-size="28" font-weight="400" fill="#C9D6E8">Test drive at the tournament venue</text>
+  </g>
+</svg>
