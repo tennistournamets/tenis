@@ -1,5 +1,5 @@
 {
-  "release": "2026-09-27-points-format-rules",
+  "release": "2026-09-27-venue-check-restorable",
   "forwardMigrations": [
     {
       "path": "supabase/migrations/20260908120000_mobile_tournament_details.sql",
@@ -136,8 +136,8 @@
     {
       "path": "supabase/migrations/20260927171456_venue_check_restorable.sql",
       "sha256": "fb7522c1a7a5345cb29aa47ee046d0b3637bf2ae021d08792a3ad99b896de4e4",
-      "tenisAppliedVersion": null,
-      "tenisNote": "Not applied to TENIS yet."
+      "tenisAppliedVersion": "20260927171456",
+      "tenisNote": "Applied 2026-09-27 with supabase db push --db-url (session pooler) after logical backup; the first release through the adopted history."
     }
   ],
   "baseline": {
