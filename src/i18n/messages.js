@@ -11,6 +11,7 @@ import { lifecycleMessages } from './lifecycle'
 import { serverErrorMessages } from './serverErrors'
 import { pluralMessages } from './plurals'
 import { groupsFlowMessages } from './groupsFlow'
+import { pointsFormatMessages } from './pointsFormat'
 
 export const messages = {
   ru: {
@@ -26,6 +27,7 @@ export const messages = {
       lead_registration: 'Закройте регистрацию',
       lead_bracket: 'Сформируйте сетку',
       lead_matches: 'Сформируйте матчи',
+      lead_rounds: 'Составьте расписание раундов',
       lead_groups: 'Сформируйте группы',
       lead_start: 'Всё готово: можно начинать турнир',
       label: 'Следующий шаг',
@@ -45,6 +47,8 @@ export const messages = {
       bracketHint: 'Жеребьёвка во вкладке «Сетка»',
       matches: 'Матчи',
       matchesHint: 'Каждый сыграет с каждым, во вкладке «Таблица»',
+      rounds: 'Раунды',
+      roundsHint: 'Расписание во вкладке «Раунды»',
       groups: 'Группы',
       groupsHint: 'Распределение во вкладке «Группы»',
       matchesReady: 'Матчей: {n}',
@@ -72,6 +76,7 @@ export const messages = {
     serverErrors: serverErrorMessages.ru,
     plural: pluralMessages.ru,
     groupsFlow: groupsFlowMessages.ru,
+    pointsFormat: pointsFormatMessages.ru,
     app: {
       title: 'Bracketa',
       subtitle: 'Организация турниров, жеребьёвка и live-сетка',
@@ -593,12 +598,20 @@ export const messages = {
       round_robin: 'Круговая',
       groups_playoff: 'Группы + плей-офф',
       double_elimination: 'Двойное выбывание',
+      americano: 'Americano',
+      mexicano: 'Mexicano',
+      team_americano: 'Team Americano',
+      king_of_court: 'King of the Court',
     },
     formatTagline: {
       single_elimination: 'проиграл — вылетел',
       round_robin: 'все со всеми',
       groups_playoff: 'группы, затем плей-офф',
       double_elimination: 'два поражения — вылет',
+      americano: 'партнёр меняется каждый раунд',
+      mexicano: 'пары по таблице',
+      team_americano: 'постоянные пары, счёт на очки',
+      king_of_court: 'победители поднимаются',
     },
     standings: {
       matchesTitle: 'Матчи',
@@ -945,6 +958,7 @@ export const messages = {
       lead_registration: 'Close registration',
       lead_bracket: 'Build the bracket',
       lead_matches: 'Create the matches',
+      lead_rounds: 'Build the rounds',
       lead_groups: 'Create the groups',
       lead_start: 'All set: you can start the tournament',
       label: 'Next step',
@@ -964,6 +978,8 @@ export const messages = {
       bracketHint: 'Draw on the Bracket tab',
       matches: 'Matches',
       matchesHint: 'Everyone plays everyone, on the Table tab',
+      rounds: 'Rounds',
+      roundsHint: 'Build the schedule on the Rounds tab',
       groups: 'Groups',
       groupsHint: 'Split into groups on the Groups tab',
       matchesReady: 'Matches: {n}',
@@ -991,6 +1007,7 @@ export const messages = {
     serverErrors: serverErrorMessages.en,
     plural: pluralMessages.en,
     groupsFlow: groupsFlowMessages.en,
+    pointsFormat: pointsFormatMessages.en,
     app: {
       title: 'Bracketa',
       subtitle: 'Run tournaments, draws, and live brackets',
@@ -1512,12 +1529,20 @@ export const messages = {
       round_robin: 'Round robin',
       groups_playoff: 'Groups + playoff',
       double_elimination: 'Double elimination',
+      americano: 'Americano',
+      mexicano: 'Mexicano',
+      team_americano: 'Team Americano',
+      king_of_court: 'King of the Court',
     },
     formatTagline: {
       single_elimination: 'lose once, you\'re out',
       round_robin: 'everyone plays everyone',
       groups_playoff: 'groups, then playoff',
       double_elimination: 'two losses to go out',
+      americano: 'new partner every round',
+      mexicano: 'pairs by the standings',
+      team_americano: 'fixed pairs, points scoring',
+      king_of_court: 'winners move up',
     },
     standings: {
       matchesTitle: 'Matches',
@@ -1864,6 +1889,7 @@ export const messages = {
       lead_registration: 'Uždarykite registraciją',
       lead_bracket: 'Sudarykite tinklelį',
       lead_matches: 'Sudarykite rungtynes',
+      lead_rounds: 'Sudarykite raundų tvarkaraštį',
       lead_groups: 'Sudarykite grupes',
       lead_start: 'Viskas paruošta: galima pradėti turnyrą',
       label: 'Kitas žingsnis',
@@ -1883,6 +1909,8 @@ export const messages = {
       bracketHint: 'Burtai skirtuke „Tinklelis“',
       matches: 'Rungtynės',
       matchesHint: 'Kiekvienas žais su kiekvienu, skirtuke „Lentelė“',
+      rounds: 'Raundai',
+      roundsHint: 'Tvarkaraštis skirtuke „Raundai“',
       groups: 'Grupės',
       groupsHint: 'Paskirstymas skirtuke „Grupės“',
       matchesReady: 'Rungtynių: {n}',
@@ -1910,6 +1938,7 @@ export const messages = {
     serverErrors: serverErrorMessages.lt,
     plural: pluralMessages.lt,
     groupsFlow: groupsFlowMessages.lt,
+    pointsFormat: pointsFormatMessages.lt,
     app: {
       title: 'Bracketa',
       subtitle: 'Turnyrai, burtai ir gyvas tinklelis',
@@ -2431,12 +2460,20 @@ export const messages = {
       round_robin: 'Ratų sistema',
       groups_playoff: 'Grupės + atkrentamosios',
       double_elimination: 'Dvigubos eliminacijos',
+      americano: 'Americano',
+      mexicano: 'Mexicano',
+      team_americano: 'Team Americano',
+      king_of_court: 'King of the Court',
     },
     formatTagline: {
       single_elimination: 'pralaimėjai — iškritai',
       round_robin: 'visi su visais',
       groups_playoff: 'grupės, tada atkrentamosios',
       double_elimination: 'du pralaimėjimai — lauk',
+      americano: 'partneris keičiasi kas raundą',
+      mexicano: 'poros pagal lentelę',
+      team_americano: 'nuolatinės poros, taškai',
+      king_of_court: 'nugalėtojai kyla aukštyn',
     },
     standings: {
       matchesTitle: 'Rungtynės',

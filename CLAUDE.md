@@ -7,7 +7,8 @@ Web-application for organizing tournaments across multiple sports with live scor
 - **Sports (v1):** `tennis`, `padel`, `football`.
   - Tennis & padel share the "sets" scoring family (games/sets/tiebreaks). Padel is always doubles.
   - Football uses the "goals" scoring family (single integer per side; draws allowed in round-robin/group stages; penalty shootout breaks knockout ties). A football entry is one team (category `singles`).
-- **Tournament formats (v1):** `single_elimination`, `round_robin`, `groups_playoff`, `double_elimination`.
+- **Tournament formats (v1):** `single_elimination`, `round_robin`, `groups_playoff`, `double_elimination`; padel only: `americano`, `mexicano`, `team_americano`, `king_of_court` (points formats, spec in `docs/PADEL_FORMATS.md`).
+  - Points formats: a match is played to a total of N points (`scoring_config.points_per_match`, sum of both scores = N); the table sums points (`get_points_standings`), a rest earns the player's own average per played match. Americano/Mexicano/King of the Court: one player per entry (forced `pick_random` registration), partners in `matches.side_a2_entry_id`/`side_b2_entry_id`.
 - **Create flow:** 6-step wizard — sport → format → details (name, slug, venue) → game rules → registration conditions → publication (visibility, QR).
 
 ## Tech Stack
@@ -33,6 +34,8 @@ src/
     GroupStageBoard.vue       # Per-group standings + fixtures (groups_playoff)
     DoubleElimBoard.vue       # Winners + losers + grand-final sections
     FootballScoreEditor.vue   # Goals + penalty result entry (goals sports)
+    PointsRoundsBoard.vue     # Padel points formats: rounds → courts (2 v 2), score/live, resting players
+    PointsStandingsTable.vue  # Padel points formats: player/pair points table (rest compensation, KotC court)
     ScoreEditor.vue           # Final set score editing (sets sports)
     LiveScoreViewerModal.vue  # Read-only live score display (spectator)
     LiveScoringModal.vue      # Point-by-point tennis scoring input (admin)
@@ -50,7 +53,8 @@ src/
     localeRoute.js            # DEFAULT_LOCALE (lt), landing language URLs (/ lt, /en, /ru) and the redirect rule for return visits
     analytics.js              # Umami page views + funnel events (off without VITE_UMAMI_WEBSITE_ID; no PII)
     sportConfig.js            # Registry: sport -> capabilities (scoringFamily, forcedCategory, supports*)
-    scoringEngines.js         # Registry: family (sets|goals) -> state/format helpers
+    scoringEngines.js         # Registry: family (sets|goals|points) -> state/format helpers
+    pointsFormat.js           # Points formats: rounds/rests from matches, plans mirroring the SQL generators
     useTennisScoring.js       # Tennis scoring composable (sets family; reused by padel)
     entryDisplay.js           # Entry/member name display helper
     shareLink.js              # Tournament link generation
@@ -117,7 +121,7 @@ supabase/
 - **tournament_access_grants**, **tournament_unlock_attempts** - hashed 12-hour tokens for password pages and lockout counters; no API access
 - **entry_members** - individual member names (doubles = 2), optional `player_id`
 - **groups**, **group_entries** - group-stage buckets (round_robin uses none; groups_playoff uses both)
-- **matches** - canonical aggregate `side_a_score`/`side_b_score` (+ `side_a_pens`/`side_b_pens` for football knockout); `stage` (main/group/winners/losers/grand_final/third_place); `group_id`; winner tree via `next_match_id`/`next_slot`; loser routing via `loser_next_match_id`/`loser_next_slot` (double-elim); unique on `(tournament_id, stage, round_number, match_number)`
+- **matches** - canonical aggregate `side_a_score`/`side_b_score` (points total in points formats; partners in `side_a2_entry_id`/`side_b2_entry_id`) (+ `side_a_pens`/`side_b_pens` for football knockout); `stage` (main/group/winners/losers/grand_final/third_place); `group_id`; winner tree via `next_match_id`/`next_slot`; loser routing via `loser_next_match_id`/`loser_next_slot` (double-elim); unique on `(tournament_id, stage, round_number, match_number)`
 - **match_sets** - per-set game scores (tennis/padel only)
 - **bracket_versions** - bracket snapshots for undo
 - **live_scores** - real-time point-by-point scoring state (JSON state/history/revision)
@@ -142,6 +146,7 @@ supabase/
 - `propagate_winner()` - advances winner via `next_match_id`; routes loser via `loser_next_match_id` (double-elim)
 - `swap_bracket_slots()`, `apply_bracket_layout()` - manual single-elim arrangement
 - `form_random_pairs()`, `form_manual_pairs()`, `split_pairs()` - doubles pairing
+- Points formats: `generate_points_format(id, rounds, courts)` (Americano schedule: cyclic whist designs for 8/12/13/16/17/20/21/24/25 players, else circle/greedy with rest spread ≤ 1; Team Americano RR; Mexicano/KotC round 1, roster stored in `format_config.roster`), `generate_next_round()`, `undo_last_round()`, `update_match_points(match, a, b, rev)`, `get_points_standings()`; live `record_point` counts rallies to N; triggers `guard_points_format` (padel only, forced pick_random, odd N for KotC), `guard_individual_entry_members`, `guard_points_match_sets`
 - `set_entry_seed_order(tournament_id, entry_ids[])` - manual seeding of the approved field before the draw (feeds manual draw and group snake); snapshot entries carry `seed_order`
 - `start_live_match()`, `record_point()`, `stop_live_match()` - live scoring lifecycle
 - `add_tournament_admin_by_email()`, `remove_tournament_admin()` - co-organizer management
@@ -173,6 +178,7 @@ Tables `tournaments`, `entries`, `matches`, `match_sets`, `tournament_admins`, `
 - Standings head-to-head handles pairwise/group ties; circular ties fall through to goal difference.
 - Football live scoring not implemented (final result entry only).
 - Manual slot editing only for single-elim.
+- Points formats: King of the Court needs a multiple of 4 players (≥ 8, no rests); Americano roster and courts are fixed at generation; no mixed Americano or "first to N"/timed matches; a dynamic-format result is locked once the next round exists (undo that round first).
 
 ## Roadmap / Missing Features
 

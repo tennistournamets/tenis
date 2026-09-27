@@ -14,8 +14,11 @@ import RegistrationForm from '../components/RegistrationForm.vue'
 import RegistrationConditions from '../components/RegistrationConditions.vue'
 import TournamentUnlock from '../components/TournamentUnlock.vue'
 import TournamentMatchList from '../components/TournamentMatchList.vue'
-import { entryDisplayNames } from '../lib/entryDisplay'
-import { categoryLabelKey, getSportConfig } from '../lib/sportConfig'
+import { matchSideLabel } from '../lib/entryDisplay'
+import { categoryLabelKey, getSportConfig, isIndividualFormat, isPointsFormat, pointsTarget } from '../lib/sportConfig'
+import PointsRoundsBoard from '../components/PointsRoundsBoard.vue'
+import PointsStandingsTable from '../components/PointsStandingsTable.vue'
+import { pointsRoster, pointsRounds } from '../lib/pointsFormat'
 import { useNarrowLayout } from '../lib/useNarrowLayout'
 import { useHeaderTitle } from '../lib/headerTitle'
 import { onTabKeydown } from '../lib/tabNavigation'
@@ -66,6 +69,8 @@ useHeaderTitle(() => tournament.value?.name)
 const entries = ref([])
 const matches = ref([])
 const standings = ref([])
+// Padel points formats (Americano…): get_points_standings rows.
+const pointsStandings = ref([])
 const registration = ref(null)
 const courts = ref([])
 const schedule = ref([])
@@ -85,6 +90,8 @@ const badgeStatus = computed(() => (regState.value.deadlinePassed && tournament.
 const isRoundRobin = computed(() => tournament.value?.format === 'round_robin')
 const isGroupsPlayoff = computed(() => tournament.value?.format === 'groups_playoff')
 const isDoubleElim = computed(() => tournament.value?.format === 'double_elimination')
+const isPointsFmt = computed(() => isPointsFormat(tournament.value?.format))
+const pointsTableTitle = computed(() => t(isIndividualFormat(tournament.value?.format) ? 'pointsFormat.playersTable' : 'pointsFormat.pairsTable'))
 const sportCfg = computed(() => getSportConfig(tournament.value?.sport || 'tennis'))
 const groups = ref([])
 const groupStandings = ref({})
@@ -187,13 +194,10 @@ function syncPublicLiveFromRoute() {
   if (tournament.value && !loading.value) replaceWithoutLiveQuery()
 }
 
-function teamLabel(entryId) {
-  if (!entryId) {
-    return t('bracket.tbd')
-  }
-  const names = entryDisplayNames(entriesMap.value[entryId])
-  return names.length ? names.join(' / ') : t('bracket.tbd')
-}
+// A side of a match: one entry, or both players in the points formats.
+const sideLabel = (match, side) => matchSideLabel(match, side, entriesMap.value, t('bracket.tbd'))
+const pointsRoundsList = computed(() => pointsRounds(matches.value, pointsRoster(tournament.value, approvedEntries.value)))
+
 
 
 // No emoji exists for padel (the racket one is badminton): it gets the neutral trophy.
@@ -205,7 +209,8 @@ const heroChips = computed(() => {
     t(`sport.${tournament.value.sport}`),
     t(`tournamentFormat.${tournament.value.format}`),
   ]
-  const category = categoryLabelKey(tournament.value.sport, tournament.value.category)
+  // Americano, Mexicano, King of the Court sign players up alone: no "doubles" chip.
+  const category = isIndividualFormat(tournament.value.format) ? null : categoryLabelKey(tournament.value.sport, tournament.value.category)
   if (category) chips.push(t(category))
   // The count lives in the "Participants (N)" tab and the entries card; a chip
   // here only repeated it.
@@ -221,7 +226,9 @@ const rulesRows = computed(() => {
   const tr = tournament.value
   if (!tr) return []
   const rows = []
-  if (sportCfg.value.supportsSetFormat && tr.set_format) {
+  if (isPointsFormat(tr.format)) {
+    rows.push({ label: t('pointsFormat.targetLabel'), value: String(pointsTarget(tr)) })
+  } else if (sportCfg.value.supportsSetFormat && tr.set_format) {
     rows.push({ label: t('admin.setFormat'), value: t(`format.${tr.set_format}`) })
   }
   if (tr.sport === 'tennis') rows.push(...tennisRulesRows(tr.scoring_config, t))
@@ -248,7 +255,7 @@ const publicTabs = computed(() => {
     const format = tournament.value.format
     tabs.push({
       id: 'bracket',
-      label: t(format === 'round_robin' ? 'admin.tabTable' : format === 'groups_playoff' ? 'admin.tabGroups' : 'tournament.tabBracket'),
+      label: t(isPointsFormat(format) ? 'pointsFormat.roundsTitle' : format === 'round_robin' ? 'admin.tabTable' : format === 'groups_playoff' ? 'admin.tabGroups' : 'tournament.tabBracket'),
     })
   }
   if (hasParticipants.value) {
@@ -280,7 +287,7 @@ function resetTournamentData() {
   matchSets.value = []
   liveScores.value = []
   selectedLiveMatchId.value = null
-  standings.value = []; groups.value = []; groupStandings.value = {}
+  standings.value = []; groups.value = []; groupStandings.value = {}; pointsStandings.value = []
   registration.value = null
   courts.value = []; schedule.value = []
 }
@@ -309,6 +316,7 @@ function applySnapshot(data) {
   groups.value = data.groups
   standings.value = data.standings
   groupStandings.value = data.group_standings
+  pointsStandings.value = data.points_standings || []
   loadError.value = ''
 }
 
@@ -556,7 +564,7 @@ onBeforeUnmount(() => {
         :format="tournament.format"
         :status="tournament.status"
         :matches="matches"
-        :standings="standings"
+        :standings="isPointsFmt ? pointsStandings : standings"
         :entries-map="entriesMap"
       />
 
@@ -681,7 +689,11 @@ onBeforeUnmount(() => {
         </div>
 
         <div id="pub-mobile-panel" role="tabpanel" :aria-labelledby="`pub-tab-${mobileSurface}`">
-        <div v-if="mobileSurface === 'matches'" class="card mobile-match-card">
+        <div v-if="mobileSurface === 'matches' && isPointsFmt" class="card">
+          <h3 class="section-title">{{ t('pointsFormat.roundsTitle') }}</h3>
+          <PointsRoundsBoard :rounds="pointsRoundsList" :entries-map="entriesMap" :live-scores-by-match="liveScoresByMatch" :format="tournament.format" @view-live="openPublicLive" />
+        </div>
+        <div v-else-if="mobileSurface === 'matches'" class="card mobile-match-card">
           <TournamentMatchList
             :format="tournament?.format"
             :matches="matches"
@@ -693,6 +705,10 @@ onBeforeUnmount(() => {
           />
         </div>
 
+        <div v-else-if="isPointsFmt" class="card">
+          <h3 class="section-title">{{ pointsTableTitle }}</h3>
+          <PointsStandingsTable :rows="pointsStandings" :format="tournament.format" />
+        </div>
         <template v-else-if="isRoundRobin">
           <div v-if="standings.length" class="card">
             <h3 class="section-title">{{ t('standings.title') }}</h3>
@@ -713,6 +729,17 @@ onBeforeUnmount(() => {
         <div v-else class="card">
           <BracketBoard :matches="matches" :sets-by-match="setsByMatch" :entries-map="entriesMap" :live-scores-by-match="liveScoresByMatch" @view-live="openPublicLive" />
         </div>
+        </div>
+      </template>
+
+      <template v-else-if="isPointsFmt">
+        <div v-if="pointsStandings.length" class="card">
+          <h3 class="section-title">{{ pointsTableTitle }}</h3>
+          <PointsStandingsTable :rows="pointsStandings" :format="tournament.format" />
+        </div>
+        <div class="card" style="margin-top: var(--space-4)">
+          <h3 class="section-title">{{ t('pointsFormat.roundsTitle') }}</h3>
+          <PointsRoundsBoard :rounds="pointsRoundsList" :entries-map="entriesMap" :live-scores-by-match="liveScoresByMatch" :format="tournament.format" @view-live="openPublicLive" />
         </div>
       </template>
 
@@ -793,8 +820,8 @@ onBeforeUnmount(() => {
       <LiveScoreViewerModal
         v-if="selectedLiveMatch && selectedLiveScore"
         :live-score="selectedLiveScore"
-        :team-a="teamLabel(selectedLiveMatch.side_a_entry_id)"
-        :team-b="teamLabel(selectedLiveMatch.side_b_entry_id)"
+        :team-a="sideLabel(selectedLiveMatch, 'a')"
+        :team-b="sideLabel(selectedLiveMatch, 'b')"
         @close="closePublicLive"
       />
     </template>

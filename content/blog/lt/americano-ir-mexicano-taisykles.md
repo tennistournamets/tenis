@@ -30,4 +30,4 @@ Mexicano taškai skaičiuojami kaip Americano, tačiau poros sudaromos ne iš an
 
 ## Ar galima surengti Americano su Bracketa?
 
-Šiuo metu [Bracketa](/) palaiko turnyrus su nuolatinėmis poromis: ratų sistemą, grupes su atkrintamosiomis, vienos ir dvigubos eliminacijos tinklelius. Jei žaidžiate Team Americano ar tiesiog norite, kad kiekviena pora žaistų su visomis, rinkitės ratų sistemą: tvarkaraštis ir lentelė susidaro automatiškai, o žiūrovai rezultatus mato tiesiogiai.
+[Bracketa](/) palaiko visus keturis socialinius padelio formatus: Americano, Mexicano, Team Americano ir King of the Court. Žaidėjai registruojasi po vieną, raundai su kortais ir poilsiu sudaromi automatiškai (Americano formate kiekvienas bus poroje su kiekvienu), rungtynės žaidžiamos iki taškų sumos, o už poilsį žaidėjas gauna savo vidutinius taškus. Mexicano ir King of the Court kiekvieną kitą raundą sudaro pagal lentelę vienu mygtuku. Rezultatas vedamas galutinis arba tiesiogiai, taškas po taško, o žiūrovai žaidėjų lentelę mato telefone.

@@ -62,3 +62,37 @@ export function entryDisplayNames(entry) {
   const custom = customDisplayName(entry)
   return custom ? [custom] : entryMemberNames(entry)
 }
+
+/**
+ * Entries of one side of a match: the entry itself, plus the partner of a
+ * points-format match (side_a2_entry_id / side_b2_entry_id).
+ * @param {object | undefined} match
+ * @param {'a' | 'b'} side
+ * @returns {string[]}
+ */
+export function sideEntryIds(match, side) {
+  return [match?.[`side_${side}_entry_id`], match?.[`side_${side}2_entry_id`]].filter(Boolean)
+}
+
+/**
+ * "Anna / Boris" for one side of a match: a pair entry, or the two players of
+ * a points-format match. Returns the fallback when the side is still empty.
+ * @param {object | undefined} match
+ * @param {'a' | 'b'} side
+ * @param {Record<string, object>} entriesMap
+ * @param {string} [fallback]
+ * @returns {string}
+ */
+export function matchSideLabel(match, side, entriesMap = {}, fallback = '') {
+  const names = sideEntryIds(match, side)
+    .map(id => entryDisplayNames(entriesMap[id]).join(' / '))
+    .filter(Boolean)
+  return names.length ? names.join(' / ') : fallback
+}
+
+/** A side is complete: one entry, or both players of an individual-format match. */
+export function matchSidesReady(match) {
+  if (!match?.side_a_entry_id || !match?.side_b_entry_id) return false
+  const partners = match.side_a2_entry_id || match.side_b2_entry_id
+  return !partners || Boolean(match.side_a2_entry_id && match.side_b2_entry_id)
+}

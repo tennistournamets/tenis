@@ -1,7 +1,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { entryDisplayNames } from '../../lib/entryDisplay'
+import { matchSideLabel } from '../../lib/entryDisplay'
 import { supabase } from '../../lib/supabase'
 import InfoTip from '../InfoTip.vue'
 import { knockoutTotals, matchRoundName } from '../../lib/roundLabels'
@@ -48,12 +48,9 @@ const publishBlocked = computed(() => conflicts.value.some(c => c.conflicts.some
 const disabled = computed(() => props.busy || !props.canManage)
 const stageOrder = { group: 0, winners: 1, main: 1, losers: 2, grand_final: 3, third_place: 4 }
 
-function teamLabel(entryId) {
-  if (!entryId) return t('bracket.tbd')
-  const names = entryDisplayNames(props.entriesMap[entryId])
-  return names.length ? names.join(' / ') : t('bracket.tbd')
-}
-const matchTitle = match => `${teamLabel(match.side_a_entry_id)} — ${teamLabel(match.side_b_entry_id)}`
+// Both players of a side in points formats (Americano…), the entry otherwise.
+const sideLabel = (match, side) => matchSideLabel(match, side, props.entriesMap, t('bracket.tbd'))
+const matchTitle = match => `${sideLabel(match, 'a')} — ${sideLabel(match, 'b')}`
 const matchLabelById = id => { const m = props.matches.find(x => x.id === id); return m ? matchTitle(m) : '' }
 const roundTotals = computed(() => knockoutTotals(props.matches, props.tournament?.format))
 // Double elimination needs "Upper/Lower bracket" to tell its rounds apart;
@@ -491,9 +488,9 @@ onBeforeUnmount(() => { clearTimeout(conflictsTimer); conflictsVersion += 1 })
               <div class="sb-item__main">
                 <span v-if="view === 'court'" class="sb-item__round" :title="roundLabel(match)">{{ roundLabel(match) }}</span>
                 <span class="sb-item__teams">
-                  <span class="sb-item__team" :class="{ 'is-tbd': !match.side_a_entry_id }">{{ teamLabel(match.side_a_entry_id) }}</span>
+                  <span class="sb-item__team" :class="{ 'is-tbd': !match.side_a_entry_id }">{{ sideLabel(match, 'a') }}</span>
                   <span class="sb-item__vs" aria-hidden="true">vs</span>
-                  <span class="sb-item__team" :class="{ 'is-tbd': !match.side_b_entry_id }">{{ teamLabel(match.side_b_entry_id) }}</span>
+                  <span class="sb-item__team" :class="{ 'is-tbd': !match.side_b_entry_id }">{{ sideLabel(match, 'b') }}</span>
                 </span>
               </div>
               <span class="sb-item__flags">

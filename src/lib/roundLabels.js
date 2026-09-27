@@ -1,3 +1,5 @@
+import { POINTS_FORMATS } from './sportConfig.js'
+
 // Knockout rounds are named from the end: final, semifinal, quarterfinal,
 // then 1/8, 1/16, 1/32… Losers-bracket rounds do not halve the field, so they
 // keep their ordinal "Round N"; all-play-all rounds (round robin, groups) are
@@ -23,6 +25,8 @@ export function knockoutRoundName(roundNumber, totalRounds, t) {
 export function knockoutTotals(matches = [], format = '') {
   const totals = {}
   if (format === 'round_robin') return { roundRobin: true }
+  // Americano, Mexicano, Team Americano, King of the Court: plain "Round N".
+  if (POINTS_FORMATS.includes(format)) return { pointsRounds: true }
   for (const m of matches) {
     if (!KNOCKOUT_STAGES.has(m.stage)) continue
     totals[m.stage] = Math.max(totals[m.stage] || 0, Number(m.round_number || 0))
@@ -39,6 +43,7 @@ export function tourName(roundNumber, t) {
 /** Round name for any match: knockout stages by distance to the final, tours and lower-bracket rounds by number. */
 export function matchRoundName(match, totals = {}, t) {
   const round = Number(match.round_number || 0)
+  if (totals.pointsRounds) return t('bracket.roundN', { n: round })
   if (match.stage === 'group' || totals.roundRobin) return tourName(round, t)
   if (KNOCKOUT_STAGES.has(match.stage)) return knockoutRoundName(round, totals[match.stage] || 0, t)
   return t('bracket.roundN', { n: round > 1000 ? round % 1000 : round })

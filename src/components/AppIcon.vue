@@ -107,6 +107,31 @@ const PATHS = {
     '<path d="M8 12h6"/>',
     '<circle cx="18" cy="12" r="3"/>',
   ],
+  // Падел-форматы на очки
+  americano: [
+    '<circle cx="7" cy="7" r="2.5"/>',
+    '<circle cx="17" cy="17" r="2.5"/>',
+    '<path d="M13 4.5a8 8 0 0 1 6.5 6"/>',
+    '<path d="M19.5 7.5v3h-3"/>',
+    '<path d="M11 19.5a8 8 0 0 1-6.5-6"/>',
+    '<path d="M4.5 16.5v-3h3"/>',
+  ],
+  mexicano: [
+    '<path d="M3 20h18"/>',
+    '<rect x="4" y="13" width="4" height="7" rx="1"/>',
+    '<rect x="10" y="8" width="4" height="12" rx="1"/>',
+    '<rect x="16" y="4" width="4" height="16" rx="1"/>',
+  ],
+  team_americano: [
+    '<circle cx="8" cy="8" r="3"/>',
+    '<circle cx="16" cy="8" r="3"/>',
+    '<path d="M2.5 20a5.5 5.5 0 0 1 11 0"/>',
+    '<path d="M10.5 20a5.5 5.5 0 0 1 11 0"/>',
+  ],
+  king_of_court: [
+    '<path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5L3 8Z"/>',
+    '<path d="M5 22h14"/>',
+  ],
 }
 
 const paths = () => (PATHS[props.name] || PATHS.trophy).join('')

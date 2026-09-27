@@ -110,6 +110,18 @@
       "sha256": "dee9624d901fe544ba94bb61afa2add9efb569d8ef599b451a673c80247350d6",
       "tenisAppliedVersion": null,
       "tenisNote": "Not applied to TENIS yet (needs confirmation, backup first)."
+    },
+    {
+      "path": "supabase/migrations/20260926203851_padel_formats_enum.sql",
+      "sha256": "9c8c405f1692f37919631943ec2cdcdeb37deaa50a6b506f11b69fe03b0e9e3e",
+      "tenisAppliedVersion": null,
+      "tenisNote": "Not applied to TENIS yet (needs confirmation, backup first)."
+    },
+    {
+      "path": "supabase/migrations/20260926203853_padel_points_formats.sql",
+      "sha256": "74a7c85a405da623c58da447addd0f973abcd73635f47ddf6b2c464cd8235055",
+      "tenisAppliedVersion": null,
+      "tenisNote": "Not applied to TENIS yet (needs confirmation, backup first)."
     }
   ],
   "baseline": {

@@ -10,7 +10,7 @@ import { confirmDiscard, useUnsavedChanges, withApprovedDeparture } from '../lib
 import { cloneForm, sameForm } from '../lib/formDraft'
 import { clearSessionDraft, readSessionDraft, userDraftKey, writeSessionDraft } from '../lib/sessionDraft'
 import { useAuthStore } from '../stores/auth'
-import { SPORTS, getSportConfig, resolveCategory } from '../lib/sportConfig'
+import { SPORTS, defaultPointsTarget, getSportConfig, isIndividualFormat, isPointsFormat, pointsTargetOptions, resolveCategory } from '../lib/sportConfig'
 import { useFeatureFlagsStore } from '../stores/featureFlags'
 import SportPicker from '../components/SportPicker.vue'
 import AppIcon from '../components/AppIcon.vue'
@@ -70,6 +70,8 @@ const form = reactive({
   doubles_pairing_random: false,
   // Groups + playoff: how many leave each group; checked against the group sizes when groups are drawn.
   advance_per_group: 2,
+  // Padel points formats: the two scores of a match add up to this total.
+  points_per_match: 24,
   ...registrationDraftFields({}),
 })
 // is_public stays derived for the QR gate and the preview badge.
@@ -94,6 +96,17 @@ watch([form, step], () => {
 
 const cfg = computed(() => getSportConfig(form.sport))
 const effectiveCategory = computed(() => resolveCategory(form.sport, form.category))
+const pointsFormat = computed(() => isPointsFormat(form.format))
+// Americano, Mexicano, King of the Court: players sign up alone, pairs change every round.
+const individualFormat = computed(() => isIndividualFormat(form.format))
+const pointsOptions = computed(() => pointsTargetOptions(form.format))
+// King of the Court needs an odd total; switching formats keeps a valid value.
+watch(() => form.format, format => {
+  if (isPointsFormat(format) && !pointsTargetOptions(format).includes(Number(form.points_per_match))) {
+    form.points_per_match = defaultPointsTarget(format)
+  }
+})
+const pairingMode = computed(() => (individualFormat.value || form.doubles_pairing_random ? 'pick_random' : 'pre_agreed'))
 
 const previewMeta = computed(() => {
   const parts = [
@@ -101,7 +114,8 @@ const previewMeta = computed(() => {
     t('tournament.' + effectiveCategory.value),
     t('tournamentFormat.' + form.format),
   ]
-  if (cfg.value.supportsSetFormat) {
+  if (pointsFormat.value) parts.push(t('pointsFormat.target', { n: form.points_per_match }))
+  else if (cfg.value.supportsSetFormat) {
     parts.push(t('format.' + form.set_format))
   }
   return parts.join(' · ')
@@ -252,14 +266,14 @@ async function createTournament() {
       p_sport: form.sport,
       p_format: form.format,
       p_category: category,
-      p_set_format: cfg.value.supportsSetFormat ? form.set_format : null,
+      p_set_format: cfg.value.supportsSetFormat && !pointsFormat.value ? form.set_format : null,
       p_is_public: form.is_public,
       p_doubles_pairing_mode:
-        category === 'doubles' && cfg.value.supportsDoublesPairing
-          ? (form.doubles_pairing_random ? 'pick_random' : 'pre_agreed')
-          : null,
+        category === 'doubles' && cfg.value.supportsDoublesPairing ? pairingMode.value : null,
       p_format_config: form.format === 'groups_playoff' ? { advance_per_group: Number(form.advance_per_group) || 2 } : {},
-      p_scoring_config: form.sport === 'tennis'
+      p_scoring_config: pointsFormat.value
+        ? { points_per_match: Number(form.points_per_match), gender: form.gender }
+        : form.sport === 'tennis'
         ? { ...form.scoring_config, gender: form.gender }
         : cfg.value.supportsSetFormat ? { tiebreak_to: Number(form.tiebreak_to), gender: form.gender } : { gender: form.gender },
       p_contact_phone: form.contact_phone.trim() || null,
@@ -506,7 +520,14 @@ watch(step, (next, prev) => { if (draftReady.value && next === prev + 1) track('
               </select>
             </div>
 
-            <div v-if="cfg.supportsSetFormat" class="form-field">
+            <div v-if="pointsFormat" class="form-field">
+              <label for="create-points">{{ t('pointsFormat.targetLabel') }}</label>
+              <select id="create-points" v-model.number="form.points_per_match" class="input" aria-describedby="create-points-hint">
+                <option v-for="n in pointsOptions" :key="n" :value="n">{{ n }}</option>
+              </select>
+            </div>
+
+            <div v-if="cfg.supportsSetFormat && !pointsFormat" class="form-field">
               <label for="create-format">{{ t('admin.setFormat') }}</label>
               <select id="create-format" v-model="form.set_format" class="input">
                 <option value="best_of_3">{{ t('format.best_of_3') }}</option>
@@ -514,7 +535,7 @@ watch(step, (next, prev) => { if (draftReady.value && next === prev + 1) track('
               </select>
             </div>
 
-            <div v-if="form.sport === 'padel'" class="form-field">
+            <div v-if="form.sport === 'padel' && !pointsFormat" class="form-field">
               <label for="create-tiebreak">{{ t('admin.tiebreakTo') }}</label>
               <select id="create-tiebreak" v-model.number="form.tiebreak_to" class="input">
                 <option :value="7">{{ t('admin.tiebreakTo7') }}</option>
@@ -530,6 +551,9 @@ watch(step, (next, prev) => { if (draftReady.value && next === prev + 1) track('
               </select>
             </div>
           </div>
+          <p v-if="pointsFormat" id="create-points-hint" class="field-hint">
+            {{ t(form.format === 'king_of_court' ? 'pointsFormat.targetHintKotc' : 'pointsFormat.targetHint') }}
+          </p>
 
         </section>
 
@@ -538,7 +562,10 @@ watch(step, (next, prev) => { if (draftReady.value && next === prev + 1) track('
           <TennisRulesSettings v-model="form.scoring_config" id-prefix="create-tennis" :disabled="saving" variant="plain" />
         </section>
 
-        <section v-if="effectiveCategory === 'doubles' && cfg.supportsDoublesPairing" class="wizard__group">
+        <section v-if="individualFormat" class="wizard__group">
+          <p class="muted">{{ t('pointsFormat.individualHint') }}</p>
+        </section>
+        <section v-else-if="effectiveCategory === 'doubles' && cfg.supportsDoublesPairing" class="wizard__group">
           <label class="wizard__toggle">
             <input v-model="form.doubles_pairing_random" type="checkbox" />
             <span class="wizard__toggle-body">
@@ -557,7 +584,7 @@ watch(step, (next, prev) => { if (draftReady.value && next === prev + 1) track('
         <section class="wizard__group wizard__group--plain">
           <RegistrationRulesFields
             :form="form"
-            :tournament="{ sport: form.sport, format: form.format, category: effectiveCategory, doubles_pairing_mode: form.doubles_pairing_random ? 'pick_random' : 'pre_agreed' }"
+            :tournament="{ sport: form.sport, format: form.format, category: effectiveCategory, doubles_pairing_mode: pairingMode }"
             :disabled="saving"
             id-prefix="create-reg"
             hide-main-legend

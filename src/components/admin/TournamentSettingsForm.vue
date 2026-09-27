@@ -6,7 +6,7 @@ import TennisRulesSettings from '../TennisRulesSettings.vue'
 import InfoTip from '../InfoTip.vue'
 import RegistrationRulesFields from './RegistrationRulesFields.vue'
 import VenueFields from './VenueFields.vue'
-import { getSportConfig } from '../../lib/sportConfig'
+import { getSportConfig, isIndividualFormat, isPointsFormat, pointsTarget, pointsTargetOptions } from '../../lib/sportConfig'
 import { REGISTRATION_DRAFT_KEYS, formatDeadline, pickRegistrationDraft, registrationDraftFields, registrationPatch, validateRegistrationForm, organizerContactError } from '../../lib/registrationRules'
 import { COMMON_TIMEZONES, browserTimezone } from '../../lib/schedule'
 import { VISIBILITY_MODES, accessError, visibilityOf } from '../../lib/access'
@@ -83,6 +83,18 @@ const structureDisabled = computed(() => isTournamentActive.value || isTournamen
 const sportCfg = computed(() => getSportConfig(props.tournament.sport || 'tennis'))
 // Padel keeps the tie-break target of the wizard (7 or 10) in scoring_config.
 const isPadel = computed(() => props.tournament.sport === 'padel')
+// Points formats: the two scores of a match add up to points_per_match.
+const pointsFormat = computed(() => isPointsFormat(props.tournament.format))
+const individualFormat = computed(() => isIndividualFormat(props.tournament.format))
+const pointsOptions = computed(() => {
+  const current = pointsTarget(props.tournament)
+  const list = pointsTargetOptions(props.tournament.format)
+  return list.includes(current) ? list : [...list, current].sort((a, b) => a - b)
+})
+const pointsPerMatch = computed({
+  get: () => pointsTarget({ format: props.tournament.format, scoring_config: settingsForm.scoring_config }),
+  set: value => { settingsForm.scoring_config = { ...(settingsForm.scoring_config || {}), points_per_match: Number(value) } },
+})
 const padelTiebreak = computed({
   get: () => (Number(settingsForm.scoring_config?.tiebreak_to) === 10 ? 10 : 7),
   set: value => { settingsForm.scoring_config = { ...(settingsForm.scoring_config || {}), tiebreak_to: Number(value) } },
@@ -112,8 +124,9 @@ const sectionMeta = computed(() => {
     schedule: joinMeta(f.schedule_timezone, f.schedule_min_rest ? `${f.schedule_min_rest} ${t('schedule.minRestUnit')}` : ''),
     game: joinMeta(
       sportCfg.value.supportsCategory ? t('tournament.' + f.category) : '',
-      sportCfg.value.supportsSetFormat && f.set_format ? t('format.' + f.set_format) : '',
-      isPadel.value ? t(padelTiebreak.value === 10 ? 'admin.tiebreakTo10' : 'admin.tiebreakTo7') : '',
+      sportCfg.value.supportsSetFormat && f.set_format && !pointsFormat.value ? t('format.' + f.set_format) : '',
+      isPadel.value && !pointsFormat.value ? t(padelTiebreak.value === 10 ? 'admin.tiebreakTo10' : 'admin.tiebreakTo7') : '',
+      pointsFormat.value ? t('pointsFormat.target', { n: pointsPerMatch.value }) : '',
     ),
     rules: props.tournament.sport === 'tennis' ? tennisRulesSummary(f.scoring_config, t) : '',
     access: joinMeta(t('tournament.' + f.status), t('access.visibility.' + f.visibility)),
@@ -352,14 +365,21 @@ async function saveTournamentSettings() {
               <option value="doubles">{{ t('tournament.doubles') }}</option>
             </select>
           </div>
-          <div v-if="sportCfg.supportsSetFormat" class="form-field">
+          <div v-if="pointsFormat" class="form-field">
+            <label for="adm-points">{{ t('pointsFormat.targetLabel') }}</label>
+            <select id="adm-points" v-model.number="pointsPerMatch" class="input" :disabled="structureDisabled" aria-describedby="adm-points-hint">
+              <option v-for="n in pointsOptions" :key="n" :value="n">{{ n }}</option>
+            </select>
+            <p id="adm-points-hint" class="field-hint">{{ t(structureDisabled && !formDisabled ? 'pointsFormat.targetLocked' : tournament.format === 'king_of_court' ? 'pointsFormat.targetHintKotc' : 'pointsFormat.targetHint') }}</p>
+          </div>
+          <div v-if="sportCfg.supportsSetFormat && !pointsFormat" class="form-field">
             <label for="adm-format">{{ t('admin.setFormat') }}</label>
             <select id="adm-format" v-model="settingsForm.set_format" class="input" :disabled="structureDisabled">
               <option value="best_of_3">{{ t('format.best_of_3') }}</option>
               <option value="best_of_5">{{ t('format.best_of_5') }}</option>
             </select>
           </div>
-          <div v-if="isPadel" class="form-field">
+          <div v-if="isPadel && !pointsFormat" class="form-field">
             <label for="adm-tiebreak">{{ t('admin.tiebreakTo') }}</label>
             <select id="adm-tiebreak" v-model.number="padelTiebreak" class="input" :disabled="structureDisabled">
               <option :value="7">{{ t('admin.tiebreakTo7') }}</option>
@@ -367,7 +387,8 @@ async function saveTournamentSettings() {
             </select>
           </div>
         </div>
-        <label v-if="sportCfg.supportsDoublesPairing && settingsForm.category === 'doubles'" class="checkbox-row">
+        <p v-if="individualFormat" class="muted">{{ t('pointsFormat.individualHint') }}</p>
+        <label v-else-if="sportCfg.supportsDoublesPairing && settingsForm.category === 'doubles'" class="checkbox-row">
           <input v-model="settingsForm.doubles_pairing_mode" type="checkbox" true-value="pick_random" false-value="pre_agreed" :disabled="structureDisabled" />
           {{ t('admin.pickRandomPairs') }}
         </label>
