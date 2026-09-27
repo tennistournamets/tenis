@@ -70,10 +70,23 @@ organizations. Повторное применение schema.sql или ста�
 
 ### Принятие baseline существующим TENIS
 
-На 6 сентября 2026 TENIS имеет актуальную модель и 23 прежние записи журнала.
-Рабочие таблицы и журнал в шаге 10 не менялись. Baseline SQL там выполнять
-не требуется. Переход к обычному `db push` требует отдельного выпуска метаданных
-истории после сравнения живой схемы с baseline и резервной копии.
+**Выполнено 27 сентября 2026.** Каталог живой схемы TENIS (`tests/helpers/catalog.sql`)
+совпал с канонической установкой baseline + все forward-миграции (функции с ACL,
+политики, индексы, триггеры, таблицы, enum, права колонок, публикация; отличия только
+в представлении NOT NULL у PostgreSQL 18 в PGlite и порядке колонок `live_scores`).
+Журнал экспортирован, 23 прежние записи помечены `reverted`, baseline и все
+forward-миграции — `applied` (`migration repair --db-url`, без DDL). Итог:
+`migration list` совпадает с обеих сторон, `db push --dry-run` — «Remote database is
+up to date». Подробности и перечень отменённых версий — `tenisHistory` в manifest.
+
+**Выпуск новых миграций в TENIS теперь штатный:** резервная копия →
+`npx supabase migration list --db-url <TENIS>` → `npx supabase db push --db-url <TENIS> --dry-run`
+(в плане только новые файлы) → `npx supabase db push --db-url <TENIS>` → снова
+`migration list`. URL — session pooler из `supabase/.temp/pooler-url` с паролем из
+закрытого окружения (пароль URL-кодировать). Затем записать `tenisAppliedVersion`
+в manifest.
+
+Исходная процедура (для истории и для других существующих проектов):
 
 Экспортировать `supabase_migrations.schema_migrations`, фактическую схему и
 перечень версий. Только после подтверждённого совпадения выполнить

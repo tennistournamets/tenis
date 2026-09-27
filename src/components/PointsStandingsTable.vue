@@ -1,14 +1,18 @@
 <script setup>
 // Points table of the padel points formats (get_points_standings): the sum of
-// the points each player (or pair, in Team Americano) scored, plus the average
-// credited for rounds of rest. King of the Court ranks by the last court first.
+// the points each player (or pair, in Team Americano) scored, plus half a
+// match for every round of rest. Ties go to wins, draws, then the difference;
+// King of the Court ranks by the last court first.
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { isIndividualFormat } from '../lib/sportConfig'
+import { restPoints } from '../lib/pointsFormat'
 
 const props = defineProps({
   rows: { type: Array, default: () => [] },
   format: { type: String, default: 'americano' },
+  // Points per match: a round of rest earns half of it.
+  target: { type: Number, default: 24 },
 })
 const { t } = useI18n()
 
@@ -17,6 +21,7 @@ const title = computed(() => t(isIndividualFormat(props.format) ? 'pointsFormat.
 // The rest column appears once somebody has rested.
 const hasRests = computed(() => props.rows.some(r => Number(r.rests) > 0))
 const hasDraws = computed(() => props.rows.some(r => Number(r.drawn) > 0))
+const compensationHint = computed(() => t('pointsFormat.compensationHint', { n: restPoints(props.target) }))
 </script>
 
 <template>
@@ -34,7 +39,7 @@ const hasDraws = computed(() => props.rows.some(r => Number(r.drawn) > 0))
           <th scope="col">{{ t('pointsFormat.lost') }}</th>
           <th scope="col">{{ t('pointsFormat.diff') }}</th>
           <th scope="col">{{ t('pointsFormat.pointsFor') }}</th>
-          <th v-if="hasRests" scope="col" :title="t('pointsFormat.compensationHint')">{{ t('pointsFormat.compensation') }}</th>
+          <th v-if="hasRests" scope="col" :title="compensationHint">{{ t('pointsFormat.compensation') }}</th>
           <th scope="col">{{ t('pointsFormat.total') }}</th>
         </tr>
       </thead>
@@ -54,8 +59,8 @@ const hasDraws = computed(() => props.rows.some(r => Number(r.drawn) > 0))
         </tr>
       </tbody>
     </table>
-    <p v-if="kotc" class="points-standings__hint muted">{{ t('pointsFormat.kotcHint') }}</p>
-    <p v-if="hasRests" class="points-standings__hint muted">{{ t('pointsFormat.compensationHint') }}</p>
+    <p class="points-standings__hint muted">{{ t(kotc ? 'pointsFormat.kotcHint' : 'pointsFormat.tiebreakHint') }}</p>
+    <p v-if="hasRests" class="points-standings__hint muted">{{ compensationHint }}</p>
   </div>
 </template>
 

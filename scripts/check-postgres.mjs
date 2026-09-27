@@ -61,7 +61,10 @@ try {
   } else await installDatabase(fresh, 'fresh')
   await upgrade.exec(read(manifest.upgradeSource.path))
   await upgrade.exec(read('tests/helpers/release-fixture.sql'))
-  const columns = await snapshotColumns(upgrade)
+  // updated_at is bookkeeping kept by triggers: a data backfill (the contact
+  // split of 20260921192934) legitimately touches it. Every other original
+  // value must survive the upgrade unchanged.
+  const columns = (await snapshotColumns(upgrade)).filter(c => c.column_name !== 'updated_at')
   const before = await snapshot(upgrade,columns)
   for (const migration of [...manifest.upgrades,...manifest.forwardMigrations]) await upgrade.exec(read(migration.path))
   assert.deepEqual(await snapshot(upgrade,columns),before,'upgrade preserves every original column and row')

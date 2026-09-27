@@ -24,10 +24,10 @@ Mexicano taškai skaičiuojami kaip Americano, tačiau poros sudaromos ne iš an
 ## Patarimai organizatoriui
 
 - **Skaičiuokite laiką.** 24 taškų rungtynės trunka apie 15–20 minučių. 7 ratai – maždaug dvi valandos su pertraukomis.
-- **Žaidėjų skaičius turi dalytis iš 4.** Jei jis nesidalija, kas ratą keli žaidėjai ilsisi, o jiems priskiriamas vidutinis taškų skaičius.
-- **Iš anksto paskelbkite lygiųjų taisyklę.** Pavyzdžiui, lemia tarpusavio rungtynės arba laimėtų rungtynių skaičius.
+- **Žaidėjų skaičius turi dalytis iš 4.** Jei jis nesidalija, kas ratą keli žaidėjai ilsisi, o jiems priskiriamas vidutinis rungtynių rezultatas — pusė taškų.
+- **Iš anksto paskelbkite lygiųjų taisyklę.** Dažniausiai esant lygiems taškams lemia pergalės, tada lygiosios, tada taškų skirtumas.
 - **Rezultatus rodykite visiems.** Lentelė telefone arba ekrane prie kortų palaiko intrigą iki paskutinio rato.
 
 ## Ar galima surengti Americano su Bracketa?
 
-[Bracketa](/) palaiko visus keturis socialinius padelio formatus: Americano, Mexicano, Team Americano ir King of the Court. Žaidėjai registruojasi po vieną, raundai su kortais ir poilsiu sudaromi automatiškai (Americano formate kiekvienas bus poroje su kiekvienu), rungtynės žaidžiamos iki taškų sumos, o už poilsį žaidėjas gauna savo vidutinius taškus. Mexicano ir King of the Court kiekvieną kitą raundą sudaro pagal lentelę vienu mygtuku. Rezultatas vedamas galutinis arba tiesiogiai, taškas po taško, o žiūrovai žaidėjų lentelę mato telefone.
+[Bracketa](/) palaiko visus keturis socialinius padelio formatus: Americano, Mexicano, Team Americano ir King of the Court. Žaidėjai registruojasi po vieną, raundai su kortais ir poilsiu sudaromi automatiškai (Americano formate kiekvienas bus poroje su kiekvienu, kiek leidžia aikštelės), rungtynės žaidžiamos iki taškų sumos, už poilsio raundą skiriama pusė rungtynių taškų, o esant lygybei lemia pergalės, lygiosios ir skirtumas. Mexicano ir King of the Court kiekvieną kitą raundą sudaro pagal lentelę vienu mygtuku. Rezultatas vedamas galutinis arba tiesiogiai, taškas po taško, o žiūrovai žaidėjų lentelę mato telefone.

@@ -11,8 +11,10 @@ const settings = async (t, patch, actor = 'owner') =>
   asActor(ctx, actor, 'select update_tournament_settings($1,$2,$3) v', [t.id, JSON.stringify(patch), await revision(t.id)])
 const drop = t => ctx.db.query('delete from tournaments where id=$1', [t.id])
 const padel = (format, count, extra = {}) => fixture(ctx, { format, count, sport: 'padel', category: 'doubles', status: 'registration_closed', isPublic: true, ...extra })
-const generate = (t, rounds = null, courts = null) =>
-  asActor(ctx, 'owner', 'select generate_points_format($1,$2,$3) r', [t.id, rounds, courts]).then(r => r.rows[0].r)
+const generate = (t, rounds = null, courts = null, firstRound = null) =>
+  asActor(ctx, 'owner', 'select generate_points_format($1,$2,$3,$4) r', [t.id, rounds, courts, firstRound]).then(r => r.rows[0].r)
+// Americano default: the full partner cycle, floor(n(n-1)/2 / (2 * courts)) rounds.
+const fullCycle = (n, courts = Math.floor(n / 4)) => Math.floor((n * (n - 1)) / 2 / (2 * courts))
 const start = t => settings(t, { status: 'in_progress' })
 const tournament = async t => (await ctx.db.query('select * from tournaments where id=$1', [t.id])).rows[0]
 const score = (m, a, b, actor = 'owner') =>
@@ -52,10 +54,10 @@ test('americano with 8 players: 7 rounds on 2 courts, every player partners ever
   await drop(t)
 })
 
-test('americano with 9 and 10 players: rests rotate fairly and partners never repeat', async () => {
+test('americano with 9 and 10 players: within one circle cycle rests rotate fairly and partners never repeat', async () => {
   for (const n of [9, 10]) {
     const t = await padel('americano', n)
-    assert.equal(await generate(t), 9)
+    assert.equal(await generate(t, 9), 9)
     const ms = await matches(ctx, t.id)
     const rests = Object.fromEntries(t.entries.map(e => [e, 0]))
     const partners = new Set()
@@ -79,7 +81,7 @@ test('americano for every field from 4 to 20 players, all courts or one: rests s
   for (let n = 4; n <= 20; n++) for (const courts of [null, 1]) {
     const t = await padel('americano', n)
     const rounds = await generate(t, null, courts)
-    assert.equal(rounds, n % 2 ? n : n - 1)
+    assert.equal(rounds, fullCycle(n, courts ?? Math.floor(n / 4)))
     const rests = Object.fromEntries(t.entries.map(e => [e, 0]))
     for (const list of Object.values(byRound(await matches(ctx, t.id)))) {
       const playing = new Set(list.flatMap(players))
@@ -88,6 +90,20 @@ test('americano for every field from 4 to 20 players, all courts or one: rests s
     }
     const counts = Object.values(rests)
     assert.ok(Math.max(...counts) - Math.min(...counts) <= 1, `n=${n} courts=${courts}: ${counts}`)
+    await drop(t)
+  }
+})
+
+test('americano plays a full partner cycle by default: nearly every pair partners, rests stay within one', async () => {
+  for (const [n, courts] of [[6, 1], [10, 2], [13, 2], [14, 3]]) {
+    const t = await padel('americano', n)
+    assert.equal(await generate(t, null, courts), fullCycle(n, courts))
+    const ms = await matches(ctx, t.id)
+    const partners = new Set(ms.flatMap(m => [key(m.side_a_entry_id, m.side_a2_entry_id), key(m.side_b_entry_id, m.side_b2_entry_id)]))
+    const pairs = (n * (n - 1)) / 2
+    assert.ok(partners.size >= 0.85 * pairs, `n=${n}: ${partners.size} of ${pairs} pairs partnered`)
+    const counts = t.entries.map(e => ms.filter(m => players(m).includes(e)).length)
+    assert.ok(Math.max(...counts) - Math.min(...counts) <= 1, `n=${n}: matches ${counts}`)
     await drop(t)
   }
 })
@@ -135,7 +151,7 @@ test('points scoring: the total must equal N, draws are allowed, sets are refuse
   await drop(t)
 })
 
-test('a player who rests in a completed round gets their own average points per played match', async () => {
+test('a completed round of rest earns half a match: floor(N / 2), from the first round on', async () => {
   const t = await padel('americano', 5)
   assert.equal(await generate(t), 5)
   await start(t)
@@ -145,23 +161,69 @@ test('a player who rests in a completed round gets their own average points per 
   const rester = t.entries.find(e => !players(m).includes(e))
   let s = await standings(t)
   assert.equal(s.find(r => r.entry_id === rester).rests, 1)
-  assert.equal(s.find(r => r.entry_id === rester).compensation, 0, 'no played match yet, no average')
-  // After the rester plays a match in round 2 the rest counts at that average.
+  assert.equal(s.find(r => r.entry_id === rester).compensation, 12, 'half of 24 before any match of their own')
   const round2 = (await matches(ctx, t.id)).find(x => x.round_number === 2)
   const onA = [round2.side_a_entry_id, round2.side_a2_entry_id].includes(rester)
   await score(round2, onA ? 14 : 10, onA ? 10 : 14)
   s = await standings(t)
   const r = s.find(x => x.entry_id === rester)
   assert.equal(r.points_for, 14)
-  assert.equal(r.rests, 1)
-  assert.equal(r.compensation, 14)
-  assert.equal(r.total, 28)
+  assert.equal(r.compensation, 12)
+  assert.equal(r.total, 26)
   await drop(t)
+  // An odd N rounds the half down.
+  const odd = await padel('americano', 5, { scoringConfig: { points_per_match: 21 } })
+  await generate(odd)
+  await start(odd)
+  await playRound(odd, 1, () => [11, 10])
+  assert.deepEqual((await standings(odd)).filter(x => x.rests).map(x => x.compensation), [10])
+  await drop(odd)
+})
+
+test('ties on points go to wins, then draws, then the point difference', async () => {
+  const t = await padel('americano', 8)
+  const [p1, p2, p3, p4, p5, p6, p7, p8] = t.entries
+  // p5 is seeded first: only the draws rule can put p1 above it.
+  await ctx.db.query('update entries set seed_order = null where tournament_id = $1', [t.id])
+  await ctx.db.query('update entries set seed_order = 1 where id = $1', [p5])
+  await ctx.db.query('update entries set seed_order = 2 where id = $1', [p1])
+  const add = (round, court, [a, a2, b, b2], sa, sb) => ctx.db.query(
+    `insert into matches(tournament_id,stage,round_number,match_number,side_a_entry_id,side_a2_entry_id,side_b_entry_id,side_b2_entry_id,side_a_score,side_b_score,status)
+     values ($1,'main',$2,$3,$4,$5,$6,$7,$8,$9,'finished')`, [t.id, round, court, a, a2, b, b2, sa, sb])
+  await add(1, 1, [p1, p2, p3, p4], 12, 12)
+  await add(1, 2, [p5, p6, p7, p8], 16, 8)
+  await add(2, 1, [p1, p7, p5, p8], 14, 10)
+  await add(2, 2, [p2, p3, p4, p6], 12, 12)
+  const s = await standings(t)
+  const row = id => s.find(r => r.entry_id === id)
+  // Both 26 points, one win, difference +4; p1 has a draw.
+  assert.deepEqual([row(p1).total, row(p1).won, row(p1).diff, row(p1).drawn], [26, 1, 4, 1])
+  assert.deepEqual([row(p5).total, row(p5).won, row(p5).diff, row(p5).drawn], [26, 1, 4, 0])
+  assert.ok(row(p1).rank < row(p5).rank)
+  await drop(t)
+})
+
+test('mexicano and king of the court: round 1 is a random draw unless the seeding is asked for', async () => {
+  for (const format of ['mexicano', 'king_of_court']) {
+    const t = await padel(format, 8)
+    await assert.rejects(generate(t, null, null, 'rating'), /pointsFormat\.invalidFirstRound/)
+    let shuffled = false
+    for (let attempt = 0; attempt < 10 && !shuffled; attempt++) {
+      await generate(t)
+      const ms = await matches(ctx, t.id)
+      shuffled = JSON.stringify(ms.flatMap(players)) !== JSON.stringify([0, 3, 1, 2, 4, 7, 5, 6].map(i => t.entries[i]))
+    }
+    assert.ok(shuffled, `${format}: round 1 never left the seeding`)
+    assert.equal((await tournament(t)).format_config.first_round, 'random')
+    await generate(t, null, null, 'seeded')
+    assert.equal((await tournament(t)).format_config.first_round, 'seeded')
+    await drop(t)
+  }
 })
 
 test('mexicano: round 1 by seed (1+4 v 2+3), the next round follows the table, later rounds lock earlier results', async () => {
   const t = await padel('mexicano', 8)
-  assert.equal(await generate(t), 1)
+  assert.equal(await generate(t, null, null, 'seeded'), 1)
   let ms = await matches(ctx, t.id)
   assert.equal(ms.length, 2)
   const [c1, c2] = ms
@@ -235,6 +297,26 @@ test('king of the court: odd N, a multiple of 4 players, winners move up and par
   assert.deepEqual(new Set(top), new Set([r2[0].side_b_entry_id, r2[0].side_b2_entry_id]))
   assert.equal((await standings(t))[0].court, 1)
   await drop(t)
+})
+
+test('king of the court plays the rounds set before the start: courts + 3 and at least 5 by default', async () => {
+  const t = await padel('king_of_court', 8)
+  await generate(t)
+  assert.equal((await tournament(t)).format_config.rounds, 5)
+  await assert.rejects(generate(t, 1), /pointsFormat\.invalidRounds/)
+  await assert.rejects(generate(t, 31), /pointsFormat\.invalidRounds/)
+  assert.equal(await generate(t, 2), 1)
+  assert.equal((await tournament(t)).format_config.rounds, 2)
+  await start(t)
+  await playRound(t, 1, () => [11, 10])
+  await asActor(ctx, 'owner', 'select generate_next_round($1)', [t.id])
+  await playRound(t, 2, () => [11, 10])
+  await assert.rejects(asActor(ctx, 'owner', 'select generate_next_round($1)', [t.id]), /pointsFormat\.lastRoundPlayed/)
+  await drop(t)
+  const big = await padel('king_of_court', 16)
+  await generate(big)
+  assert.equal((await tournament(big)).format_config.rounds, 7)
+  await drop(big)
 })
 
 test('team americano: fixed pairs play all-play-all on points; pairs must be complete', async () => {
@@ -313,6 +395,33 @@ test('snapshot carries points standings; schedule, reminders and opponents see a
   const conflicts = (await ctx.db.query("select match_schedule_conflicts($1,null,'2030-01-01T10:00:00Z','fixed',null) c", [m.id])).rows[0].c
   assert.ok(conflicts.some(c => c.kind === 'participant_busy'))
   await drop(t)
+})
+
+test('points formats refuse the knockout, round-robin and group generators; matches stay after the start', async () => {
+  for (const format of ['americano', 'team_americano']) {
+    const t = format === 'americano' ? await padel(format, 8) : await padel(format, 4, { pairing: 'pre_agreed' })
+    if (format === 'team_americano') for (const e of t.entries) await ctx.db.query('insert into entry_members(entry_id,member_name,member_order) values ($1,$2,2)', [e, `Partner ${e.slice(0, 4)}`])
+    await generate(t)
+    const count = (await matches(ctx, t.id)).length
+    for (const sql of [
+      "select generate_bracket($1,'auto-random',null)",
+      "select rebuild_bracket($1,'auto-random',null)",
+      'select generate_round_robin($1)',
+      'select generate_groups($1,2,null)',
+    ]) await assert.rejects(asActor(ctx, 'owner', sql, [t.id]), /pointsFormat\.useRounds/, `${format}: ${sql}`)
+    const [m] = await matches(ctx, t.id)
+    await assert.rejects(asActor(ctx, 'owner', "insert into matches(tournament_id,stage,round_number,match_number,side_a_entry_id,side_b_entry_id,status) values ($1,'main',9,9,$2,$3,'ready')",
+      [t.id, m.side_a_entry_id, m.side_b_entry_id]), /permission denied|pointsFormat\.useRounds/)
+    assert.equal((await matches(ctx, t.id)).length, count)
+    // The UI "reset bracket" is a direct delete: refused once the tournament runs or is over.
+    await start(t)
+    await asActor(ctx, 'owner', 'delete from matches where tournament_id=$1', [t.id])
+    assert.equal((await matches(ctx, t.id)).length, count)
+    await ctx.db.query("update tournaments set status='completed' where id=$1", [t.id])
+    await asActor(ctx, 'editor', 'delete from matches where tournament_id=$1', [t.id])
+    assert.equal((await matches(ctx, t.id)).length, count)
+    await drop(t)
+  }
 })
 
 test('the padel formats migration replays cleanly', async () => {

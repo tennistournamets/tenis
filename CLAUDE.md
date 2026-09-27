@@ -8,7 +8,7 @@ Web-application for organizing tournaments across multiple sports with live scor
   - Tennis & padel share the "sets" scoring family (games/sets/tiebreaks). Padel is always doubles.
   - Football uses the "goals" scoring family (single integer per side; draws allowed in round-robin/group stages; penalty shootout breaks knockout ties). A football entry is one team (category `singles`).
 - **Tournament formats (v1):** `single_elimination`, `round_robin`, `groups_playoff`, `double_elimination`; padel only: `americano`, `mexicano`, `team_americano`, `king_of_court` (points formats, spec in `docs/PADEL_FORMATS.md`).
-  - Points formats: a match is played to a total of N points (`scoring_config.points_per_match`, sum of both scores = N); the table sums points (`get_points_standings`), a rest earns the player's own average per played match. Americano/Mexicano/King of the Court: one player per entry (forced `pick_random` registration), partners in `matches.side_a2_entry_id`/`side_b2_entry_id`.
+  - Points formats: a match is played to a total of N points (`scoring_config.points_per_match`, sum of both scores = N); the table sums points (`get_points_standings`), a completed round of rest earns half a match, floor(N/2); ties go to wins, draws, then point difference; Mexicano/KotC round 1 is a random draw unless `format_config.first_round = 'seeded'`; KotC plays `format_config.rounds` rounds (set before the start), Mexicano is open-ended; Americano defaults to a full partner cycle. Americano/Mexicano/King of the Court: one player per entry (forced `pick_random` registration), partners in `matches.side_a2_entry_id`/`side_b2_entry_id`.
 - **Create flow:** 6-step wizard — sport → format → details (name, slug, venue) → game rules → registration conditions → publication (visibility, QR).
 
 ## Tech Stack
@@ -146,7 +146,7 @@ supabase/
 - `propagate_winner()` - advances winner via `next_match_id`; routes loser via `loser_next_match_id` (double-elim)
 - `swap_bracket_slots()`, `apply_bracket_layout()` - manual single-elim arrangement
 - `form_random_pairs()`, `form_manual_pairs()`, `split_pairs()` - doubles pairing
-- Points formats: `generate_points_format(id, rounds, courts)` (Americano schedule: cyclic whist designs for 8/12/13/16/17/20/21/24/25 players, else circle/greedy with rest spread ≤ 1; Team Americano RR; Mexicano/KotC round 1, roster stored in `format_config.roster`), `generate_next_round()`, `undo_last_round()`, `update_match_points(match, a, b, rev)`, `get_points_standings()`; live `record_point` counts rallies to N; triggers `guard_points_format` (padel only, forced pick_random, odd N for KotC), `guard_individual_entry_members`, `guard_points_match_sets`
+- Points formats: `generate_points_format(id, rounds, courts, first_round)` (Americano schedule: full partner cycle by default, cyclic whist designs for 8/12/13/16/17/20/21/24/25 players, else circle/greedy with rest spread ≤ 1; Team Americano RR; Mexicano/KotC round 1, roster stored in `format_config.roster`), `generate_next_round()`, `undo_last_round()`, `update_match_points(match, a, b, rev)`, `get_points_standings()`; live `record_point` counts rallies to N; triggers `guard_points_format` (padel only, forced pick_random, odd N for KotC), `guard_individual_entry_members`, `guard_points_match_sets`
 - `set_entry_seed_order(tournament_id, entry_ids[])` - manual seeding of the approved field before the draw (feeds manual draw and group snake); snapshot entries carry `seed_order`
 - `start_live_match()`, `record_point()`, `stop_live_match()` - live scoring lifecycle
 - `add_tournament_admin_by_email()`, `remove_tournament_admin()` - co-organizer management
@@ -211,7 +211,6 @@ Planned/known gaps, roughly by priority. Not implemented yet.
 
 ### Platform
 - Super-admin dashboard (list all tournaments/users). Feature-flag toggles exist at `/admin/platform`; tournament/user listing does not.
-- Adoption of the migration baseline by the existing TENIS project (see `docs/RELEASE.md`); until then new forward migrations are applied to TENIS one by one.
 
 ## Dev Setup
 
@@ -224,7 +223,7 @@ npm run build    # Production build to dist/
 
 Growth/SEO setup (analytics id, domain, `SITE_URL`, Search Console) is in `docs/GROWTH.md`. `vercel.json` routes messenger crawler user agents on `/tournaments/:slug` to `api/preview`; keep that rewrite before the SPA fallback. `npm run build` also prerenders the landing (`scripts/prerender.mjs`): landing code must not touch `window`/`document` at import or setup beyond what `scripts/prerender-env.mjs` stubs, and the SPA shell is `dist/app.html`, served by `vercel.json` only for `/admin…`, `/tournaments/:slug`, `/embed/:slug` — a new top-level route needs a rewrite there, otherwise Vercel answers 404. Translations: keep `messages.js` plain data (no functions); set the language through `setAppLocale()` so its chunk is loaded first. Icons/preview images are re-rendered with `npm run icons` / `npm run og:image` (Google Chrome).
 
-DB changes follow `docs/RELEASE.md`: create a migration with `npx supabase migration new <name>` (redirect stdin from `/dev/null` in scripts, the CLI reads it), append the same SQL to `supabase/schema.sql` (canonical state), register the file with its SHA-256 in `supabase/database-release.json` (`forwardMigrations`), and keep `npm run test:sql` green in the `schema`, `fresh` and `upgrade` modes (`TENIS_TEST_INSTALL_MODE`). Every forward migration must be replayable (tests re-apply the whole chain). Never re-apply `schema.sql` to a working database. The free-tier project auto-pauses — resume it in the dashboard if connections fail.
+DB changes follow `docs/RELEASE.md`: create a migration with `npx supabase migration new <name>` (redirect stdin from `/dev/null` in scripts, the CLI reads it), append the same SQL to `supabase/schema.sql` (canonical state), register the file with its SHA-256 in `supabase/database-release.json` (`forwardMigrations`), and keep `npm run test:sql` green in the `schema`, `fresh` and `upgrade` modes (`TENIS_TEST_INSTALL_MODE`). TENIS adopted the baseline history on 2026-09-27: its `supabase_migrations` journal matches `supabase/migrations/`, so production releases go through `npx supabase db push --db-url <TENIS>` after a backup and a `--dry-run` (see `docs/RELEASE.md`), then `tenisAppliedVersion` in the manifest. Every forward migration must be replayable (tests re-apply the whole chain). Never re-apply `schema.sql` to a working database. The free-tier project auto-pauses — resume it in the dashboard if connections fail.
 
 ## General Rules
 

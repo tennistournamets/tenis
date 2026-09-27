@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onBeforeUnmount, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { scoringFamily } from '../../lib/sportConfig'
+import { isIndividualFormat, scoringFamily } from '../../lib/sportConfig'
 import { useUnsavedChanges } from '../../lib/unsavedChanges'
 import { supabase } from '../../lib/supabase'
 import { entryNamesError, registrationError, sameNameMember } from '../../lib/registrationRules'
@@ -28,6 +28,8 @@ const isTournamentFinished = computed(() => props.tournament.status === 'complet
 const disabled = computed(() => actionLoading.value || !props.canManage || isTournamentActive.value || isTournamentFinished.value)
 const isGoalsSport = computed(() => scoringFamily(props.tournament.sport || 'tennis') === 'goals')
 const isPickRandomDoubles = computed(() => props.tournament.category === 'doubles' && props.tournament.doubles_pairing_mode === 'pick_random')
+// Americano, Mexicano, King of the Court: one player per entry, no partner field.
+const isIndividual = computed(() => isIndividualFormat(props.tournament.format))
 
 const addEntryForm = reactive({
   memberOne: '',
@@ -73,7 +75,7 @@ async function addEntryManually() {
   const category = props.tournament.category
   const pMode = props.tournament.doubles_pairing_mode
   const m1 = addEntryForm.memberOne.trim()
-  const m2 = addEntryForm.memberTwo.trim()
+  const m2 = isIndividual.value ? '' : addEntryForm.memberTwo.trim()
 
   const requireBothMembers = category === 'doubles' && pMode !== 'pick_random'
   if (!m1 || (requireBothMembers && !m2)) {
@@ -187,7 +189,7 @@ onBeforeUnmount(() => clearTimeout(addEntrySuccessTimer))
       <form class="stack stack--sm" @submit.prevent="addEntryManually">
         <div class="grid-2 grid-2--admin">
           <div class="form-field">
-            <label for="adm-add-m1">{{ isGoalsSport ? t('registrationForm.teamName') : tournament.category === 'doubles' ? t('registrationForm.memberOne') : t('registrationForm.member') }}</label>
+            <label for="adm-add-m1">{{ isGoalsSport ? t('registrationForm.teamName') : tournament.category === 'doubles' && !isIndividual ? t('registrationForm.memberOne') : t('registrationForm.member') }}</label>
             <input
               id="adm-add-m1"
               v-model="addEntryForm.memberOne"
@@ -212,7 +214,7 @@ onBeforeUnmount(() => clearTimeout(addEntrySuccessTimer))
               required
             />
           </div>
-          <div v-if="isPickRandomDoubles" class="form-field">
+          <div v-if="isPickRandomDoubles && !isIndividual" class="form-field">
             <label for="adm-add-m2">{{ t('registrationForm.memberTwoOptional') }}</label>
             <input
               id="adm-add-m2"

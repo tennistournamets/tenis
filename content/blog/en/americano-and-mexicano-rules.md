@@ -24,10 +24,10 @@ Mexicano scores like Americano, but pairs are not fixed in advance: they are for
 ## Tips for organisers
 
 - **Plan the time.** A 24-point match takes about 15–20 minutes. Seven rounds take roughly two hours with breaks.
-- **The number of players should divide by 4.** If it does not, some players sit out each round and receive the average score.
-- **Announce the tie rule in advance.** For example head-to-head or the number of matches won.
+- **The number of players should divide by 4.** If it does not, some players sit out each round and receive the average score of a match — half the points.
+- **Announce the tie rule in advance.** Most apps rank equal points by matches won, then draws, then point difference.
 - **Show the results to everyone.** A live leaderboard on phones or a screen by the courts keeps the suspense until the last round.
 
 ## Can you run Americano with Bracketa?
 
-[Bracketa](/en) runs all four social padel formats: Americano, Mexicano, Team Americano and King of the Court. Players sign up one by one, the rounds with courts and rests are built automatically (in Americano everyone partners everyone once), matches are played to a total of points and a rest earns the player their own average. Mexicano and King of the Court build every next round from the standings in one click. Scores are entered as a final result or live, point by point, and spectators follow the player table on their phones.
+[Bracketa](/en) runs all four social padel formats: Americano, Mexicano, Team Americano and King of the Court. Players sign up one by one, the rounds with courts and rests are built automatically (in Americano everyone partners everyone as far as the courts allow), matches are played to a total of points and a round of rest earns half a match, and equal points go to wins, then draws, then difference. Mexicano and King of the Court build every next round from the standings in one click. Scores are entered as a final result or live, point by point, and spectators follow the player table on their phones.
