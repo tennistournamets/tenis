@@ -31,6 +31,7 @@ Forward-миграции после baseline (порядок и SHA-256 — в `
 | `20260926203851_padel_formats_enum.sql` | Значения enum `americano`, `mexicano`, `team_americano`, `king_of_court` (отдельный файл) |
 | `20260926203853_padel_points_formats.sql` | Падел-форматы на очки: партнёры в матче, генераторы, счёт до N, таблица очков, live-счётчик |
 | `20260927095123_points_format_rules.sql` | Guard'ы форматов на очки и правила как у конкурентов: отдых ⌊N/2⌋, тай-брейки, жеребьёвка раунда 1, раунды King of the Court, полный цикл Americano |
+| `20260927171456_venue_check_restorable.sql` | Проверка координат площадки без `BETWEEN`: определение не меняется после pg_dump/pg_restore |
 
 Каждая forward-миграция переигрывается без изменения данных: тесты применяют
 всю цепочку повторно (`reapplyForwardMigrations` в `tests/helpers/database.mjs`).
