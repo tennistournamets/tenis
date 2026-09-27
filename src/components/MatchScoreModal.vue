@@ -1,12 +1,14 @@
 <script setup>
-// Single-match final score entry, opened from the round-robin crosstable/accordion.
-// Form logic and RPC payloads mirror ScoreEditor.vue (sets) and
-// FootballScoreEditor.vue (goals) — keep the three in sync on scoring changes.
+// Single-match final score entry, opened from the round-robin crosstable/accordion
+// and the rounds of the padel points formats. Form logic and RPC payloads mirror
+// ScoreEditor.vue (sets) and FootballScoreEditor.vue (goals) — keep the three in
+// sync on scoring changes. Points (Americano…): the two scores add up to target.
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppModal from './AppModal.vue'
 
-import { entryDisplayNames } from '../lib/entryDisplay'
+import { matchSideLabel } from '../lib/entryDisplay'
+import { complementScore } from '../lib/pointsFormat'
 import { supabase } from '../lib/supabase'
 import { useUnsavedChanges, confirmDiscard } from '../lib/unsavedChanges'
 import { sameForm, cloneForm } from '../lib/formDraft'
@@ -23,6 +25,8 @@ const props = defineProps({
   exists: { type: Boolean, default: true },
   entriesMap: { type: Object, default: () => ({}) },
   family: { type: String, default: 'sets' },
+  // Points family: total of one match (scoring_config.points_per_match).
+  target: { type: Number, default: 24 },
   setFormat: { type: String, default: 'best_of_3' },
   sets: { type: Array, default: () => [] },
   canEditFinal: { type: Boolean, default: false },
@@ -46,14 +50,14 @@ const draftKey = draftOwnerId
 const draftEnabled = ref(Boolean(draftKey))
 const isDraftSessionCurrent = () => draftEnabled.value && auth.user?.id === draftOwnerId
 
-function teamLabel(entryId) {
-  if (!entryId) return t('bracket.tbd')
-  const names = entryDisplayNames(props.entriesMap[entryId])
-  return names.length ? names.join(' / ') : t('bracket.tbd')
-}
+// A side is an entry, or both players of a points-format match.
+const sideLabel = side => matchSideLabel(props.match, side, props.entriesMap, t('bracket.tbd'))
 
 function goalLabel(metric, side) {
-  return t('a11y.scoreField', { metric: t(`football.${metric}`), team: teamLabel(props.match[`side_${side}_entry_id`]), side: side.toUpperCase() })
+  return t('a11y.scoreField', { metric: t(`football.${metric}`), team: sideLabel(side), side: side.toUpperCase() })
+}
+function pointsLabel(side) {
+  return t('a11y.scoreField', { metric: t('pointsFormat.pointsFor'), team: sideLabel(side), side: side.toUpperCase() })
 }
 
 // --- sets form ---
@@ -142,6 +146,18 @@ function discardStoredDraft() {
 }
 
 const isSets = computed(() => props.family === 'sets')
+const isPoints = computed(() => props.family === 'points')
+// Typing one score of a points match fills the other: together they make the total.
+watch(() => goals.value.a, value => {
+  if (!isPoints.value) return
+  const other = complementScore(value, props.target)
+  if (other !== '' && String(goals.value.b) !== other) goals.value.b = other
+})
+watch(() => goals.value.b, value => {
+  if (!isPoints.value) return
+  const other = complementScore(value, props.target)
+  if (other !== '' && String(goals.value.a) !== other) goals.value.a = other
+})
 
 async function reloadResult() {
   if (saving.value || !isDraftSessionCurrent()) return
@@ -177,6 +193,15 @@ async function save() {
     catch (error) { errorText.value = scoringError(error.message, t); return }
     rpcName = 'update_match_sets'
     rpcPayload = { p_match_id: props.match.id, p_sets: payload, p_expected_revision: baseRevision.value }
+  } else if (isPoints.value) {
+    const a = Number(goals.value.a)
+    const b = Number(goals.value.b)
+    if (goals.value.a === '' || goals.value.b === '' || !Number.isInteger(a) || !Number.isInteger(b) || a < 0 || b < 0 || a + b !== props.target) {
+      errorText.value = t('pointsFormat.errors.invalidScore')
+      return
+    }
+    rpcName = 'update_match_points'
+    rpcPayload = { p_match_id: props.match.id, p_a: a, p_b: b, p_expected_revision: baseRevision.value }
   } else {
     if (goals.value.a === '' || goals.value.b === '') { errorText.value=t('scoringFlow.finalRequired'); return }
     const a = Number(goals.value.a)
@@ -228,7 +253,7 @@ async function save() {
       <div class="modal-dialog__head">
         <div>
           <h2>{{ t('standings.matchScore') }}</h2>
-          <p class="muted msm-matchup">{{ teamLabel(match.side_a_entry_id) }} vs {{ teamLabel(match.side_b_entry_id) }}</p>
+          <p class="muted msm-matchup">{{ sideLabel('a') }} vs {{ sideLabel('b') }}</p>
         </div>
         <button class="modal-close" type="button" :aria-label="t('actions.close')" @click="close">×</button>
       </div>
@@ -249,17 +274,29 @@ async function save() {
       <p v-else class="muted">{{ t('scoringFlow.hint') }}</p>
       <!-- sets sports -->
       <TennisSetInputs v-if="isSets" v-model="setRows" :scoring-config="scoringConfig" :set-format="setFormat"
-        :team-a="teamLabel(match.side_a_entry_id)" :team-b="teamLabel(match.side_b_entry_id)"
+        :team-a="sideLabel('a')" :team-b="sideLabel('b')"
         :id-prefix="`modal-${match.id}`" :disabled="!canEditFinal || manualBlocked || saving || savedFlash" />
+
+      <!-- points formats (Americano, Mexicano…) -->
+      <div v-else-if="isPoints" class="stack stack--sm">
+        <div class="msm-goals">
+          <span class="msm-grid__name msm-points__name">{{ sideLabel('a') }}</span>
+          <input v-model="goals.a" class="input msm-grid__input msm-points__input" type="number" inputmode="numeric" min="0" :max="target" :disabled="!canEditFinal || manualBlocked || saving || savedFlash" :aria-label="pointsLabel('a')" />
+          <span class="muted">:</span>
+          <input v-model="goals.b" class="input msm-grid__input msm-points__input" type="number" inputmode="numeric" min="0" :max="target" :disabled="!canEditFinal || manualBlocked || saving || savedFlash" :aria-label="pointsLabel('b')" />
+          <span class="msm-grid__name msm-goals__right msm-points__name">{{ sideLabel('b') }}</span>
+        </div>
+        <p class="muted" style="font-size: var(--font-sm)">{{ t('pointsFormat.scoreHint', { n: target }) }}</p>
+      </div>
 
       <!-- goals sports -->
       <div v-else class="stack stack--sm">
         <div class="msm-goals">
-          <span class="msm-grid__name">{{ teamLabel(match.side_a_entry_id) }}</span>
+          <span class="msm-grid__name">{{ sideLabel('a') }}</span>
           <input v-model="goals.a" class="input msm-grid__input" type="number" inputmode="numeric" min="0" :disabled="!canEditFinal || manualBlocked || saving || savedFlash" :aria-label="goalLabel('goals', 'a')" />
           <span class="muted">:</span>
           <input v-model="goals.b" class="input msm-grid__input" type="number" inputmode="numeric" min="0" :disabled="!canEditFinal || manualBlocked || saving || savedFlash" :aria-label="goalLabel('goals', 'b')" />
-          <span class="msm-grid__name msm-goals__right">{{ teamLabel(match.side_b_entry_id) }}</span>
+          <span class="msm-grid__name msm-goals__right">{{ sideLabel('b') }}</span>
         </div>
         <div class="msm-goals">
           <span class="msm-goals__pens-label muted">{{ t('football.pens') }}</span>
@@ -350,6 +387,14 @@ async function save() {
 .msm-goals__right {
   flex: 1;
   text-align: right;
+}
+/* Two players per side: let the names wrap instead of cutting them off. */
+.msm-grid__input.msm-points__input { width: 68px; flex: none; }
+.msm-points__name {
+  flex: 1;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.3;
 }
 .msm-goals__pens-label {
   font-size: var(--font-sm);

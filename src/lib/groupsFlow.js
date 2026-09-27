@@ -14,11 +14,15 @@ export function groupsError(message, t) {
  * withdrawn participant still plays. Works for every format, because every
  * approved entry appears in the first stage (round robin, groups, round 1).
  */
-export function rosterMismatch(approvedEntries = [], matches = []) {
+export function rosterMismatch(approvedEntries = [], matches = [], roster = null) {
   if (!matches.length) return { stale: false, missing: [], extra: [] }
   const approved = new Set(approvedEntries.map(entry => entry.id))
-  const playing = new Set()
-  for (const m of matches) for (const id of [m.side_a_entry_id, m.side_b_entry_id]) if (id) playing.add(id)
+  // A points format keeps its field in format_config.roster: resting players
+  // are in no match of the round.
+  const playing = new Set(Array.isArray(roster) ? roster : [])
+  if (!Array.isArray(roster)) {
+    for (const m of matches) for (const id of [m.side_a_entry_id, m.side_a2_entry_id, m.side_b_entry_id, m.side_b2_entry_id]) if (id) playing.add(id)
+  }
   const missing = [...approved].filter(id => !playing.has(id))
   const extra = [...playing].filter(id => !approved.has(id))
   return { stale: missing.length > 0 || extra.length > 0, missing, extra }

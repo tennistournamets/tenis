@@ -18,6 +18,7 @@ const NAMESPACES = {
   'tennisRules.': 'tennisRules.',
   'scoringFlow.': 'scoringFlow.',
   'seeding.': 'seeding.',
+  'pointsFormat.': 'pointsFormat.errors.',
   'serverErrors.': 'serverErrors.',
 }
 

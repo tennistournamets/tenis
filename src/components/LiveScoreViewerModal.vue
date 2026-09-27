@@ -82,6 +82,9 @@ const emit = defineEmits(['close'])
 const { t } = useI18n()
 
 const state = computed(() => props.liveScore?.state || null)
+// Padel points formats: a rally counter up to the total, no court animation.
+const isPoints = computed(() => state.value?.family === 'points')
+const tennisState = computed(() => (isPoints.value ? null : state.value))
 const statusText = computed(() => {
   if (props.liveScore?.status === 'finished' || state.value?.winner) return t('live.finished')
   if (props.liveScore?.status === 'stopped') return t('live.stopped')
@@ -90,8 +93,8 @@ const statusText = computed(() => {
 
 // Court sides follow the scorer's orientation (stored on the live row).
 // Changeover flips wait for the game-win celebration to finish.
-const autoChangeover = useDeferredChangeover(state)
-const sides = computed(() => displaySides(props.liveScore, state.value, autoChangeover.value))
+const autoChangeover = useDeferredChangeover(tennisState)
+const sides = computed(() => displaySides(props.liveScore, tennisState.value, autoChangeover.value))
 const swapped = computed(() => sides.value[0] === 'b')
 
 function teamName(side) {
@@ -111,7 +114,7 @@ function teamName(side) {
       </div>
 
       <LiveRallyScene3D
-        v-if="tier !== '2d'"
+        v-if="!isPoints && tier !== '2d'"
         :key="tier"
         :state="state"
         :team-a="teamA"
@@ -120,7 +123,7 @@ function teamName(side) {
         :tier="tier"
         @fallback="tier = '2d'"
       />
-      <LiveRallyAnimation v-else :state="state" :team-a="teamA" :team-b="teamB" :swapped="swapped" />
+      <LiveRallyAnimation v-else-if="!isPoints" :state="state" :team-a="teamA" :team-b="teamB" :swapped="swapped" />
 
       <!-- Score rows keep a fixed A/B order — only the court figures swap ends. -->
       <div class="live-scoreboard">
@@ -131,12 +134,15 @@ function teamName(side) {
           :class="{ 'live-scoreboard__row--winner': state?.winner === side }"
         >
           <strong>{{ teamName(side) }}</strong>
-          <span class="live-scoreboard__point">{{ pointLabel(state, side) }}</span>
+          <span class="live-scoreboard__point">{{ isPoints ? (state.points?.[side] ?? 0) : pointLabel(state, side) }}</span>
         </div>
       </div>
 
-      <p class="live-scoreboard__sets">{{ scoreLine(state) }}</p>
-      <div v-if="liveRuleHint(state, t)" class="alert alert--info" role="status">{{ liveRuleHint(state, t) }}</div>
+      <p v-if="isPoints" class="live-scoreboard__sets">{{ t('pointsFormat.liveTarget', { n: state.target }) }}<template v-if="state.winner === 'draw'"> · {{ t('pointsFormat.liveDraw') }}</template></p>
+      <template v-else>
+        <p class="live-scoreboard__sets">{{ scoreLine(state) }}</p>
+        <div v-if="liveRuleHint(state, t)" class="alert alert--info" role="status">{{ liveRuleHint(state, t) }}</div>
+      </template>
     </div>
   </AppModal>
 </template>

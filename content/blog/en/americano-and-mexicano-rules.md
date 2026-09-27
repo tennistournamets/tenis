@@ -30,4 +30,4 @@ Mexicano scores like Americano, but pairs are not fixed in advance: they are for
 
 ## Can you run Americano with Bracketa?
 
-Today [Bracketa](/en) supports tournaments with fixed pairs: round robin, groups with a playoff, single and double elimination. If you play Team Americano or simply want every pair to play every other pair, choose round robin: the schedule and the table are built automatically and spectators follow the scores live.
+[Bracketa](/en) runs all four social padel formats: Americano, Mexicano, Team Americano and King of the Court. Players sign up one by one, the rounds with courts and rests are built automatically (in Americano everyone partners everyone once), matches are played to a total of points and a rest earns the player their own average. Mexicano and King of the Court build every next round from the standings in one click. Scores are entered as a final result or live, point by point, and spectators follow the player table on their phones.

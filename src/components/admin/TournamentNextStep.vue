@@ -1,6 +1,7 @@
 <script setup>
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { isPointsFormat } from '../../lib/sportConfig'
 
 // The road from registration to the first match, as one checklist above the
 // tabs: every step says whether it is done and offers the action that does it,
@@ -27,7 +28,8 @@ const PRE_START = ['draft', 'registration_open', 'registration_closed']
 const playoffPhase = computed(() => props.status === 'in_progress' && props.format === 'groups_playoff'
   && props.groupMatchesTotal > 0 && !props.hasPlayoff)
 const visible = computed(() => PRE_START.includes(props.status) || playoffPhase.value)
-const matchesKey = computed(() => (props.format === 'round_robin' ? 'matches' : props.format === 'groups_playoff' ? 'groups' : 'bracket'))
+const matchesKey = computed(() => (isPointsFormat(props.format) ? 'rounds'
+  : props.format === 'round_robin' ? 'matches' : props.format === 'groups_playoff' ? 'groups' : 'bracket'))
 const registrationClosed = computed(() => props.status === 'registration_closed')
 
 const rosterStale = computed(() => props.matchesCount > 0 && (props.rosterMissing > 0 || props.rosterExtra > 0))

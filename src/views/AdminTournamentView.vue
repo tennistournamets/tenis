@@ -11,7 +11,10 @@ import MatchScoreModal from '../components/MatchScoreModal.vue'
 import FootballScoreEditor from '../components/FootballScoreEditor.vue'
 import GroupStageBoard from '../components/GroupStageBoard.vue'
 import DoubleElimBoard from '../components/DoubleElimBoard.vue'
-import { scoringFamily, getSportConfig } from '../lib/sportConfig'
+import { scoringFamily, getSportConfig, isDynamicFormat, isIndividualFormat, isPointsFormat, pointsTarget } from '../lib/sportConfig'
+import PointsRoundsBoard from '../components/PointsRoundsBoard.vue'
+import PointsStandingsTable from '../components/PointsStandingsTable.vue'
+import { currentRound, pointsPlan, pointsRoster, pointsRounds, roundMinutes } from '../lib/pointsFormat'
 import { scoringAccess, matchScoringAction } from '../lib/scoringAccess'
 import LiveScoringModal from '../components/LiveScoringModal.vue'
 import TournamentQrModal from '../components/TournamentQrModal.vue'
@@ -39,7 +42,7 @@ import { scoringError } from '../lib/tennisRules'
 import { registrationDisplayState, registrationError } from '../lib/registrationRules'
 import { sameForm, cloneForm, matchVersions } from '../lib/formDraft'
 import { useUnsavedChanges, confirmDiscard, withApprovedDeparture } from '../lib/unsavedChanges'
-import { customDisplayName, entryDisplayNames, entryMemberNames } from '../lib/entryDisplay'
+import { customDisplayName, entryDisplayNames, entryMemberNames, matchSideLabel } from '../lib/entryDisplay'
 import { confirmDialog } from '../lib/confirmDialog'
 import { supabase } from '../lib/supabase'
 import { createSnapshotRefresh, subscribeTournament } from '../lib/tournamentSync'
@@ -109,6 +112,7 @@ const schedule = ref([])
 const scheduleMatch = ref(null)
 const groups = ref([])
 const groupStandings = ref({}) // group_id -> standings rows
+const pointsStandings = ref([]) // points formats: get_points_standings rows
 const groupCount = ref(2)
 // How many leave each group; sent with generate_groups, which stores it.
 // The organizer's own pick of "advance per group"; null keeps the wizard value.
@@ -201,8 +205,11 @@ const unpairedEntries = computed(() => {
 
 const unpairedCount = computed(() => unpairedEntries.value.length)
 
+// Individual points formats (Americano…) register players alone too, but pair
+// them per match: there are no fixed pairs to form.
 const isPickRandomDoubles = computed(() =>
   tournament.value?.category === 'doubles' && tournament.value?.doubles_pairing_mode === 'pick_random'
+  && !isIndividualFormat(tournament.value?.format)
 )
 
 const allPairingPlayers = computed(() =>
@@ -281,6 +288,9 @@ function entryInitials(entry) {
     .join('')
 }
 
+// A side of a match: one entry, or both players in the points formats.
+const sideLabel = (match, side) => matchSideLabel(match, side, entriesMap.value, t('bracket.tbd'))
+
 function teamLabel(entryId) {
   if (!entryId) {
     return t('bracket.tbd')
@@ -299,7 +309,9 @@ const showPublicShareActions = computed(() => {
 
 // Matches must cover exactly the approved field (every format): an approval,
 // rejection or reopening after generation leaves them stale until regenerated.
-const rosterState = computed(() => rosterMismatch(approvedEntries.value, matches.value))
+// Points formats compare with their stored roster, resting players included.
+const rosterState = computed(() => rosterMismatch(approvedEntries.value, matches.value,
+  isPointsFormat(tournament.value?.format) ? tournament.value?.format_config?.roster ?? null : null))
 const canStartTournament = computed(
   () => tournament.value?.status === 'registration_closed' && matches.value.length > 0 && !rosterState.value.stale,
 )
@@ -353,8 +365,8 @@ const startBlockReason = computed(() => {
   if (canStartTournament.value) return null
   if (tournament.value?.status !== 'registration_closed') return t(regState.value.deadlinePassed ? 'admin.startNeedRegClosedDeadline' : 'admin.startNeedRegClosed')
   if (matches.value.length && rosterState.value.stale) return t('groupsFlow.startNeedRegenerate')
-  // Round robin and groups have matches, not a bracket.
-  return isRoundRobin.value || isGroupsPlayoff.value ? t('admin.startNeedMatches', { tab: bracketTabLabel.value }) : t('admin.startNeedBracket')
+  // Round robin, groups and the points formats have matches, not a bracket.
+  return isRoundRobin.value || isGroupsPlayoff.value || isPointsFmt.value ? t('admin.startNeedMatches', { tab: bracketTabLabel.value }) : t('admin.startNeedBracket')
 })
 
 async function startTournament() {
@@ -384,7 +396,7 @@ async function finishTournament() {
   errorText.value = ''
   try {
     // Unplayed matches are listed explicitly before the tournament is closed for good.
-    const finish = finishConfirmation({ format: tournament.value.format, matches: matches.value, groups: groups.value, label: teamLabel, t })
+    const finish = finishConfirmation({ format: tournament.value.format, matches: matches.value, groups: groups.value, label: teamLabel, sideLabel, t })
     if (!(await confirmDialog(finish.message, finish.options))) return
     const { data, error } = await supabase.rpc('update_tournament_settings', {
       p_tournament_id: props.id, p_patch: { status: 'completed' }, p_expected_revision: revision,
@@ -480,6 +492,7 @@ const snapshotRefresh = createSnapshotRefresh({
     if (scheduleMatch.value && !data.matches.some(m => m.id === scheduleMatch.value.id)) scheduleMatch.value = null
     standings.value = data.standings
     groupStandings.value = data.group_standings
+    pointsStandings.value = data.points_standings || []
     entryEditState.value = { entries: [...data.entries].sort((a,b) => a.id.localeCompare(b.id)),
       matches: matchVersions(data.matches), settings_revision: data.tournament.settings_revision }
     syncFailed.value = false
@@ -708,9 +721,42 @@ const bracketPlanText = computed(() => {
 })
 const slotsEditable = computed(() => canManageTournament.value && (arrangeMode.value || bracketEditing.value)
   && !actionLoading.value && !isTournamentActive.value && !isTournamentFinished.value)
-const bracketTabLabel = computed(() => t(isRoundRobin.value ? 'admin.tabTable' : isGroupsPlayoff.value ? 'admin.tabGroups' : 'admin.tabBracket'))
+const bracketTabLabel = computed(() => t(isPointsFmt.value ? 'pointsFormat.roundsTitle' : isRoundRobin.value ? 'admin.tabTable' : isGroupsPlayoff.value ? 'admin.tabGroups' : 'admin.tabBracket'))
 const isDoubleElim = computed(() => tournamentFormat.value === 'double_elimination')
-const tournamentScoringFamily = computed(() => scoringFamily(tournament.value?.sport || 'tennis'))
+const tournamentScoringFamily = computed(() => scoringFamily(tournament.value?.sport || 'tennis', tournament.value?.format))
+
+// Padel points formats: rounds of courts, a points table, next rounds on demand.
+const isPointsFmt = computed(() => isPointsFormat(tournamentFormat.value))
+const isDynamicFmt = computed(() => isDynamicFormat(tournamentFormat.value))
+const matchTarget = computed(() => pointsTarget(tournament.value))
+const pointsRoundsList = computed(() => pointsRounds(matches.value, pointsRoster(tournament.value, sortedApproved.value)))
+const pointsCurrent = computed(() => currentRound(pointsRoundsList.value))
+const pointsCourts = ref(null)
+const pointsRoundsWanted = ref(null)
+const pointsPlanNow = computed(() => pointsPlan(tournamentFormat.value, approvedEntries.value.length, { courts: pointsCourts.value, rounds: pointsRoundsWanted.value }))
+const courtOptions = computed(() => Array.from({ length: pointsPlanNow.value.maxCourts }, (_, i) => i + 1))
+const roundOptions = computed(() => {
+  const plan = pointsPlanNow.value
+  if (!plan.maxRounds) return []
+  const cycle = plan.cycle
+  return Array.from({ length: plan.maxRounds }, (_, i) => i + 1).filter(n => n <= cycle || n % cycle === 0 || n === plan.rounds)
+})
+const pointsPlanLines = computed(() => {
+  const plan = pointsPlanNow.value
+  if (!plan.valid) return [t(`pointsFormat.errors.${plan.reason}`)]
+  const lines = []
+  if (tournamentFormat.value === 'team_americano') lines.push(t('pointsFormat.planTeam', plan))
+  else if (plan.dynamic) lines.push(t('pointsFormat.planDynamicField', plan), t(tournamentFormat.value === 'king_of_court' ? 'pointsFormat.planKotc' : 'pointsFormat.planMexicano'))
+  else lines.push(t('pointsFormat.planIndividual', plan), t('pointsFormat.planCycle', plan))
+  if (plan.resting) lines.push(t('pointsFormat.planRest', { n: plan.resting }))
+  lines.push(`${t('pointsFormat.target', { n: matchTarget.value })}. ${t('pointsFormat.planTime', { min: roundMinutes(matchTarget.value) })}`)
+  return lines
+})
+// Mexicano / King of the Court: the next round, once every match of this one is played.
+const lastRound = computed(() => pointsRoundsList.value[pointsRoundsList.value.length - 1] || null)
+const canBuildNextRound = computed(() => isDynamicFmt.value && isTournamentActive.value && Boolean(lastRound.value?.finished))
+const canUndoRound = computed(() => isDynamicFmt.value && !isTournamentFinished.value && (lastRound.value?.round || 0) > 1
+  && lastRound.value.matches.every(m => m.status !== 'finished' && m.side_a_score == null && !liveScoresByMatch.value[m.id]))
 const isGoalsSport = computed(() => tournamentScoringFamily.value === 'goals')
 const sportCfg = computed(() => getSportConfig(tournament.value?.sport || 'tennis'))
 
@@ -1051,6 +1097,56 @@ async function generateSchedule() {
     })
     if (error) throw error
     if (firstDraw) track('draw_generated', { format: tournament.value?.format })
+    await loadAll()
+  } catch (error) {
+    errorText.value = groupsError(error?.message, t)
+  } finally { actionLoading.value = false }
+}
+
+async function generatePointsSchedule() {
+  if (actionLoading.value) return
+  actionLoading.value = true
+  try {
+    if (hasBracket.value && !(await confirmDialog(rebuildConfirmText('pointsFormat.regenerateConfirm'), { danger: true }))) return
+    errorText.value = ''
+    if (!(await ensureRegistrationClosed())) return
+    const firstDraw = !hasBracket.value
+    const plan = pointsPlanNow.value
+    const { error } = await supabase.rpc('generate_points_format', {
+      p_tournament_id: props.id,
+      p_rounds: tournamentFormat.value === 'americano' ? plan.rounds : null,
+      p_courts: isIndividualFormat(tournamentFormat.value) && tournamentFormat.value !== 'king_of_court' ? plan.courts : null,
+    })
+    if (error) throw error
+    if (firstDraw) track('draw_generated', { format: tournament.value?.format })
+    await loadAll()
+  } catch (error) {
+    errorText.value = groupsError(error?.message, t)
+  } finally { actionLoading.value = false }
+}
+
+async function buildNextRound() {
+  if (actionLoading.value || !canBuildNextRound.value) return
+  actionLoading.value = true
+  try {
+    if (!(await confirmDialog(t('pointsFormat.nextRoundConfirm', { n: (lastRound.value?.round || 0) + 1 })))) return
+    errorText.value = ''
+    const { error } = await supabase.rpc('generate_next_round', { p_tournament_id: props.id })
+    if (error) throw error
+    await loadAll()
+  } catch (error) {
+    errorText.value = groupsError(error?.message, t)
+  } finally { actionLoading.value = false }
+}
+
+async function undoLastRound() {
+  if (actionLoading.value || !canUndoRound.value) return
+  actionLoading.value = true
+  try {
+    if (!(await confirmDialog(t('pointsFormat.undoRoundConfirm', { n: lastRound.value.round }), { danger: true }))) return
+    errorText.value = ''
+    const { error } = await supabase.rpc('undo_last_round', { p_tournament_id: props.id })
+    if (error) throw error
     await loadAll()
   } catch (error) {
     errorText.value = groupsError(error?.message, t)
@@ -1620,7 +1716,7 @@ onBeforeUnmount(() => {
         :format="tournament.format"
         :status="tournament.status"
         :matches="matches"
-        :standings="standings"
+        :standings="isPointsFmt ? pointsStandings : standings"
         :entries-map="entriesMap"
         :can-finish="canManageTournament"
         :busy="actionLoading || settingsSaving"
@@ -2182,11 +2278,72 @@ onBeforeUnmount(() => {
           </div>
         </template>
         <div id="admin-mobile-panel" :role="isNarrowLayout && isTournamentActive && matches.length ? 'tabpanel' : undefined" :aria-labelledby="isNarrowLayout && isTournamentActive && matches.length ? `admin-surface-${adminMobileBracketSurface}` : undefined">
-          <section v-if="isNarrowLayout && isTournamentActive && matches.length && adminMobileBracketSurface === 'matches'" class="card mobile-score-center mt-3">
+          <section v-if="isNarrowLayout && isTournamentActive && matches.length && adminMobileBracketSurface === 'matches' && isPointsFmt" class="card stack stack--sm mt-3">
+            <h2 class="section-title">{{ t('pointsFormat.roundsTitle') }}</h2>
+            <PointsRoundsBoard :rounds="pointsRoundsList" :entries-map="entriesMap" :live-scores-by-match="liveScoresByMatch" :format="tournament.format" :can-edit-final="canEditFinalScores" :can-live-score="canUseLiveScoring" @edit-result="openRrMatch" @view-live="openLiveScoring" />
+          </section>
+          <section v-else-if="isNarrowLayout && isTournamentActive && matches.length && adminMobileBracketSurface === 'matches'" class="card mobile-score-center mt-3">
             <TournamentMatchList :format="tournament.format" :matches="matches" :groups="groups" :entries-map="entriesMap" :sets-by-match="setsByMatch" :live-scores-by-match="liveScoresByMatch" :can-edit-final="canEditFinalScores" :can-live-score="canUseLiveScoring" @edit-result="openRrMatch" @view-live="openLiveScoring" />
           </section>
+        <!-- Padel points formats: schedule, next rounds, points table, rounds of courts -->
+        <template v-if="isPointsFmt">
+          <section v-if="canManageTournament && !isTournamentActive && !isTournamentFinished" class="card stack stack--sm">
+            <h2 class="section-title">{{ t('pointsFormat.scheduleTitle') }}</h2>
+            <div v-if="pointsPlanNow.valid && tournament.format !== 'king_of_court' && tournament.format !== 'team_americano' && (courtOptions.length > 1 || roundOptions.length)" class="points-plan-fields">
+              <div v-if="courtOptions.length > 1" class="form-field form-field--narrow">
+                <label for="adm-points-courts">{{ t('pointsFormat.courts') }}</label>
+                <select id="adm-points-courts" :value="pointsPlanNow.courts" class="input" :disabled="actionLoading" @change="pointsCourts = Number($event.target.value)">
+                  <option v-for="n in courtOptions" :key="n" :value="n">{{ n }}</option>
+                </select>
+              </div>
+              <div v-if="roundOptions.length" class="form-field form-field--narrow">
+                <label for="adm-points-rounds">{{ t('pointsFormat.rounds') }}</label>
+                <select id="adm-points-rounds" :value="pointsPlanNow.rounds" class="input" :disabled="actionLoading" @change="pointsRoundsWanted = Number($event.target.value)">
+                  <option v-for="n in roundOptions" :key="n" :value="n">{{ n }}</option>
+                </select>
+              </div>
+            </div>
+            <p v-for="line in pointsPlanLines" :key="line" class="muted">{{ line }}</p>
+            <p v-if="hasBracket" class="muted">{{ t('standings.rrRegenerateWarn') }}</p>
+            <div class="inline-actions">
+              <button
+                class="btn btn--sm"
+                :class="hasBracket ? 'btn--danger' : 'btn--primary'"
+                type="button"
+                :disabled="actionLoading || !pointsPlanNow.valid"
+                @click="generatePointsSchedule"
+              >
+                {{ t(isDynamicFmt ? (hasBracket ? 'pointsFormat.regenerateFirst' : 'pointsFormat.generateFirst') : (hasBracket ? 'pointsFormat.regenerate' : 'pointsFormat.generate')) }}
+              </button>
+            </div>
+          </section>
+
+          <section v-if="canManageTournament && isDynamicFmt && isTournamentActive && hasBracket" class="card stack stack--sm">
+            <h2 class="section-title">{{ t('pointsFormat.nextRound') }}</h2>
+            <p v-if="!canBuildNextRound" class="muted">{{ t('pointsFormat.nextRoundWait', { n: lastRound?.round || 1 }) }}</p>
+            <div class="inline-actions">
+              <button class="btn btn--primary btn--sm" type="button" :disabled="actionLoading || !canBuildNextRound" @click="buildNextRound">
+                {{ t('pointsFormat.nextRound') }}
+              </button>
+              <button v-if="canUndoRound" class="btn btn--ghost btn--sm" type="button" :disabled="actionLoading" @click="undoLastRound">
+                {{ t('pointsFormat.undoRound') }}
+              </button>
+            </div>
+          </section>
+
+          <section v-if="hasBracket && pointsStandings.length && showAdminBracketOverview" class="card stack stack--sm mt-4">
+            <h2 class="section-title">{{ t(isIndividualFormat(tournament.format) ? 'pointsFormat.playersTable' : 'pointsFormat.pairsTable') }}</h2>
+            <PointsStandingsTable :rows="pointsStandings" :format="tournament.format" />
+          </section>
+
+          <section v-if="hasBracket && (!isNarrowLayout || !isTournamentActive)" class="card stack stack--sm mt-4">
+            <h2 class="section-title">{{ t('pointsFormat.roundsTitle') }}</h2>
+            <PointsRoundsBoard :rounds="pointsRoundsList" :entries-map="entriesMap" :live-scores-by-match="liveScoresByMatch" :format="tournament.format" :can-edit-final="canEditFinalScores" :can-live-score="canUseLiveScoring" @edit-result="openRrMatch" @view-live="openLiveScoring" />
+          </section>
+        </template>
+
         <!-- Round-robin: schedule + standings + fixtures -->
-        <template v-if="isRoundRobin">
+        <template v-else-if="isRoundRobin">
           <section v-if="canManageTournament && !isTournamentActive && !isTournamentFinished" class="card stack stack--sm">
             <h2 class="section-title">{{ t('standings.matchesTitle') }}</h2>
             <p class="muted">{{ t('standings.rrPlan', pluralParams(rrPlan, t, locale)) }}</p>
@@ -2493,6 +2650,17 @@ onBeforeUnmount(() => {
           <h2 class="empty-state__title">{{ t('admin.scoresBeforeStartTitle') }}</h2>
           <p class="empty-state__hint">{{ startBlockReason || t('admin.scoresLockedTooltip') }}</p>
         </section>
+        <!-- Padel points formats: the rounds with score entry, then the points table -->
+        <template v-else-if="isPointsFmt">
+          <section class="card stack stack--sm">
+            <h2 class="section-title">{{ t('pointsFormat.roundsTitle') }}</h2>
+            <PointsRoundsBoard :rounds="pointsRoundsList" :entries-map="entriesMap" :live-scores-by-match="liveScoresByMatch" :format="tournament.format" :can-edit-final="canEditFinalScores" :can-live-score="canUseLiveScoring" @edit-result="openRrMatch" @view-live="openLiveScoring" />
+          </section>
+          <section v-if="pointsStandings.length" class="card stack stack--sm mt-4">
+            <h2 class="section-title">{{ t(isIndividualFormat(tournament.format) ? 'pointsFormat.playersTable' : 'pointsFormat.pairsTable') }}</h2>
+            <PointsStandingsTable :rows="pointsStandings" :format="tournament.format" />
+          </section>
+        </template>
         <section v-else-if="isNarrowLayout" class="card mobile-score-center">
           <TournamentMatchList
             :format="tournament.format"
@@ -2681,8 +2849,10 @@ onBeforeUnmount(() => {
         :can-stop-live="scoreAccess.stopLive"
         :live-score="selectedLiveScore"
         :scoring-config="tournament.scoring_config || {}"
-        :team-a="teamLabel(selectedLiveMatch.side_a_entry_id)"
-        :team-b="teamLabel(selectedLiveMatch.side_b_entry_id)"
+        :team-a="sideLabel(selectedLiveMatch, 'a')"
+        :team-b="sideLabel(selectedLiveMatch, 'b')"
+        :family="tournamentScoringFamily"
+        :target="matchTarget"
         @close="closeAdminScoreModal"
         @changed="scheduleScoreReload"
       />
@@ -2727,6 +2897,7 @@ onBeforeUnmount(() => {
         :match="matches.find(m => m.id === selectedRrMatch.id) || selectedRrMatch"
         :entries-map="entriesMap"
         :family="tournamentScoringFamily"
+        :target="matchTarget"
         :set-format="tournament.set_format || 'best_of_3'"
         :scoring-config="tournament.scoring_config || {}"
         :sets="setsByMatch[selectedRrMatch.id] || []"
@@ -2742,6 +2913,7 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.points-plan-fields { display: flex; flex-wrap: wrap; gap: var(--space-3); }
 /* Entry rows (approve / roster) */
 .participant-item { gap: var(--space-3); }
 

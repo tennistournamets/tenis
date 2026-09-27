@@ -19,6 +19,10 @@ export const LABELS = {
       round_robin: 'Круговая',
       groups_playoff: 'Группы + плей-офф',
       double_elimination: 'Двойное выбывание',
+      americano: 'Americano',
+      mexicano: 'Mexicano',
+      team_americano: 'Team Americano',
+      king_of_court: 'King of the Court',
     },
     status: {
       registration_open: 'Идёт регистрация',
@@ -37,6 +41,10 @@ export const LABELS = {
       round_robin: 'Round robin',
       groups_playoff: 'Groups + playoff',
       double_elimination: 'Double elimination',
+      americano: 'Americano',
+      mexicano: 'Mexicano',
+      team_americano: 'Team Americano',
+      king_of_court: 'King of the Court',
     },
     status: {
       registration_open: 'Registration is open',
@@ -55,6 +63,10 @@ export const LABELS = {
       round_robin: 'Ratų sistema',
       groups_playoff: 'Grupės + atkrentamosios',
       double_elimination: 'Dvigubos eliminacijos',
+      americano: 'Americano',
+      mexicano: 'Mexicano',
+      team_americano: 'Team Americano',
+      king_of_court: 'King of the Court',
     },
     status: {
       registration_open: 'Vyksta registracija',

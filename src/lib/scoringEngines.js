@@ -15,6 +15,13 @@ export const scoringEngines = {
     // Aggregate badge from sets won.
     formatAggregate: (a, b) => `${a ?? 0}:${b ?? 0}`,
   },
+  // Padel points formats: rallies counted up to a total of N (state.target).
+  points: {
+    family: 'points',
+    createInitialState: (target = 24) => ({ family: 'points', points: { a: 0, b: 0 }, target, winner: null }),
+    formatScore: (state) => `${state?.points?.a ?? 0} : ${state?.points?.b ?? 0}`,
+    formatAggregate: (a, b) => `${a ?? 0} : ${b ?? 0}`,
+  },
   goals: {
     family: 'goals',
     createInitialState: () => ({ a: 0, b: 0, winner: null }),
@@ -23,6 +30,6 @@ export const scoringEngines = {
   },
 }
 
-export function getEngine(sport) {
-  return scoringEngines[scoringFamily(sport)] ?? scoringEngines.sets
+export function getEngine(sport, format = null) {
+  return scoringEngines[scoringFamily(sport, format)] ?? scoringEngines.sets
 }

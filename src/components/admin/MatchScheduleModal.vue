@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import DateTimeField from '../DateTimeField.vue'
 import { useI18n } from 'vue-i18n'
 import AppModal from '../AppModal.vue'
-import { entryDisplayNames } from '../../lib/entryDisplay'
+import { matchSideLabel } from '../../lib/entryDisplay'
 import { supabase } from '../../lib/supabase'
 import { conflictText, hasHardConflict, isoToZonedLocal, scheduleError, timezoneOf, zonedLocalToIso } from '../../lib/schedule'
 
@@ -69,15 +69,12 @@ const modes = computed(() => [
 const hardConflict = computed(() => hasHardConflict(conflicts.value))
 const softOnly = computed(() => conflicts.value.length > 0 && !hardConflict.value)
 
-function teamLabel(entryId) {
-  if (!entryId) return t('bracket.tbd')
-  const names = entryDisplayNames(props.entriesMap[entryId])
-  return names.length ? names.join(' / ') : t('bracket.tbd')
-}
-const title = computed(() => `${teamLabel(props.match.side_a_entry_id)} — ${teamLabel(props.match.side_b_entry_id)}`)
+// Both players of a side in points formats (Americano…), the entry otherwise.
+const sideLabel = (match, side) => matchSideLabel(match, side, props.entriesMap, t('bracket.tbd'))
+const title = computed(() => `${sideLabel(props.match, 'a')} — ${sideLabel(props.match, 'b')}`)
 function matchLabel(matchId) {
   const other = props.matches.find(m => m.id === matchId)
-  return other ? `${teamLabel(other.side_a_entry_id)} — ${teamLabel(other.side_b_entry_id)}` : ''
+  return other ? `${sideLabel(other, 'a')} — ${sideLabel(other, 'b')}` : ''
 }
 
 async function runCheck() {

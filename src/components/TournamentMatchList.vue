@@ -3,7 +3,7 @@ import { computed, inject, ref, useId, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { compareBySchedule, scheduleSummary } from '../lib/schedule'
 
-import { entryDisplayNames } from '../lib/entryDisplay'
+import { matchSideLabel } from '../lib/entryDisplay'
 import { formatSetScore } from '../lib/tennisRules'
 import { knockoutTotals, matchRoundName } from '../lib/roundLabels'
 import { pointLabel, scoreLine } from '../lib/useTennisScoring'
@@ -41,11 +41,14 @@ const scheduleIsDraft = match => Boolean(scheduleView?.value?.draftIds?.has(matc
 
 const stageOrder = { group: 0, winners: 1, main: 1, losers: 2, grand_final: 3, third_place: 4 }
 
-function teamLabel(entryId) {
-  if (!entryId) return t('bracket.tbd')
-  const names = entryDisplayNames(props.entriesMap[entryId])
-  return names.length ? names.join(' / ') : t('bracket.tbd')
-}
+// One entry per side, or both players of a points-format match (Americano…).
+const sideLabel = (match, side) => matchSideLabel(match, side, props.entriesMap, t('bracket.tbd'))
+// Points formats count rallies (state.points), tennis counts games and sets.
+const isPointsState = state => state?.family === 'points'
+const liveLine = state => (isPointsState(state) ? t('pointsFormat.liveTarget', { n: state.target }) : scoreLine(state))
+const livePoints = state => (isPointsState(state)
+  ? `${state.points?.a ?? 0} : ${state.points?.b ?? 0}`
+  : `${pointLabel(state, 'a')} : ${pointLabel(state, 'b')}`)
 
 function isLive(match) {
   return props.liveScoresByMatch[match.id]?.status === 'active'
@@ -115,7 +118,7 @@ const visibleMatches = computed(() => {
       if (statusFilter.value !== 'all' && statusFilter.value !== 'current' && state !== statusFilter.value) return false
       if (stageFilter.value !== 'all' && (match.stage || 'main') !== stageFilter.value) return false
       if (!needle) return true
-      return `${teamLabel(match.side_a_entry_id)} ${teamLabel(match.side_b_entry_id)}`.toLocaleLowerCase().includes(needle)
+      return `${sideLabel(match, 'a')} ${sideLabel(match, 'b')}`.toLocaleLowerCase().includes(needle)
     })
     .sort((a, b) => {
       if (sortByTime.value) {
@@ -202,14 +205,14 @@ const visibleMatches = computed(() => {
         </p>
 
         <div class="mobile-match__teams">
-          <strong :class="{ 'mobile-match__winner': match.winner_entry_id === match.side_a_entry_id }">{{ teamLabel(match.side_a_entry_id) }}</strong>
+          <strong :class="{ 'mobile-match__winner': match.winner_entry_id === match.side_a_entry_id }">{{ sideLabel(match, 'a') }}</strong>
           <span aria-hidden="true">—</span>
-          <strong :class="{ 'mobile-match__winner': match.winner_entry_id === match.side_b_entry_id }">{{ teamLabel(match.side_b_entry_id) }}</strong>
+          <strong :class="{ 'mobile-match__winner': match.winner_entry_id === match.side_b_entry_id }">{{ sideLabel(match, 'b') }}</strong>
         </div>
 
         <div v-if="isLive(match)" class="mobile-match__score mobile-match__score--live">
-          <span>{{ scoreLine(liveScoresByMatch[match.id].state) }}</span>
-          <strong>{{ pointLabel(liveScoresByMatch[match.id].state, 'a') }} : {{ pointLabel(liveScoresByMatch[match.id].state, 'b') }}</strong>
+          <span>{{ liveLine(liveScoresByMatch[match.id].state) }}</span>
+          <strong>{{ livePoints(liveScoresByMatch[match.id].state) }}</strong>
         </div>
         <div v-else-if="match.status === 'finished'" class="mobile-match__score">
           <span>{{ t('mobile.finalScore') }}</span><strong>{{ finalScore(match) }}</strong>

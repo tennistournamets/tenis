@@ -30,6 +30,9 @@ const props = defineProps({
     type: String,
     required: true,
   },
+  // 'points' for the padel points formats: rallies counted up to target.
+  family: { type: String, default: 'sets' },
+  target: { type: Number, default: 24 },
 })
 
 const emit = defineEmits(['close', 'changed'])
@@ -60,7 +63,13 @@ watch(
 )
 
 const state = computed(() => currentLiveScore.value?.state || null)
-const norm = computed(() => (state.value ? normalizeTennisState(state.value) : null))
+const isPoints = computed(() => props.family === 'points' || state.value?.family === 'points')
+const norm = computed(() => (state.value && !isPoints.value ? normalizeTennisState(state.value) : null))
+// Points match: the score is the rally count; it ends when both add up to the total.
+const pointsTotal = computed(() => state.value?.target ?? props.target)
+const pointsLeft = computed(() => Math.max(0, pointsTotal.value - (state.value?.points?.a ?? 0) - (state.value?.points?.b ?? 0)))
+const tennisState = computed(() => (isPoints.value ? null : state.value))
+const ruleHint = computed(() => (isPoints.value ? '' : liveRuleHint(state.value, t)))
 const revision = computed(() => currentLiveScore.value?.revision ?? 0)
 const canUndo = computed(() => (currentLiveScore.value?.history || []).length > 0)
 const isFinished = computed(() => currentLiveScore.value?.status === 'finished' || Boolean(state.value?.winner))
@@ -97,7 +106,7 @@ const autoSides = computed(() =>
   currentLiveScore.value ? currentLiveScore.value.sides_auto !== false : pendingAuto.value,
 )
 // Deferred: after a completed game the flip waits for the celebration.
-const autoChangeover = useDeferredChangeover(state)
+const autoChangeover = useDeferredChangeover(tennisState)
 const displaySwapped = computed(
   () => baseSwapped.value !== (autoSides.value ? autoChangeover.value : false),
 )
@@ -340,6 +349,7 @@ async function stopLive() {
           <p class="live-modal__status">
             <span v-if="isActive" class="live-modal__badge"><span class="live-dot"></span>{{ t('live.live') }}</span>
             <span v-if="isActive && norm" class="live-modal__set">{{ norm.isMatchTiebreak ? t('tennisRules.matchTiebreak') : t('live.setN', { n: norm.currentSet }) }}</span>
+            <span v-if="isActive && isPoints" class="live-modal__set">{{ t('pointsFormat.liveLeft', { n: pointsLeft }) }}</span>
             <span v-if="!isActive" class="muted">{{ statusText }}</span>
           </p>
         </div>
@@ -347,7 +357,8 @@ async function stopLive() {
       </div>
 
       <div class="live-sides">
-        <label class="switch">
+        <!-- Automatic changeovers follow tennis games; a points match only swaps by hand. -->
+        <label v-if="!isPoints" class="switch">
           <input type="checkbox" :checked="autoSides" :disabled="!isSessionCurrent() || !isOnline || savingSides || (currentLiveScore && loading) || pendingTaps > 0" @change="toggleAutoSides" />
           <span class="switch__track"><span class="switch__thumb"></span></span>
           <span class="switch__label">{{ t('live.autoSwap') }}</span>
@@ -374,13 +385,14 @@ async function stopLive() {
       <TransitionGroup name="side-swap" tag="div" class="live-board">
         <div v-for="side in sides" :key="side" class="live-board__row">
           <strong class="live-board__name">{{ teamName(side) }}</strong>
-          <span class="live-board__sets">{{ completedSets(side) }} {{ norm && !norm.winner && !norm.isMatchTiebreak ? norm.games[side] : '' }}</span>
-          <span class="live-board__points">{{ pointLabel(state, side) }}</span>
+          <span v-if="!isPoints" class="live-board__sets">{{ completedSets(side) }} {{ norm && !norm.winner && !norm.isMatchTiebreak ? norm.games[side] : '' }}</span>
+          <span class="live-board__points">{{ isPoints ? (state?.points?.[side] ?? 0) : pointLabel(state, side) }}</span>
         </div>
       </TransitionGroup>
 
-      <p v-if="!state" class="muted">{{ tennisRulesSummary(scoringConfig, t) }}</p>
-      <div v-if="liveRuleHint(state, t)" class="alert alert--info" role="status">{{ liveRuleHint(state, t) }}</div>
+      <p v-if="isPoints" class="muted">{{ t('pointsFormat.liveTarget', { n: pointsTotal }) }}<template v-if="state?.winner === 'draw'"> · {{ t('pointsFormat.liveDraw') }}</template></p>
+      <p v-else-if="!state" class="muted">{{ tennisRulesSummary(scoringConfig, t) }}</p>
+      <div v-if="ruleHint" class="alert alert--info" role="status">{{ ruleHint }}</div>
       <p v-if="state?.isTiebreak" class="muted live-rule-hint">{{ t(state.isMatchTiebreak ? 'tennisRules.matchServingHint' : state.tiebreakMargin === 1 ? 'tennisRules.shortServingHint' : 'tennisRules.servingHint') }}</p>
 
       <template v-if="!isFinished">
@@ -477,6 +489,7 @@ async function stopLive() {
 }
 
 .live-sides__swap {
+  margin-left: auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;

@@ -3,6 +3,7 @@
 // get_standings for an all-play-all), plus the matches still to be played
 // when the organizer finishes the tournament.
 import { correctionMatchTitle } from './roundLabels.js'
+import { isDynamicFormat, isPointsFormat } from './sportConfig.js'
 
 const KNOCKOUT_FORMATS = new Set(['single_elimination', 'double_elimination', 'groups_playoff'])
 const STAGE_ORDER = { group: 0, main: 1, winners: 2, losers: 3, third_place: 4, grand_final: 5 }
@@ -43,7 +44,8 @@ export function unplayedMatches(format, matches = []) {
  * Knockout formats: the winner of the final (SE), grand final (DE) or playoff
  * final (groups). Round robin: the standings leader once every match is played,
  * or when the organizer has finished the tournament; a shared first place has
- * no single champion.
+ * no single champion. Points formats: the leader of the points table (a player
+ * in Americano, Mexicano and King of the Court).
  */
 export function tournamentChampion({ format, status, matches = [], standings = [] } = {}) {
   if (KNOCKOUT_FORMATS.has(format)) {
@@ -51,10 +53,12 @@ export function tournamentChampion({ format, status, matches = [], standings = [
     if (!final || !isFinished(final) || !final.winner_entry_id) return null
     return { entryId: final.winner_entry_id, source: 'final', matchId: final.id }
   }
-  if (format === 'round_robin') {
+  if (format === 'round_robin' || isPointsFormat(format)) {
     if (!standings.length || !matches.some(isFinished)) return null
     const complete = unplayedMatches(format, matches).length === 0
-    if (!complete && status !== 'completed') return null
+    // Mexicano and King of the Court can always play one more round: their
+    // leader is the champion only once the organizer finishes the tournament.
+    if ((!complete || isDynamicFormat(format)) && status !== 'completed') return null
     const ranks = standings.map(r => Number(r.rank)).filter(Number.isFinite)
     const top = Math.min(...ranks)
     const leaders = standings.filter(r => Number(r.rank) === top)
@@ -71,7 +75,7 @@ const SHOWN_UNPLAYED = 8
  * everything is played, otherwise an explicit warning with the unplayed
  * matches (the first few by name, then a count).
  */
-export function finishConfirmation({ format, matches = [], groups = [], label = id => id || '', t }) {
+export function finishConfirmation({ format, matches = [], groups = [], label = id => id || '', sideLabel = null, t }) {
   const unplayed = unplayedMatches(format, matches)
   if (!unplayed.length) return { message: t('admin.finishTournamentConfirm'), options: {}, unplayed: 0 }
   const groupNames = Object.fromEntries(groups.map(g => [g.id, g.name]))
@@ -80,7 +84,7 @@ export function finishConfirmation({ format, matches = [], groups = [], label = 
     // The names of the board and the correction preview: "Semifinal · №1",
     // "Upper bracket · Final · №1", "Group A · Tour 2 · №3", "Tour 3 · №2".
     title: correctionMatchTitle(m, matches, t, { format, groupNames }),
-    teams: `${label(m.side_a_entry_id)} — ${label(m.side_b_entry_id)}`,
+    teams: sideLabel ? `${sideLabel(m, 'a')} — ${sideLabel(m, 'b')}` : `${label(m.side_a_entry_id)} — ${label(m.side_b_entry_id)}`,
     effect: t('lifecycle.unplayed'),
   }))
   if (unplayed.length > SHOWN_UNPLAYED) {
