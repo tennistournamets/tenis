@@ -21,6 +21,7 @@
 | Скорость | `scripts/vite-locale-messages.js`, `vercel.json` | Скачивается только нужный язык (общий JS 196 → 128 КБ gzip), шрифты грузятся параллельно, файлы `/assets` кэшируются навсегда. |
 | «Сделано в Bracketa» | `src/components/MadeWithBracketa.vue` | Внизу каждой публичной страницы турнира. Ссылка на главную с `utm_source=bracketa&utm_medium=tournament_page&utm_campaign=made_with`. |
 | Аналитика | `src/lib/analytics.js` | Umami без cookies, поэтому баннер согласия не нужен. Выключена, пока не задан `VITE_UMAMI_WEBSITE_ID`. |
+| IndexNow (Bing → ChatGPT, Copilot; Yandex) | `api/indexnow.js`, `api/_indexnow.js`, `public/<ключ>.txt`, `vercel.json` → `crons` | Каждый день в 05:00 UTC Vercel Cron отправляет в IndexNow публичные турниры и статьи блога, изменённые за 25 часов. Работает, только если в Vercel задан `CRON_SECRET`. Полная переотправка всех адресов (после изменений главной или блога): `npm run indexnow` (`-- --dry-run` — только список). Ключ публичный по задумке: поисковики проверяют файл `/<ключ>.txt`. Google IndexNow не использует. |
 
 ## Блог (статьи для поиска)
 
@@ -118,7 +119,8 @@
 ### 4. Проверить языковые версии
 - `curl -s https://<домен>/ | grep -o '<title>.*</title>'` — литовский заголовок, `/ru` — русский.
 - Google Search Console → URL Inspection → `https://<домен>/` и `https://<домен>/ru` → «Проверить URL на сайте» → скриншот и HTML.
-- Bing Webmaster Tools (https://www.bing.com/webmasters) — импортировать сайт из Search Console: Bing используют ChatGPT и Copilot.
+- Bing Webmaster Tools (https://www.bing.com/webmasters) — импортировать сайт из Search Console: Bing используют ChatGPT и Copilot. Sitemap при импорте могут не перенестись — отправить `sitemap.xml` и `blog/sitemap.xml` вручную (Sitemaps → Submit sitemap).
+- IndexNow: Vercel → Environment Variables (Production) → `CRON_SECRET` = `openssl rand -hex 32` → Redeploy. Проверка: Vercel → Project → Settings → Cron Jobs → `/api/indexnow` → Run; в Bing Webmaster → IndexNow появятся отправленные адреса.
 
 ### 5. Проверить превью
 - https://www.opengraph.xyz/ или https://developers.facebook.com/tools/debug/: вставить ссылку на турнир.
