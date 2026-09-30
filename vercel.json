@@ -52,6 +52,14 @@
       "destination": "/en/blog/:slug.html"
     },
     {
+      "source": "/:doc(privacy|terms)",
+      "destination": "/:doc.html"
+    },
+    {
+      "source": "/:lang(ru|en)/:doc(privacy|terms)",
+      "destination": "/:lang/:doc.html"
+    },
+    {
       "source": "/admin",
       "destination": "/app.html"
     },

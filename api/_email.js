@@ -1,6 +1,6 @@
 // Participant emails (lt / ru / en). Every string from the database is escaped; each
 // email links to the tournament page and invites the reader to run their own tournament.
-import { DEFAULT_LOCALE, isLocale, landingPath } from '../src/lib/localeRoute.js'
+import { DEFAULT_LOCALE, isLocale, landingPath, legalPath } from '../src/lib/localeRoute.js'
 import { SITE_NAME, escapeHtml } from '../src/lib/seo.js'
 
 const COPY = {
@@ -9,6 +9,7 @@ const COPY = {
     open: 'Atidaryti turnyro puslapį',
     why: t => `Šį laišką gavote, nes užsiregistravote į turnyrą „${t}“ ${SITE_NAME} platformoje.`,
     growth: 'Organizuojate turnyrą? Sukurkite jį nemokamai',
+    privacy: 'Privatumo politika',
     court: c => `, kortas: ${c}`,
     kinds: {
       registration_received: { subject: t => `Registracija gauta: ${t}`, body: t => `Gavome jūsų registraciją į turnyrą „${t}“. Organizatorius ją peržiūrės, o apie sprendimą pranešime el. paštu.` },
@@ -23,6 +24,7 @@ const COPY = {
     open: 'Открыть страницу турнира',
     why: t => `Вы получили это письмо, потому что зарегистрировались на турнир «${t}» в ${SITE_NAME}.`,
     growth: 'Организуете турнир? Создайте его бесплатно',
+    privacy: 'Политика конфиденциальности',
     court: c => `, корт: ${c}`,
     kinds: {
       registration_received: { subject: t => `Заявка получена: ${t}`, body: t => `Мы получили вашу заявку на турнир «${t}». Организатор её рассмотрит, а о решении мы сообщим по почте.` },
@@ -37,6 +39,7 @@ const COPY = {
     open: 'Open the tournament page',
     why: t => `You received this email because you signed up for “${t}” on ${SITE_NAME}.`,
     growth: 'Running a tournament? Create yours for free',
+    privacy: 'Privacy policy',
     court: c => `, court: ${c}`,
     kinds: {
       registration_received: { subject: t => `Registration received: ${t}`, body: t => `We have received your registration for “${t}”. The organiser will review it and we will email you the decision.` },
@@ -70,11 +73,12 @@ export function buildEmail(row, origin) {
   }
   const pageUrl = `${origin}/tournaments/${encodeURIComponent(row.tournament_slug)}?utm_source=email&utm_medium=notification&utm_campaign=${row.kind}`
   const homeUrl = `${origin}${landingPath(locale)}?utm_source=email&utm_medium=notification&utm_campaign=growth`
+  const privacyUrl = `${origin}${legalPath(locale, 'privacy')}`
   const subject = kind.subject(tournament)
   const hello = copy.hello(row.entry_name || '')
   const body = kind.body(tournament, match)
   const e = escapeHtml
-  const text = [hello, '', body, '', `${copy.open}: ${pageUrl}`, '', '—', copy.why(tournament), `${copy.growth}: ${homeUrl}`].join('\n')
+  const text = [hello, '', body, '', `${copy.open}: ${pageUrl}`, '', '—', copy.why(tournament), `${copy.growth}: ${homeUrl}`, `${copy.privacy}: ${privacyUrl}`].join('\n')
   const html = `<!doctype html>
 <html lang="${locale}"><body style="margin:0;padding:0;background:#F7F7F4;font-family:Arial,Helvetica,sans-serif;color:#14201B">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F7F7F4"><tr><td align="center" style="padding:24px 12px">
@@ -87,7 +91,8 @@ export function buildEmail(row, origin) {
 </td></tr>
 <tr><td style="padding:16px 28px 24px;border-top:1px solid #E4E7E2;font-size:13px;line-height:1.5;color:#5E6B64">
 <p style="margin:0 0 8px">${e(copy.why(tournament))}</p>
-<p style="margin:0"><a href="${e(homeUrl)}" style="color:#0F7B4D">${e(copy.growth)} →</a></p>
+<p style="margin:0 0 8px"><a href="${e(homeUrl)}" style="color:#0F7B4D">${e(copy.growth)} →</a></p>
+<p style="margin:0"><a href="${e(privacyUrl)}" style="color:#5E6B64">${e(copy.privacy)}</a></p>
 </td></tr></table>
 </td></tr></table></body></html>`
   return { subject, html, text }

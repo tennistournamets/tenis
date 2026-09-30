@@ -11,6 +11,7 @@ import { installPrerenderGlobals } from './prerender-env.mjs'
 import { DEFAULT_LOCALE, LOCALES, landingPath } from '../src/lib/localeRoute.js'
 import { landingHead, replaceHeadBlock, shellHead, siteOrigin } from '../src/lib/seo.js'
 import { writeBlog } from './blog.mjs'
+import { writeLegal } from './legal.mjs'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
 const dist = `${root}dist/`
@@ -109,6 +110,8 @@ async function main() {
   }
   const articles = writeBlog(dist, { origin, env: { ...process.env, ...env } })
   console.log(`blog: ${articles.length} pages -> dist/blog, dist/<lang>/blog`)
+  const legal = writeLegal(dist, { origin, env: { ...process.env, ...env } })
+  console.log(`legal: ${legal.join(', ')}`)
   // The manifest is a build artifact only; don't publish it.
   rmSync(`${dist}.vite`, { recursive: true, force: true })
 }
