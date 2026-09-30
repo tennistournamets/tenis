@@ -60,6 +60,14 @@ test('status changes queue approved / rejected / waitlisted once each, and nothi
   await ctx.db.query("insert into entries(id,tournament_id,entry_type,display_name,phone_or_email,status) values ($1,$2,'singles','Phone','+37060033333','pending')", [phoneOnly, t.id])
   await ctx.db.query("update entries set status='approved' where id=$1", [phoneOnly])
   assert.deepEqual(await outbox(phoneOnly), [])
+
+  // Entries added by the admin form carry a placeholder that only looks like an email.
+  const placeholder = randomUUID()
+  await ctx.db.query("insert into entries(id,tournament_id,entry_type,display_name,phone_or_email,status) values ($1,$2,'singles','Manual',$3,'pending')", [placeholder, t.id, `admin-entry-${randomUUID()}@local.tenis`])
+  await ctx.db.query("update entries set status='approved' where id=$1", [placeholder])
+  assert.deepEqual(await outbox(placeholder), [])
+  assert.equal((await ctx.db.query("select entry_email('ADMIN-entry-1@local.tenis', null) e")).rows[0].e, null)
+  assert.equal((await ctx.db.query("select entry_email(null, 'Ann@Mail.test') e")).rows[0].e, 'ann@mail.test')
 })
 
 test('a full tournament with a waitlist queues "waitlisted"', async () => {

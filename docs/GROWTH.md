@@ -52,26 +52,34 @@
 
 Включение:
 1. Применить миграцию `supabase/migrations/20260926200333_participant_notifications.sql` к TENIS (после резервной копии, как в `docs/RELEASE.md`).
-2. https://resend.com → аккаунт → подтвердить домен (DNS-записи) → создать API key. Бесплатно: 3 000 писем в месяц, 100 в день.
+2. https://resend.com → аккаунт → Domains → домен (регион Ireland eu-west-1) → DNS-записи у регистратора: TXT `resend._domainkey` (DKIM), CNAME `send` и `rsend` (отправка), TXT `_dmarc` = `v=DMARC1; p=none;` → Verified → API Keys → ключ с правом Sending access. Бесплатно: 3 000 писем в месяц, 100 в день.
 3. Vercel → Environment Variables (Production), **без** префикса `VITE_`:
    - `RESEND_API_KEY` — ключ Resend;
    - `EMAIL_FROM` — например `Bracketa <turnyrai@ваш-домен>` (домен из шага 2);
-   - `SUPABASE_SERVICE_ROLE_KEY` — Supabase → Project Settings → API Keys → secret key;
+   - `SUPABASE_SERVICE_ROLE_KEY` — Supabase → Project Settings → API Keys → secret key (`sb_secret_…`, лучше отдельный для Vercel);
    - `NOTIFICATIONS_SECRET` — любая длинная случайная строка (`openssl rand -hex 32`).
-4. Supabase → SQL Editor (подставить домен и секрет):
+4. Секрет в Supabase Vault (сам секрет не попадает ни в SQL, ни в чат; команда копирует его в буфер для шага 3):
+   ```sh
+   S=$(openssl rand -hex 32); (set -a; . ./.env; PGPASSWORD="$SUPABASE_DB_PASSWORD" psql "<строка подключения к пулеру>" -Atc "select vault.create_secret('$S', 'bracketa_notifications_secret', 'Bearer for /api/notifications')") && printf %s "$S" | pbcopy
+   ```
+   Затем таймер (секрет читается из Vault при каждом запуске):
    ```sql
    create extension if not exists pg_net;
    create extension if not exists pg_cron;
-   select cron.schedule('bracketa-notifications', '* * * * *', $$
+   select cron.schedule('bracketa-notifications', '* * * * *', $cron$
      select net.http_post(
        url := 'https://<домен>/api/notifications',
-       headers := jsonb_build_object('Authorization', 'Bearer <NOTIFICATIONS_SECRET>', 'Content-Type', 'application/json'),
+       headers := jsonb_build_object(
+         'Authorization', 'Bearer ' || (select decrypted_secret from vault.decrypted_secrets where name = 'bracketa_notifications_secret'),
+         'Content-Type', 'application/json'),
        body := '{}'::jsonb
      ) where public.notifications_due();
-   $$);
+   $cron$);
    ```
+   Пауза без удаления: `select cron.alter_job(<jobid>, active := false);`. Ответы функции: `select status_code, content from net._http_response order by created desc limit 5;`.
 5. Проверка: зарегистрироваться на свой тестовый турнир со своим email → письмо «заявка получена» в течение минуты. Состояние очереди: `select kind, status, attempts, last_error from notification_outbox order by created_at desc limit 20;`
 6. Отключить: `select cron.unschedule('bracketa-notifications');`
+7. Участники, добавленные организатором вручную, получают служебный контакт `admin-entry-<uuid>@local.tenis`: `entry_email()` его не считает адресом, писем им нет. В Resend → Emails статус Bounced означает несуществующий адрес: частые отказы портят репутацию домена.
 
 ## События аналитики
 
