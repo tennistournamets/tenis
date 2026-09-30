@@ -84,6 +84,7 @@ src/
   styles.css                  # Global styles
 api/                          # Vercel functions: preview.js (OG tags for messenger bots), og.js (per-tournament PNG via @vercel/og; _og-card.js layout, _fonts/), robots.js, sitemap.js, notifications.js (email sender; _notifier.js, _email.js)
 content/blog/<lang>/*.md      # Blog articles (front matter: title, description, key, date); every key in all 3 languages
+content/legal/<lang>/{privacy,terms}.md  # Privacy policy + terms of use (scripts/legal.mjs -> /privacy, /terms, /ru/…, /en/…; linked from footers, registration form, emails)
 public/embed.js               # Club-site loader: iframe + auto height (postMessage, origin-checked)
 scripts/vite-locale-messages.js  # Vite plugin: virtual:bracketa-locale/<code> = one locale as JSON chunk
 scripts/prerender.mjs         # Post-build: Vue SSR of the landing -> dist/index.html (lt), en.html, ru.html + dist/app.html shell
@@ -105,6 +106,7 @@ supabase/
 | `/embed/:slug` | PublicTournamentView `embed` mode (club-site widget, noindex) | No |
 | `/tournaments/:slug/poster` | TournamentPosterView (A4 print, QR with utm_source=poster) | No |
 | `/blog/…`, `/ru/blog/…`, `/en/blog/…` | static pages from `content/blog/<lang>/*.md` (scripts/blog.mjs), not the SPA | No |
+| `/privacy`, `/terms`, `/ru/…`, `/en/…` | static pages from `content/legal/<lang>/*.md` (scripts/legal.mjs), not the SPA | No |
 | anything else | NotFoundView (HTTP 404 on Vercel via `dist/404.html`) | No |
 | `/admin/tournaments` | AdminTournamentListView | Yes |
 | `/admin/tournaments/new` | AdminTournamentCreateView | Yes |

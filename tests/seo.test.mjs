@@ -148,6 +148,8 @@ test('vercel.json sends messenger crawlers to the preview and keeps browsers and
     '/ru/blog/:slug': '/ru/blog/:slug.html',
     '/en/blog': '/en/blog/index.html',
     '/en/blog/:slug': '/en/blog/:slug.html',
+    '/:doc(privacy|terms)': '/:doc.html',
+    '/:lang(ru|en)/:doc(privacy|terms)': '/:lang/:doc.html',
     '/admin': '/app.html',
     '/admin/:path*': '/app.html',
     '/tournaments/:slug': '/app.html',

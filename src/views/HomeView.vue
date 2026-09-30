@@ -13,7 +13,7 @@ import { useNarrowLayout } from '../lib/useNarrowLayout'
 import { tilt } from '../lib/tilt'
 import { useReveal } from '../lib/useReveal'
 import { useAuthStore } from '../stores/auth'
-import { DEFAULT_LOCALE, landingPath } from '../lib/localeRoute'
+import { DEFAULT_LOCALE, landingPath, legalPath } from '../lib/localeRoute'
 
 const { t, locale } = useI18n()
 const activeStep = ref(1)
@@ -241,6 +241,6 @@ function scrollTo(id) {
       <div v-if="!compact" class="cta-stage" data-stage="trophy" aria-hidden="true"><LandingStill kind="cup" /></div>
       <div class="landing-cta__inner reveal"><p class="landing-eyebrow">{{ t('home.cinematic.closingEyebrow') }}</p><h2 class="landing-cta__title">{{ t('home.cinematic.closingTitle') }}</h2><p class="landing-cta__subtitle">{{ t('home.cinematic.closingText') }}</p><button class="cinema-button" :disabled="signingIn" :aria-busy="signingIn" aria-describedby="closing-signin-note" @click="goRegister">{{ t(signingIn ? 'home.cinematic.signingIn' : 'home.cinematic.cta') }}<span aria-hidden="true">↗</span></button><p id="closing-signin-note" class="landing-hero__note">{{ t('home.cinematic.note') }}</p><p v-if="signInError" class="cinema-error" role="alert">{{ signInError }}</p></div>
     </section>
-    <footer class="landing-footer"><a class="footer-brand" href="#top" @click.prevent="scrollTo('top')">Bracketa<span>.</span></a><span>{{ t('home.cinematic.footer') }}</span><span class="landing-footer__copy">&copy; {{ new Date().getFullYear() }} Bracketa</span><a class="landing-footer__blog" :href="blogHref">{{ t('app.blog') }}</a><nav class="landing-footer__langs" aria-label="Language / Язык / Kalba"><RouterLink v-for="item in languages" :key="item.code" :to="landingPath(item.code)" :hreflang="item.code" :lang="item.code" :aria-current="locale === item.code ? 'page' : undefined">{{ item.name }}</RouterLink></nav></footer>
+    <footer class="landing-footer"><a class="footer-brand" href="#top" @click.prevent="scrollTo('top')">Bracketa<span>.</span></a><span>{{ t('home.cinematic.footer') }}</span><span class="landing-footer__copy">&copy; {{ new Date().getFullYear() }} Bracketa</span><a class="landing-footer__blog" :href="blogHref">{{ t('app.blog') }}</a><nav class="landing-footer__legal" :aria-label="t('app.privacy')"><a :href="legalPath(locale, 'privacy')">{{ t('app.privacy') }}</a><a :href="legalPath(locale, 'terms')">{{ t('app.terms') }}</a></nav><nav class="landing-footer__langs" aria-label="Language / Язык / Kalba"><RouterLink v-for="item in languages" :key="item.code" :to="landingPath(item.code)" :hreflang="item.code" :lang="item.code" :aria-current="locale === item.code ? 'page' : undefined">{{ item.name }}</RouterLink></nav></footer>
   </div>
 </template>

@@ -362,6 +362,8 @@ export const messages = {
       notFoundText: 'Возможно, ссылка устарела или в адресе опечатка.',
       notFoundHome: 'На главную',
       blog: 'Статьи',
+      privacy: 'Политика конфиденциальности',
+      terms: 'Условия использования',
     },
     home: {
       cinematic: cinematicMessages.ru,
@@ -566,6 +568,9 @@ export const messages = {
     registrationForm: {
       displayNameHint: 'Если оставить пустым, в сетке будет имя и фамилия.',
       requiredLegend: 'обязательные поля',
+      legalNote: 'Отправляя заявку, вы принимаете {terms} и {privacy}.',
+      legalTerms: 'условия использования',
+      legalPrivacy: 'политику конфиденциальности',
       contactsPrivate: 'Телефон и email не публикуются: они нужны организатору, чтобы связаться с вами. На email придут уведомления о заявке и напоминания о матчах.',
       doublesNote: 'Парный разряд: в заявке два игрока.',
       doublesRandomNote: 'Парный разряд: партнёр необязателен — без него организатор подберёт пару.',
@@ -1583,6 +1588,8 @@ export const messages = {
       notFoundText: 'The link may be outdated or the address may have a typo.',
       notFoundHome: 'Go to the home page',
       blog: 'Guides',
+      privacy: 'Privacy policy',
+      terms: 'Terms of use',
     },
     home: {
       cinematic: cinematicMessages.en,
@@ -1787,6 +1794,9 @@ export const messages = {
     registrationForm: {
       displayNameHint: 'Leave empty to show the full name.',
       requiredLegend: 'required fields',
+      legalNote: 'By registering you accept the {terms} and the {privacy}.',
+      legalTerms: 'terms of use',
+      legalPrivacy: 'privacy policy',
       contactsPrivate: 'Phone and email are not published: the organizer uses them to reach you. Updates on your registration and match reminders go to your email.',
       doublesNote: 'Doubles: two players per entry.',
       doublesRandomNote: 'Doubles: a partner is optional — without one the organizer will find you a pair.',
@@ -2804,6 +2814,8 @@ export const messages = {
       notFoundText: 'Galbūt nuoroda pasenusi arba adrese yra klaida.',
       notFoundHome: 'Į pradžią',
       blog: 'Straipsniai',
+      privacy: 'Privatumo politika',
+      terms: 'Naudojimo sąlygos',
     },
     home: {
       cinematic: cinematicMessages.lt,
@@ -3008,6 +3020,9 @@ export const messages = {
     registrationForm: {
       displayNameHint: 'Palikus tuščią, bus rodomas vardas ir pavardė.',
       requiredLegend: 'privalomi laukai',
+      legalNote: 'Registruodamiesi sutinkate su {terms} ir {privacy}.',
+      legalTerms: 'naudojimo sąlygomis',
+      legalPrivacy: 'privatumo politika',
       contactsPrivate: 'Telefonas ir el. paštas neskelbiami: jų reikia organizatoriui susisiekti. El. paštu gausite pranešimus apie registraciją ir priminimus apie rungtynes.',
       doublesNote: 'Dvejetai: paraiškoje du žaidėjai.',
       doublesRandomNote: 'Dvejetai: partneris nebūtinas — be jo organizatorius parinks porą.',

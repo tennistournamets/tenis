@@ -1,6 +1,6 @@
 <script setup>
 import { computed, reactive, ref, watch } from 'vue'
-import { useI18n } from 'vue-i18n'
+import { Translation, useI18n } from 'vue-i18n'
 
 import { useUnsavedChanges, confirmDiscard } from '../lib/unsavedChanges'
 import { cloneForm, sameForm } from '../lib/formDraft'
@@ -8,6 +8,7 @@ import { supabase } from '../lib/supabase'
 import { isIndividualFormat, scoringFamily } from '../lib/sportConfig'
 import { registrationDisplayState, registrationError, closedReasonKey, entryNamesError } from '../lib/registrationRules'
 import { track } from '../lib/analytics'
+import { legalPath } from '../lib/localeRoute'
 
 const props = defineProps({
   tournament: {
@@ -261,6 +262,11 @@ async function submit() {
       <p id="reg-email-hint" class="field-hint">{{ t('registrationForm.contactsPrivate') }}</p>
     </div>
 
+    <Translation keypath="registrationForm.legalNote" tag="p" class="field-hint reg-form__legal" scope="global">
+      <template #terms><a :href="legalPath(locale, 'terms')" target="_blank" rel="noopener">{{ t('registrationForm.legalTerms') }}</a></template>
+      <template #privacy><a :href="legalPath(locale, 'privacy')" target="_blank" rel="noopener">{{ t('registrationForm.legalPrivacy') }}</a></template>
+    </Translation>
+
     <button class="btn btn--primary" :disabled="loading || registrationClosed || conditionsChanged" type="submit">
       <span v-if="loading" class="spinner" aria-hidden="true" />
       {{ waitlistMode ? t('registrationRules.waitlistSubmit') : t('registrationForm.submit') }}
@@ -276,4 +282,7 @@ async function submit() {
 .reg-form__type { margin: 4px 0 0; }
 .reg-form__legend { margin: 4px 0 0; font-size: 0.8125rem; }
 .reg-form__req { color: var(--danger); font-weight: 600; }
+.reg-form__legal { margin: 0; }
+.reg-form__legal a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+.reg-form__legal a:hover { color: var(--text); }
 </style>

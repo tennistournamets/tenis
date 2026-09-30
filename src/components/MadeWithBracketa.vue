@@ -5,9 +5,10 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import BrandLogo from './BrandLogo.vue'
 import { track } from '../lib/analytics'
+import { legalPath } from '../lib/localeRoute'
 
 const router = useRouter()
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 const href = computed(() => router.resolve({
   name: 'home',
@@ -22,13 +23,19 @@ const href = computed(() => router.resolve({
       <span class="made-with__text">{{ t('app.madeWith') }}</span>
       <span class="made-with__cta">{{ t('app.madeWithCta') }} →</span>
     </a>
+    <nav class="made-with__legal" :aria-label="t('app.privacy')">
+      <a :href="legalPath(locale, 'privacy')" target="_blank" rel="noopener">{{ t('app.privacy') }}</a>
+      <a :href="legalPath(locale, 'terms')" target="_blank" rel="noopener">{{ t('app.terms') }}</a>
+    </nav>
   </footer>
 </template>
 
 <style scoped>
 .made-with {
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
   padding:
     0
     calc(var(--space-4) + var(--safe-area-right))
@@ -62,6 +69,25 @@ const href = computed(() => router.resolve({
 .made-with__link:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
+}
+
+.made-with__legal {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0 var(--space-4);
+  font-size: 0.8125rem;
+}
+
+.made-with__legal a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--muted);
+}
+
+.made-with__legal a:hover {
+  color: var(--text);
 }
 
 .made-with__cta {

@@ -6,15 +6,15 @@ import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { marked } from 'marked'
-import { DEFAULT_LOCALE, LOCALES, landingPath } from '../src/lib/localeRoute.js'
+import { DEFAULT_LOCALE, LOCALES, landingPath, legalPath } from '../src/lib/localeRoute.js'
 import { OG_IMAGE_PATH, SITE_NAME, escapeHtml, jsonLdScript } from '../src/lib/seo.js'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
 
 export const BLOG_LABELS = {
-  lt: { blog: 'Straipsniai', blogIntro: 'Patarimai, kaip surengti teniso, padelio ir futbolo turnyrus.', cta: 'Sukurti turnyrą nemokamai', ctaText: 'Registracija, tinklelis ir rezultatai tiesiogiai vienoje vietoje. Dalyviams paskyros nereikia.', more: 'Kiti straipsniai', read: 'Skaityti', home: 'Pradžia' },
-  ru: { blog: 'Статьи', blogIntro: 'Советы, как провести турнир по теннису, паделу и футболу.', cta: 'Создать турнир бесплатно', ctaText: 'Регистрация, сетка и live-счёт в одном месте. Участникам не нужен аккаунт.', more: 'Другие статьи', read: 'Читать', home: 'Главная' },
-  en: { blog: 'Guides', blogIntro: 'Practical advice on running tennis, padel and football tournaments.', cta: 'Create a tournament for free', ctaText: 'Registration, brackets and live scores in one place. Players need no account.', more: 'More guides', read: 'Read', home: 'Home' },
+  lt: { blog: 'Straipsniai', blogIntro: 'Patarimai, kaip surengti teniso, padelio ir futbolo turnyrus.', cta: 'Sukurti turnyrą nemokamai', ctaText: 'Registracija, tinklelis ir rezultatai tiesiogiai vienoje vietoje. Dalyviams paskyros nereikia.', more: 'Kiti straipsniai', read: 'Skaityti', home: 'Pradžia', privacy: 'Privatumo politika', terms: 'Naudojimo sąlygos', updated: 'Atnaujinta' },
+  ru: { blog: 'Статьи', blogIntro: 'Советы, как провести турнир по теннису, паделу и футболу.', cta: 'Создать турнир бесплатно', ctaText: 'Регистрация, сетка и live-счёт в одном месте. Участникам не нужен аккаунт.', more: 'Другие статьи', read: 'Читать', home: 'Главная', privacy: 'Политика конфиденциальности', terms: 'Условия использования', updated: 'Обновлено' },
+  en: { blog: 'Guides', blogIntro: 'Practical advice on running tennis, padel and football tournaments.', cta: 'Create a tournament for free', ctaText: 'Registration, brackets and live scores in one place. Players need no account.', more: 'More guides', read: 'Read', home: 'Home', privacy: 'Privacy policy', terms: 'Terms of use', updated: 'Updated' },
 }
 
 const INTL = { ru: 'ru-RU', en: 'en-GB', lt: 'lt-LT' }
@@ -54,7 +54,7 @@ export function loadArticles(dir = join(root, 'content/blog')) {
   return articles.sort((a, b) => b.date.localeCompare(a.date) || a.title.localeCompare(b.title))
 }
 
-function formatDate(date, lang) {
+export function formatDate(date, lang) {
   return new Intl.DateTimeFormat(INTL[lang], { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${date}T00:00:00Z`))
 }
 
@@ -106,7 +106,7 @@ function analyticsTag(env) {
   return `<script defer src="${escapeHtml(src)}" data-website-id="${escapeHtml(id)}"${domains ? ` data-domains="${escapeHtml(domains)}"` : ''}></script>`
 }
 
-function page({ lang, origin, title, description, path, type, alternates, jsonLd, body, env }) {
+export function page({ lang, origin, title, description, path, type, alternates, jsonLd, body, env }) {
   const e = escapeHtml
   const url = `${origin}${path}`
   const hreflang = Object.entries(alternates)
@@ -150,7 +150,7 @@ ${analyticsTag(env)}
 <nav><a href="${blogPath(lang)}">${e(labels.blog)}</a><a class="btn" href="${landingPath(lang)}?utm_source=blog&amp;utm_medium=header">${e(labels.cta)}</a></nav>
 </header>
 ${body}
-<footer><span>© ${new Date().getUTCFullYear()} ${SITE_NAME}</span><nav aria-label="Language / Язык / Kalba">${langLinks.join('')}</nav></footer>
+<footer><span>© ${new Date().getUTCFullYear()} ${SITE_NAME}</span><nav aria-label="${e(labels.privacy)}"><a href="${legalPath(lang, 'privacy')}">${e(labels.privacy)}</a><a href="${legalPath(lang, 'terms')}">${e(labels.terms)}</a></nav><nav aria-label="Language / Язык / Kalba">${langLinks.join('')}</nav></footer>
 </div>
 </body>
 </html>

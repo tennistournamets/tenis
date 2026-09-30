@@ -15,6 +15,13 @@ export function landingPath(locale) {
   return isLocale(locale) && locale !== DEFAULT_LOCALE ? `/${locale}` : '/'
 }
 
+// Static legal pages (content/legal, scripts/legal.mjs): /privacy (lt), /ru/privacy, /en/terms...
+export const LEGAL_DOCS = ['privacy', 'terms']
+
+export function legalPath(locale, doc) {
+  return isLocale(locale) && locale !== DEFAULT_LOCALE ? `/${locale}/${doc}` : `/${doc}`
+}
+
 /** Language named by a landing URL ("/ru" -> ru, "/" -> lt), or null for other pages. */
 export function pathLocale(pathname) {
   const match = /^\/(ru|en)\/?$/.exec(String(pathname ?? ''))
