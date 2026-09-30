@@ -10,7 +10,8 @@
     "test:sql": "node --test --test-concurrency=2 tests/*.test.mjs",
     "test:postgres": "node scripts/check-postgres.mjs",
     "og:image": "node scripts/render-og-image.mjs",
-    "icons": "node scripts/render-icons.mjs"
+    "icons": "node scripts/render-icons.mjs",
+    "indexnow": "node scripts/indexnow.mjs"
   },
   "engines": {
     "node": ">=22.12.0 <27"

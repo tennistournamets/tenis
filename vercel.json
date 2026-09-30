@@ -109,6 +109,12 @@
       ]
     }
   ],
+  "crons": [
+    {
+      "path": "/api/indexnow",
+      "schedule": "0 5 * * *"
+    }
+  ],
   "functions": {
     "api/og.js": {
       "includeFiles": "api/_fonts/**"
