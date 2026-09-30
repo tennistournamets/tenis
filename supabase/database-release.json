@@ -1,5 +1,5 @@
 {
-  "release": "2026-09-27-sponsorship-content",
+  "release": "2026-09-30-skip-placeholder-emails",
   "forwardMigrations": [
     {
       "path": "supabase/migrations/20260908120000_mobile_tournament_details.sql",
@@ -156,6 +156,12 @@
       "sha256": "e9b75892859a500f41973302a3334513e74b812ef17850d07c74154fe5d24c53",
       "tenisAppliedVersion": "20260927204037",
       "tenisNote": "Applied 2026-09-27 with supabase db push --db-url (session pooler) after logical backup (tenis-public-20260927-2351-pre-sponsorship-content.dump + migrations journal dump)."
+    },
+    {
+      "path": "supabase/migrations/20260930204416_skip_placeholder_emails.sql",
+      "sha256": "d151d610bcc08cac01478fd9a15ad0761397d20068470b485c28f3ed339a06dc",
+      "tenisAppliedVersion": "20260930204416",
+      "tenisNote": "Applied 2026-09-30 with supabase db push --db-url (session pooler) after logical backup (tenis-public-20260930-2347-pre-skip-placeholder-emails.dump + migrations journal dump); function replacement only."
     }
   ],
   "baseline": {
