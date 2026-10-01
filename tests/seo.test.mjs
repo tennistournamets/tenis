@@ -4,7 +4,7 @@ import { test } from 'node:test'
 import { messages } from './helpers/messages.mjs'
 import {
   LABELS, LANDING_PATHS, applyLandingHead, clearLandingHead, escapeHtml, fetchPublicTournament, fetchSitemapTournaments,
-  isProductionEnv, landingHead, normalizeOrigin, pickLocale, previewHtml, replaceHeadBlock, robotsTxt, shellHead, siteOrigin,
+  isProductionEnv, landingHead, normalizeOrigin, previewLocale, previewHtml, replaceHeadBlock, robotsTxt, shellHead, siteOrigin,
   sitemapXml, tournamentMeta, formatDateRange, scheduleSpan, jsonLdScript, landingJsonLd, tournamentJsonLd, tournamentImageUrl,
   applyTournamentHead, clearTournamentHead,
 } from '../src/lib/seo.js'
@@ -36,12 +36,11 @@ test('site origin: SITE_URL, then the Vercel production domain, then the request
   assert.equal(siteOrigin({}), '')
 })
 
-test('locale comes from Accept-Language with lt as the default', () => {
-  assert.equal(pickLocale('lt-LT,lt;q=0.9,en;q=0.8'), 'lt')
-  assert.equal(pickLocale('de-DE,en;q=0.5'), 'en')
-  assert.equal(pickLocale('ru-RU,ru;q=0.9'), 'ru')
-  assert.equal(pickLocale('de-DE'), 'lt')
-  assert.equal(pickLocale(undefined), 'lt')
+test('preview locale comes from ?lang with lt as the default', () => {
+  assert.equal(previewLocale('ru'), 'ru')
+  assert.equal(previewLocale('EN'), 'en')
+  assert.equal(previewLocale('de'), 'lt')
+  assert.equal(previewLocale(null), 'lt')
 })
 
 test('tournament meta: name, sport, format, status and venue; unknown row falls back to the site', () => {
@@ -170,12 +169,15 @@ test('preview function answers with tournament tags', async () => {
   globalThis.fetch = async () => new Response(JSON.stringify([{ name: 'Kaunas Cup', sport: 'tennis', format: 'double_elimination', status: 'in_progress', visibility: 'public' }]))
   try {
     const { GET } = await import('../api/preview.js')
-    const response = await GET(new Request('https://x/api/preview?slug=kaunas-cup', { headers: { 'accept-language': 'lt' } }))
+    // Crawlers send their own Accept-Language; the preview stays in lt.
+    const response = await GET(new Request('https://x/api/preview?slug=kaunas-cup', { headers: { 'accept-language': 'en-US,en;q=0.9' } }))
     const html = await response.text()
     assert.match(response.headers.get('content-type'), /text\/html/)
     assert.ok(html.includes('<meta property="og:title" content="Kaunas Cup">'))
     assert.ok(html.includes('Turnyras vyksta — rezultatai tiesiogiai. Tenisas · Dvigubos eliminacijos'))
     assert.ok(html.includes('https://bracketa.lt/tournaments/kaunas-cup'))
+    const ru = await (await GET(new Request('https://x/api/preview?slug=kaunas-cup&lang=ru'))).text()
+    assert.ok(ru.includes('lang=ru'), 'an explicit ?lang reaches the card image')
   } finally {
     globalThis.fetch = realFetch
     for (const key of ['SITE_URL', 'VITE_SUPABASE_URL', 'VITE_SUPABASE_ANON_KEY']) {
