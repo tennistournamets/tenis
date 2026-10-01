@@ -119,10 +119,14 @@ export function siteOrigin(env = {}, request = null) {
   try { return new URL(request.url).origin } catch { return '' }
 }
 
-/** ru | en | lt from an Accept-Language header; lt is the app default. */
-export function pickLocale(acceptLanguage) {
-  const tags = String(acceptLanguage ?? '').toLowerCase().split(',').map(part => part.trim().slice(0, 2))
-  return tags.find(tag => LOCALES.includes(tag)) || DEFAULT_LOCALE
+/**
+ * Preview language: an explicit ?lang=ru|en|lt on the shared link, otherwise lt.
+ * Not Accept-Language: messenger crawlers (Telegram, Facebook/WhatsApp) send
+ * their own `en`, not the language of the people who read the chat.
+ */
+export function previewLocale(lang) {
+  const tag = String(lang ?? '').toLowerCase()
+  return LOCALES.includes(tag) ? tag : DEFAULT_LOCALE
 }
 
 function clip(text, max) {
