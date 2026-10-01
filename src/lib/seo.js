@@ -59,10 +59,10 @@ export const LABELS = {
   lt: {
     sport: { tennis: 'Tenisas', padel: 'Padelis', football: 'Futbolas' },
     format: {
-      single_elimination: 'Vienos eliminacijos',
-      round_robin: 'Ratų sistema',
-      groups_playoff: 'Grupės + atkrentamosios',
-      double_elimination: 'Dvigubos eliminacijos',
+      single_elimination: 'Olimpinė sistema',
+      round_robin: 'Kiekvienas su kiekvienu',
+      groups_playoff: 'Grupės ir atkrintamosios',
+      double_elimination: 'Dvigubo atkritimo sistema',
       americano: 'Americano',
       mexicano: 'Mexicano',
       team_americano: 'Team Americano',
@@ -70,12 +70,12 @@ export const LABELS = {
     },
     status: {
       registration_open: 'Vyksta registracija',
-      in_progress: 'Turnyras vyksta — rezultatai tiesiogiai',
-      completed: 'Turnyras baigtas — rezultatai ir tinklelis',
+      in_progress: 'Turnyras vyksta – rezultatai tiesiogiai',
+      completed: 'Turnyras baigtas – galutiniai rezultatai',
     },
     chip: { registration_open: 'Registracija atvira', registration_closed: 'Registracija uždaryta', in_progress: 'LIVE', completed: 'Baigtas' },
-    siteTitle: 'Bracketa — teniso, padelio ir futbolo turnyrai',
-    siteDescription: 'Nemokama programa teniso, padelio ir futbolo turnyrams: dalyvių registracija, turnyrų tinklelis, rezultatai tiesiogiai ir kortų tvarkaraštis. Žiūrovams paskyros nereikia.',
+    siteTitle: 'Bracketa – teniso, padelio ir futbolo turnyrai',
+    siteDescription: 'Nemokama programa teniso, padelio ir futbolo turnyrams: dalyvių registracija, turnyrų tinkleliai, rezultatai tiesiogiai ir kortų tvarkaraštis. Žiūrovams paskyros nereikia.',
     open: 'Atidaryti turnyrą',
   },
 }

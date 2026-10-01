@@ -174,7 +174,7 @@ test('preview function answers with tournament tags', async () => {
     const html = await response.text()
     assert.match(response.headers.get('content-type'), /text\/html/)
     assert.ok(html.includes('<meta property="og:title" content="Kaunas Cup">'))
-    assert.ok(html.includes('Turnyras vyksta — rezultatai tiesiogiai. Tenisas · Dvigubos eliminacijos'))
+    assert.ok(html.includes('Turnyras vyksta – rezultatai tiesiogiai. Tenisas · Dvigubo atkritimo sistema'))
     assert.ok(html.includes('https://bracketa.lt/tournaments/kaunas-cup'))
     const ru = await (await GET(new Request('https://x/api/preview?slug=kaunas-cup&lang=ru'))).text()
     assert.ok(ru.includes('lang=ru'), 'an explicit ?lang reaches the card image')

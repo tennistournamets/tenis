@@ -45,7 +45,7 @@ export const draftMessages = {
     bracketLayoutInvalid: 'The layout must keep every player exactly once, and every first-round match needs at least one player.',
   },
   lt: {
-    matchRemoved: 'Rungtynės pašalintos arba tinklelis sukurtas iš naujo. Įvestas rezultatas liko matomas; senoms rungtynėms jo išsaugoti negalima.',
+    matchRemoved: 'Mačas pašalintas arba tinklelis sukurtas iš naujo. Įvestas rezultatas liko matomas, tačiau senam mačui jo išsaugoti negalima.',
     unsaved: 'Yra neišsaugotų pakeitimų.',
     conflict: 'Šie nustatymai pakeisti kitame įrenginyje. Juodraštis išsaugotas formoje. Prieš išsaugodami įkelkite naujausius nustatymus.',
     structureConflict: 'Dalyviai, tinklelis arba nustatymai pasikeitė. Juodraštis liko formoje. Įkelkite naujausius duomenis ir pakartokite pakeitimus.',
@@ -54,7 +54,7 @@ export const draftMessages = {
     discardLeave: 'Atsisakyti pakeitimų',
     leaveSaving: 'Išsaugojimas dar vyksta. Išeiti iš puslapio nelaukiant serverio atsakymo?',
     leaveAnyway: 'Išeiti',
-    categoryReset: 'Pakeitus kategoriją dabartinis tinklelis bus pašalintas. Nustatymai ir pašalinimas bus išsaugoti kartu. Tęsti?',
+    categoryReset: 'Pakeitus kategoriją dabartinis tinklelis bus pašalintas. Nustatymai ir tinklelio pašalinimas bus išsaugoti kartu. Tęsti?',
     pairingReset: 'Išsaugojus naujas poras dabartinis tinklelis bus pašalintas. Tęsti?',
     rulesLocked: 'Turnyras jau prasidėjo arba yra rezultatų. Dalyvių ir taisyklių keisti negalima.',
     unavailable: 'Nepavyko įkelti naujausių duomenų. Juodraštis liko formoje.',
@@ -63,7 +63,7 @@ export const draftMessages = {
     restored: 'Atkurtas šio skirtuko juodraštis.',
     discardStored: 'Išvalyti juodraštį',
     bracketResultsLocked: 'Turnyras prasidėjo arba baigėsi, o tinklelyje jau yra rezultatų: perkūrimas juos ištrintų.',
-    bracketSlotLocked: 'Dalyvius galima perkelti tik pirmajame rate — rungtynėse, į kurias niekas nepatenka iš kitų rungtynių.',
-    bracketLayoutInvalid: 'Išdėstyme kiekvienas dalyvis turi likti po vieną kartą, o kiekvienose pirmojo rato rungtynėse turi būti bent vienas dalyvis.',
+    bracketSlotLocked: 'Dalyvius galima perkelti tik pirmajame raunde – mačuose, į kuriuos niekas nepatenka iš kitų mačų.',
+    bracketLayoutInvalid: 'Išdėstyme kiekvienas dalyvis turi būti lygiai vieną kartą, o kiekviename pirmojo raundo mače – bent vienas dalyvis.',
   },
 }

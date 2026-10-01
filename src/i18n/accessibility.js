@@ -16,8 +16,8 @@ export const accessibilityMessages = {
   lt: {
     skipContent: 'Pereiti prie turinio', profileMenu: 'Paskyros meniu',
     tournamentPage: 'Turnyras', manageTournament: 'Turnyro valdymas',
-    scoreField: '{metric} — {team}, pusė {side}', scheduleFor: 'Dalyvio {name} mačai',
-    matchAction: '{action}: {teamA} — {teamB}', rank: 'Vieta', entryAction: '{action}: {name}', darkTheme: 'Tamsi tema',
+    scoreField: '{metric} – {team}, pusė {side}', scheduleFor: 'Dalyvio {name} mačai',
+    matchAction: '{action}: {teamA} – {teamB}', rank: 'Vieta', entryAction: '{action}: {name}', darkTheme: 'Tamsi tema',
     stats: { played: 'Sužaisti mačai', won: 'Pergalės', drawn: 'Lygiosios', lost: 'Pralaimėjimai', for: 'Įmušti įvarčiai', against: 'Praleisti įvarčiai', diff: 'Įvarčių skirtumas', sets: 'Laimėti ir pralaimėti setai', points: 'Taškai' },
   },
 }

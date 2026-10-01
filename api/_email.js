@@ -14,9 +14,9 @@ const COPY = {
     kinds: {
       registration_received: { subject: t => `Registracija gauta: ${t}`, body: t => `Gavome jūsų registraciją į turnyrą „${t}“. Organizatorius ją peržiūrės, o apie sprendimą pranešime el. paštu.` },
       registration_waitlisted: { subject: t => `Esate laukiančiųjų sąraše: ${t}`, body: t => `Visos turnyro „${t}“ vietos užimtos, todėl įrašėme jus į laukiančiųjų sąrašą. Jei vieta atsilaisvins, pranešime.` },
-      registration_approved: { subject: t => `Registracija patvirtinta: ${t}`, body: t => `Jūsų registracija į turnyrą „${t}“ patvirtinta. Tinklelį, tvarkaraštį ir rezultatus rasite turnyro puslapyje. Iki pasimatymo korte!` },
+      registration_approved: { subject: t => `Registracija patvirtinta: ${t}`, body: t => `Jūsų registracija į turnyrą „${t}“ patvirtinta. Mačus, tvarkaraštį ir rezultatus rasite turnyro puslapyje. Sėkmės turnyre!` },
       registration_rejected: { subject: t => `Registracija nepatvirtinta: ${t}`, body: t => `Deja, organizatorius nepatvirtino jūsų registracijos į turnyrą „${t}“. Jei turite klausimų, susisiekite su organizatoriumi.` },
-      match_reminder: { subject: t => `Jūsų rungtynės netrukus: ${t}`, body: (t, m) => `Jūsų rungtynės${m.opponent ? ` prieš ${m.opponent}` : ''} prasideda ${m.time}${m.court}. Turnyras „${t}“.` },
+      match_reminder: { subject: t => `Netrukus jūsų mačas: ${t}`, body: (t, m) => `Jūsų mačas prasideda ${m.time}${m.court}${m.opponent ? `, varžovas: ${m.opponent}` : ''}. Turnyras „${t}“.` },
     },
   },
   ru: {
