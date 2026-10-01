@@ -19,10 +19,10 @@ Pagrindinė paslauga nemokama. Kai kurios papildomos funkcijos, pavyzdžiui, rė
 
 ## 3. Organizatoriai
 
-Rengdami turnyrą Bracketa, esate to renginio organizatorius ir už jį atsakote. Visų pirma jūs:
+Rengdami turnyrą Bracketa platformoje, esate to renginio organizatorius ir už jį atsakote. Visų pirma jūs:
 
 - pateikiate teisingą informaciją apie turnyrą: vietą, laiką, taisykles ir dalyvio mokestį, jei jis yra;
-- įsitikinate, kad galite skelbti dalyvių vardus ir rezultatus, ir pranešate dalyviams, kad turnyras vyksta Bracketa;
+- įsitikinate, kad galite skelbti dalyvių vardus ir rezultatus, ir pranešate dalyviams, kad turnyras vyksta Bracketa platformoje;
 - dalyvių kontaktus naudojate tik turnyrui rengti, o ne pašalinėms reklamos žinutėms;
 - patys sprendžiate dalyvio mokesčių, prizų, grąžinimų ir dalyvių ginčų klausimus. Bracketa nepriima mokėjimų ir nėra turnyro šalis;
 - įkeliate rėmėjų logotipus ir kitą medžiagą tik tada, kai turite teisę ją naudoti.

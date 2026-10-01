@@ -19,8 +19,8 @@ const row = {
 
 test('emails are localized, escaped and link back with utm tags', () => {
   const lt = buildEmail(row, 'https://bracketa.lt')
-  assert.equal(lt.subject, 'Jūsų rungtynės netrukus: Vilnius Cup')
-  assert.match(lt.text, /prieš Ben prasideda 15:30, kortas: Court 2/)
+  assert.equal(lt.subject, 'Netrukus jūsų mačas: Vilnius Cup')
+  assert.match(lt.text, /prasideda 15:30, kortas: Court 2, varžovas: Ben/)
   assert.ok(lt.html.includes('Ann &lt;b&gt;'))
   assert.ok(!lt.html.includes('<b>'))
   assert.ok(lt.html.includes('https://bracketa.lt/tournaments/vilnius-cup?utm_source=email&amp;utm_medium=notification&amp;utm_campaign=match_reminder'))

@@ -14,7 +14,7 @@ test('the preview card shows name, status, sport, format, date and venue in the 
     starts_at: '2026-10-12T07:00:00Z', ends_at: '2026-10-14T16:00:00Z', venue_address: 'Ozo g. 14', schedule_config: { timezone: 'Europe/Vilnius' },
   }, 'lt')
   const all = texts(card)
-  for (const text of ['Bracketa', 'Vilnius Padel Cup', 'Registracija atvira', 'Padelis', 'Grupės + atkrentamosios', 'Ozo g. 14']) {
+  for (const text of ['Bracketa', 'Vilnius Padel Cup', 'Registracija atvira', 'Padelis', 'Grupės ir atkrintamosios', 'Ozo g. 14']) {
     assert.ok(all.includes(text), text)
   }
   assert.ok(all.some(text => /spalio/.test(text)), 'Lithuanian date')

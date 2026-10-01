@@ -4,7 +4,7 @@ description: Kokius asmens duomenis renka Bracketa, kam jie naudojami, kur saugo
 updated: 2026-10-01
 ---
 
-Bracketa (braketa.top) – nemokama paslauga teniso, padelio ir futbolo turnyrams organizuoti. Šioje politikoje paaiškinama, kokius asmens duomenis tvarkome, kodėl, ir kokias teises jums suteikia ES Bendrasis duomenų apsaugos reglamentas (BDAR).
+Bracketa (braketa.top) – nemokama paslauga teniso, padelio ir futbolo turnyrams organizuoti. Šioje politikoje paaiškinama, kokius asmens duomenis tvarkome, kodėl ir kokias teises jums suteikia ES Bendrasis duomenų apsaugos reglamentas (BDAR).
 
 ## Kas atsakingas už duomenis
 
@@ -26,8 +26,8 @@ Yra du vaidmenys:
 
 ### Dalyviai
 
-- **Registracijos forma:** žaidėjų vardai (vienas arba du porai), pasirinktinai – komandos pavadinimas, telefono numeris ir el. pašto adresas.
-- **Kalba** puslapio, kuriame užsiregistravote, – kad laiškus gautumėte ta kalba.
+- **Registracijos forma:** žaidėjų vardai (vienas, o poros atveju – du), pasirinktinai – komandos pavadinimas, telefono numeris ir el. pašto adresas.
+- **Kalba:** puslapio, kuriame užsiregistravote, kalba – kad laiškus gautumėte ta pačia kalba.
 - **Paraiškos būsena:** laukia patvirtinimo, patvirtinta, laukiančiųjų sąraše arba atmesta.
 - **Turnyro duomenys:** vieta tinklelyje, rungtynės, rezultatai ir lentelė.
 
@@ -41,7 +41,7 @@ Dalyviams paskyros nereikia.
 
 ## Kas matoma viešai
 
-- **Patvirtintų** dalyvių vardai, tinklelis, tvarkaraštis, rezultatai ir lentelė matomi kiekvienam, kas atidaro turnyro puslapį. Turnyrai, kurių matomumas „Viešas“, taip pat patenka į paieškos sistemas; turnyrai „Pagal nuorodą“ neindeksuojami; „Privatūs“ ir slaptažodžiu apsaugoti turnyrai paslėpti.
+- **Patvirtintų** dalyvių vardai, tinklelis, tvarkaraštis, rezultatai ir lentelė matomi kiekvienam, kuris atidaro turnyro puslapį. Turnyrai, kurių matomumas „Viešas“, taip pat patenka į paieškos sistemas; turnyrai „Pagal nuorodą“ neindeksuojami; „Privatūs“ ir slaptažodžiu apsaugoti turnyrai paslėpti.
 - **Dalyvių telefonai ir el. pašto adresai niekada neskelbiami.** Juos mato tik to turnyro organizatoriai.
 - Vietos adresas, organizatoriaus kontaktas (jei įjungtas) ir rėmėjų medžiaga rodomi turnyro puslapyje.
 
@@ -65,7 +65,7 @@ Asmens duomenų neparduodame, nekuriame pagal juos reklaminių profilių ir nepr
 | Vercel | Svetainės priegloba ir serverio funkcijos | Pasaulinis tinklas, įmonė JAV |
 | Resend | Laiškų siuntimas | ES regionas (Airija), įmonė JAV |
 | Umami | Statistika be slapukų | ES |
-| Google | Prisijungimas su Google; šriftai iš Google serverių (naršyklė perduoda Google savo IP adresą) | JAV / pasauliniu mastu |
+| Google | Prisijungimas per Google; šriftai iš Google serverių (naršyklė perduoda Google savo IP adresą) | JAV / pasauliniu mastu |
 | IndexNow (Bing ir kt.) | Pranešimas paieškos sistemoms apie naujus viešus puslapius; perduodami tik puslapių adresai | JAV / pasauliniu mastu |
 
 Jei teikėjas yra už Europos ekonominės erdvės ribų, duomenys perduodami remiantis ES ir JAV duomenų privatumo sistema arba Europos Komisijos standartinėmis sutarčių sąlygomis.
@@ -87,7 +87,7 @@ Bracketa nenaudoja slapukų. Naršyklės vietinėje saugykloje laikomi keli įra
 - pasirinkta kalba, šviesi ar tamsi tema ir ar įjungta pagrindinio puslapio animacija;
 - atsitiktinis naršyklės identifikatorius slaptažodžio bandymams;
 - slaptažodžiu apsaugoto turnyro prieigos raktas (kol uždarysite skirtuką);
-- neišsaugoti juodraščiai (kuriamas turnyras, vedamas rezultatas) ir organizatoriaus pasirinktas burtų būdas.
+- neišsaugoti juodraščiai (kuriamas turnyras, įvedamas rezultatas) ir organizatoriaus pasirinktas burtų būdas.
 
 Juos bet kada galite išvalyti naršyklės nustatymuose.
 

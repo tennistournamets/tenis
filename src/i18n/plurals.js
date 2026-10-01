@@ -17,9 +17,9 @@ export const pluralMessages = {
   },
   lt: {
     participants: { one: '{n} dalyvis', few: '{n} dalyviai', many: '{n} dalyvio', other: '{n} dalyvių' },
-    matches: { one: '{n} rungtynės', few: '{n} rungtynės', many: '{n} rungtynių', other: '{n} rungtynių' },
+    matches: { one: '{n} mačas', few: '{n} mačai', many: '{n} mačo', other: '{n} mačų' },
     rounds: { one: '{n} raundas', few: '{n} raundai', many: '{n} raundo', other: '{n} raundų' },
     groups: { one: '{n} grupė', few: '{n} grupės', many: '{n} grupės', other: '{n} grupių' },
-    byes: { one: '{n} praeina pirmą raundą be žaidimo', few: '{n} praeina pirmą raundą be žaidimo', many: '{n} praeina pirmą raundą be žaidimo', other: '{n} praeina pirmą raundą be žaidimo' },
+    byes: { one: '{n} dalyvis praeina pirmą raundą be žaidimo', few: '{n} dalyviai praeina pirmą raundą be žaidimo', many: '{n} dalyvio praeina pirmą raundą be žaidimo', other: '{n} dalyvių praeina pirmą raundą be žaidimo' },
   },
 }
