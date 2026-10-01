@@ -141,6 +141,12 @@
 .landing--cinematic .landing-cta__inner { text-align: left; padding: 0; background: none; border: 0; box-shadow: none; max-width: none; }
 .landing--cinematic .landing-cta__title { white-space: pre-line; color: var(--cinema-text); font: 550 clamp(2.6rem, 4.3vw, 4.1rem)/1.12 var(--font-display); letter-spacing: -.055em; margin: 0 0 23px; }
 .landing--cinematic .landing-cta__subtitle { color: var(--cinema-muted); font-size: 1rem; line-height: 1.8; margin: 0 0 30px; }
+.landing--cinematic .landing-contact { margin-top: 40px; padding-top: 28px; border-top: 1px solid var(--cinema-line); }
+.landing--cinematic .landing-contact__title { margin: 0 0 6px; color: var(--cinema-text); font: 600 1.125rem/1.4 var(--font-display); }
+.landing--cinematic .landing-contact__text { margin: 0 0 18px; color: var(--cinema-muted); font-size: .9375rem; line-height: 1.6; }
+.landing--cinematic .cinema-button--ghost { background: transparent; color: var(--cinema-text); border: 1px solid var(--cinema-line); text-decoration: none; }
+.landing--cinematic .cinema-button--ghost:hover { background: transparent; border-color: var(--cinema-accent); box-shadow: none; }
+.landing--cinematic .cinema-button > .landing-contact__email { overflow-wrap: anywhere; font-size: inherit; font-weight: 600; transform: none; }
 .landing--cinematic .landing-footer { display: flex; align-items: center; justify-content: space-between; gap: 24px; border-top: 1px solid var(--cinema-line); padding: 32px clamp(24px, 4.5vw, 72px); font-size: .75rem; color: var(--cinema-muted); }
 .landing--cinematic .footer-brand { font: 650 1.5rem var(--font-display); letter-spacing: -.06em; color: var(--cinema-text); }
 .landing--cinematic .footer-brand span { color: var(--cinema-accent); }
