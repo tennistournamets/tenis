@@ -30,6 +30,7 @@ export const cinematicMessages = {
     participantsTitle: 'Участники и команды', participantsText: 'Индивидуальные участники, пары и команды — в зависимости от выбранного вида спорта.',
     closingEyebrow: 'Следующий чемпион ещё не известен', closingTitle: 'Его история\nначнётся с вас.',
     closingText: 'Соберите участников. Создайте турнир. Пусть победит сильнейший.',
+    contactTitle: 'Есть вопросы?', contactText: 'Напишите нам — поможем настроить и провести первый турнир.', contactLabel: 'Написать на почту',
     footer: 'Создано для соревнований.', pause: 'Остановить анимацию', play: 'Включить анимацию', signInError: 'Не удалось открыть вход. Попробуйте ещё раз.',
   },
   en: {
@@ -63,6 +64,7 @@ export const cinematicMessages = {
     participantsTitle: 'Participants and teams', participantsText: 'Individuals, doubles and teams, depending on the selected sport.',
     closingEyebrow: 'The next champion is still unknown', closingTitle: 'Their story\nstarts with you.',
     closingText: 'Bring the participants. Create the tournament. May the best competitor win.',
+    contactTitle: 'Questions?', contactText: 'Write to us – we will help you set up and run your first tournament.', contactLabel: 'Send an email',
     footer: 'Made for competition.', pause: 'Pause animation', play: 'Play animation', signInError: 'Could not open sign-in. Please try again.',
   },
   lt: {
@@ -96,6 +98,7 @@ export const cinematicMessages = {
     participantsTitle: 'Dalyviai ir komandos', participantsText: 'Individualūs dalyviai, poros ir komandos – pagal pasirinktą sporto šaką.',
     closingEyebrow: 'Kitas čempionas dar nežinomas', closingTitle: 'Jo istorija\nprasidės nuo jūsų.',
     closingText: 'Suburkite dalyvius. Sukurkite turnyrą. Tegul laimi stipriausias.',
+    contactTitle: 'Turite klausimų?', contactText: 'Parašykite mums – padėsime nustatyti ir surengti pirmąjį turnyrą.', contactLabel: 'Rašyti el. paštu',
     footer: 'Sukurta varžyboms.', pause: 'Sustabdyti animaciją', play: 'Įjungti animaciją', signInError: 'Nepavyko atidaryti prisijungimo. Bandykite dar kartą.',
   },
 }
