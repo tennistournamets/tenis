@@ -125,7 +125,7 @@ function matchAria(match) {
 .points-round__state { margin-left: auto; font-family: var(--font-mono); font-size: 0.7rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
 .points-round--current .points-round__state { color: var(--primary); }
 .points-round__courts { display: grid; gap: var(--space-2); padding: 0 var(--space-3) var(--space-3); }
-.points-court { display: grid; gap: 8px; padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-row); }
+.points-court { display: grid; gap: 8px; padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-row); container-type: inline-size; }
 .points-court--live { border-color: #ef4444; }
 .points-court--king .points-court__head span:first-child::before { content: '♛ '; color: var(--primary); }
 .points-court__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-family: var(--font-mono); font-size: 0.7rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
@@ -136,6 +136,13 @@ function matchAria(match) {
 .points-court__side--won { color: var(--primary); }
 .points-court__score { min-width: 4.5rem; text-align: center; font-family: var(--font-mono); font-size: 1.15rem; font-weight: 700; font-variant-numeric: tabular-nums; }
 .points-court--live .points-court__score { color: #b91c1c; }
+/* Phone-width card: two names per side do not fit beside the score
+   (Lithuanian surnames broke mid-word), so the sides stack around it. */
+@container (max-width: 320px) {
+  .points-court__body { grid-template-columns: minmax(0, 1fr); justify-items: center; gap: 4px; text-align: center; }
+  .points-court__side, .points-court__side--b { text-align: center; }
+  .points-court__score { min-width: 0; }
+}
 .points-court__actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .points-court__actions .btn { flex: 1 1 120px; }
 .points-round__rest { margin: 0; padding: 0 var(--space-3) var(--space-3); font-size: 0.85rem; color: var(--muted); }

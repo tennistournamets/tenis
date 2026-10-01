@@ -1,5 +1,5 @@
 <script setup>
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { Translation, useI18n } from 'vue-i18n'
 
 import { useUnsavedChanges, confirmDiscard } from '../lib/unsavedChanges'
@@ -55,6 +55,7 @@ const submitted = ref(false)
 const submittedStatus = ref('pending')
 const phoneTouched = ref(false)
 const emailTouched = ref(false)
+const successCard = ref(null)
 
 const initialForm = cloneForm(form)
 const dirty = computed(() => !sameForm(form, initialForm))
@@ -70,6 +71,12 @@ const closedMessage = computed(() => (!regState.value.known || regState.value.re
 useUnsavedChanges(() => dirty.value, () => loading.value)
 watch(dirty, value => emit('dirty', value), { flush: 'sync' })
 watch(conditions, value => { if (!dirty.value) reviewedConditions.value = cloneForm(value) }, { deep: true })
+async function registerAnother() {
+  submitted.value = false
+  await nextTick()
+  document.getElementById('reg-member-one')?.focus()
+}
+
 async function discard() {
   if (!(await confirmDiscard(t, dirty.value, loading.value))) return
   Object.assign(form, cloneForm(initialForm))
@@ -146,6 +153,11 @@ async function submit() {
     phoneTouched.value = false
     emailTouched.value = false
     emit('submitted')
+    // The fields give way to the confirmation; on a phone it would otherwise
+    // sit below the fold under an emptied form.
+    await nextTick()
+    successCard.value?.scrollIntoView({ block: 'center' })
+    successCard.value?.focus({ preventScroll: true })
   } catch (error) {
     errorText.value = registrationError(error?.message, t, 'registrationForm.error')
   } finally {
@@ -162,118 +174,124 @@ async function submit() {
       <p class="muted reg-form__legend"><span class="reg-form__req" aria-hidden="true">*</span> {{ t('registrationForm.requiredLegend') }}</p>
     </div>
 
-    <p v-if="registrationClosed" class="alert alert--info" role="status">{{ closedMessage }}</p>
-    <div v-else-if="conditionsChanged" class="alert alert--info" role="status">
-      {{ t('drafts.registrationChanged') }}
-      <button class="btn btn--ghost btn--sm" type="button" @click="reviewedConditions = conditions()">{{ t('drafts.review') }}</button>
+    <div v-if="submitted" ref="successCard" class="alert alert--success reg-form__done" role="status" tabindex="-1">
+      <p class="reg-form__done-text">{{ submittedStatus === 'waitlisted' ? t('registrationRules.waitlistSuccess') : t('registrationForm.success') }}</p>
+      <p class="reg-form__done-text">{{ t('registrationForm.successEmail') }}</p>
+      <button class="btn btn--secondary btn--sm" type="button" @click="registerAnother">{{ t('registrationForm.anotherEntry') }}</button>
     </div>
-    <p v-else-if="waitlistMode" class="alert alert--info" role="status">{{ t('registrationRules.waitlistNote') }}</p>
-    <div class="form-field">
-      <label for="reg-member-one">{{ memberOneLabel }} <span class="reg-form__req" aria-hidden="true">*</span></label>
-      <input
-        id="reg-member-one"
-        v-model="form.memberOne"
-        class="input"
-        type="text"
-        maxlength="100"
-        autocomplete="name"
-        :disabled="loading"
-        required
-      />
-    </div>
+    <template v-else>
+      <p v-if="registrationClosed" class="alert alert--info" role="status">{{ closedMessage }}</p>
+      <div v-else-if="conditionsChanged" class="alert alert--info" role="status">
+        {{ t('drafts.registrationChanged') }}
+        <button class="btn btn--ghost btn--sm" type="button" @click="reviewedConditions = conditions()">{{ t('drafts.review') }}</button>
+      </div>
+      <p v-else-if="waitlistMode" class="alert alert--info" role="status">{{ t('registrationRules.waitlistNote') }}</p>
+      <div class="form-field">
+        <label for="reg-member-one">{{ memberOneLabel }} <span class="reg-form__req" aria-hidden="true">*</span></label>
+        <input
+          id="reg-member-one"
+          v-model="form.memberOne"
+          class="input"
+          type="text"
+          maxlength="100"
+          autocomplete="name"
+          :disabled="loading"
+          required
+        />
+      </div>
 
-    <div v-if="showMemberTwo" class="form-field">
-      <label for="reg-member-two">{{ t('registrationForm.memberTwo') }} <span class="reg-form__req" aria-hidden="true">*</span></label>
-      <input
-        id="reg-member-two"
-        v-model="form.memberTwo"
-        class="input"
-        type="text"
-        maxlength="100"
-        autocomplete="name"
-        :disabled="loading"
-        required
-      />
-    </div>
+      <div v-if="showMemberTwo" class="form-field">
+        <label for="reg-member-two">{{ t('registrationForm.memberTwo') }} <span class="reg-form__req" aria-hidden="true">*</span></label>
+        <input
+          id="reg-member-two"
+          v-model="form.memberTwo"
+          class="input"
+          type="text"
+          maxlength="100"
+          autocomplete="name"
+          :disabled="loading"
+          required
+        />
+      </div>
 
-    <div v-if="showMemberTwoOptional" class="form-field">
-      <label for="reg-member-two">{{ t('registrationForm.memberTwoOptional') }}</label>
-      <input
-        id="reg-member-two"
-        v-model="form.memberTwo"
-        class="input"
-        type="text"
-        maxlength="100"
-        autocomplete="name"
-        :disabled="loading"
-      />
-    </div>
+      <div v-if="showMemberTwoOptional" class="form-field">
+        <label for="reg-member-two">{{ t('registrationForm.memberTwoOptional') }}</label>
+        <input
+          id="reg-member-two"
+          v-model="form.memberTwo"
+          class="input"
+          type="text"
+          maxlength="100"
+          autocomplete="name"
+          :disabled="loading"
+        />
+      </div>
 
-    <div class="form-field">
-      <label for="reg-display-name">{{ showEntryType ? t('registrationForm.displayName') : t('registrationForm.displayNameSolo') }}</label>
-      <input
-        id="reg-display-name"
-        v-model="form.displayName"
-        class="input"
-        type="text"
-        maxlength="160"
-        aria-describedby="reg-display-name-hint"
-        :disabled="loading"
-      />
-      <p id="reg-display-name-hint" class="field-hint">{{ t('registrationForm.displayNameHint') }}</p>
-    </div>
+      <div class="form-field">
+        <label for="reg-display-name">{{ showEntryType ? t('registrationForm.displayName') : t('registrationForm.displayNameSolo') }}</label>
+        <input
+          id="reg-display-name"
+          v-model="form.displayName"
+          class="input"
+          type="text"
+          maxlength="160"
+          aria-describedby="reg-display-name-hint"
+          :disabled="loading"
+        />
+        <p id="reg-display-name-hint" class="field-hint">{{ t('registrationForm.displayNameHint') }}</p>
+      </div>
 
-    <div class="form-field">
-      <label for="reg-phone">{{ t('registrationForm.phone') }} <span class="reg-form__req" aria-hidden="true">*</span></label>
-      <input
-        id="reg-phone"
-        v-model="form.phone"
-        class="input"
-        :class="{ 'input--error': phoneInvalid }"
-        type="tel"
-        inputmode="tel"
-        autocomplete="tel"
-        :disabled="loading"
-        required
-        :aria-invalid="phoneInvalid || undefined"
-        :aria-describedby="phoneInvalid ? 'reg-phone-error' : undefined"
-        @blur="phoneTouched = true"
-      />
-      <p v-if="phoneInvalid" id="reg-phone-error" class="error-text" role="alert" style="margin: 4px 0 0">{{ t('registrationForm.invalidPhone') }}</p>
-    </div>
+      <div class="form-field">
+        <label for="reg-phone">{{ t('registrationForm.phone') }} <span class="reg-form__req" aria-hidden="true">*</span></label>
+        <input
+          id="reg-phone"
+          v-model="form.phone"
+          class="input"
+          :class="{ 'input--error': phoneInvalid }"
+          type="tel"
+          inputmode="tel"
+          autocomplete="tel"
+          :disabled="loading"
+          required
+          :aria-invalid="phoneInvalid || undefined"
+          :aria-describedby="phoneInvalid ? 'reg-phone-error' : undefined"
+          @blur="phoneTouched = true"
+        />
+        <p v-if="phoneInvalid" id="reg-phone-error" class="error-text" role="alert" style="margin: 4px 0 0">{{ t('registrationForm.invalidPhone') }}</p>
+      </div>
 
-    <div class="form-field">
-      <label for="reg-email">{{ t('registrationForm.email') }} <span class="reg-form__req" aria-hidden="true">*</span></label>
-      <input
-        id="reg-email"
-        v-model="form.email"
-        class="input"
-        :class="{ 'input--error': emailInvalid }"
-        type="email"
-        inputmode="email"
-        autocomplete="email"
-        :disabled="loading"
-        required
-        :aria-invalid="emailInvalid || undefined"
-        :aria-describedby="emailInvalid ? 'reg-email-error reg-email-hint' : 'reg-email-hint'"
-        @blur="emailTouched = true"
-      />
-      <p v-if="emailInvalid" id="reg-email-error" class="error-text" role="alert" style="margin: 4px 0 0">{{ t('registrationForm.invalidEmail') }}</p>
-      <p id="reg-email-hint" class="field-hint">{{ t('registrationForm.contactsPrivate') }}</p>
-    </div>
+      <div class="form-field">
+        <label for="reg-email">{{ t('registrationForm.email') }} <span class="reg-form__req" aria-hidden="true">*</span></label>
+        <input
+          id="reg-email"
+          v-model="form.email"
+          class="input"
+          :class="{ 'input--error': emailInvalid }"
+          type="email"
+          inputmode="email"
+          autocomplete="email"
+          :disabled="loading"
+          required
+          :aria-invalid="emailInvalid || undefined"
+          :aria-describedby="emailInvalid ? 'reg-email-error reg-email-hint' : 'reg-email-hint'"
+          @blur="emailTouched = true"
+        />
+        <p v-if="emailInvalid" id="reg-email-error" class="error-text" role="alert" style="margin: 4px 0 0">{{ t('registrationForm.invalidEmail') }}</p>
+        <p id="reg-email-hint" class="field-hint">{{ t('registrationForm.contactsPrivate') }}</p>
+      </div>
 
-    <Translation keypath="registrationForm.legalNote" tag="p" class="field-hint reg-form__legal" scope="global">
-      <template #terms><a :href="legalPath(locale, 'terms')" target="_blank" rel="noopener">{{ t('registrationForm.legalTerms') }}</a></template>
-      <template #privacy><a :href="legalPath(locale, 'privacy')" target="_blank" rel="noopener">{{ t('registrationForm.legalPrivacy') }}</a></template>
-    </Translation>
+      <Translation keypath="registrationForm.legalNote" tag="p" class="field-hint reg-form__legal" scope="global">
+        <template #terms><a :href="legalPath(locale, 'terms')" target="_blank" rel="noopener">{{ t('registrationForm.legalTerms') }}</a></template>
+        <template #privacy><a :href="legalPath(locale, 'privacy')" target="_blank" rel="noopener">{{ t('registrationForm.legalPrivacy') }}</a></template>
+      </Translation>
 
-    <button class="btn btn--primary" :disabled="loading || registrationClosed || conditionsChanged" type="submit">
-      <span v-if="loading" class="spinner" aria-hidden="true" />
-      {{ waitlistMode ? t('registrationRules.waitlistSubmit') : t('registrationForm.submit') }}
-    </button>
+      <button class="btn btn--primary" :disabled="loading || registrationClosed || conditionsChanged" type="submit">
+        <span v-if="loading" class="spinner" aria-hidden="true" />
+        {{ waitlistMode ? t('registrationRules.waitlistSubmit') : t('registrationForm.submit') }}
+      </button>
 
-    <button v-if="dirty" class="btn btn--ghost" type="button" :disabled="loading" @click="discard">{{ t('drafts.discardLeave') }}</button>
-    <div v-if="submitted" class="alert alert--success" role="status">{{ submittedStatus === 'waitlisted' ? t('registrationRules.waitlistSuccess') : t('registrationForm.success') }}</div>
+      <button v-if="dirty" class="btn btn--ghost" type="button" :disabled="loading" @click="discard">{{ t('drafts.discardLeave') }}</button>
+    </template>
     <div v-if="errorText" class="alert alert--error" role="alert">{{ errorText }}</div>
   </form>
 </template>
@@ -285,4 +303,7 @@ async function submit() {
 .reg-form__legal { margin: 0; }
 .reg-form__legal a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
 .reg-form__legal a:hover { color: var(--text); }
+.reg-form__done { display: grid; gap: 8px; justify-items: start; }
+.reg-form__done:focus { outline: none; }
+.reg-form__done-text { margin: 0; }
 </style>

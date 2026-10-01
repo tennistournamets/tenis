@@ -33,13 +33,13 @@ const compensationHint = computed(() => t('pointsFormat.compensationHint', { n: 
           <th scope="col" class="standings__rank" :aria-label="t('a11y.rank')">#</th>
           <th scope="col" class="standings__team">{{ t(isIndividualFormat(format) ? 'pointsFormat.player' : 'pointsFormat.pair') }}</th>
           <th v-if="kotc" scope="col">{{ t('pointsFormat.courtColumn') }}</th>
-          <th scope="col" :title="t('pointsFormat.playedFull')">{{ t('pointsFormat.played') }}</th>
+          <th scope="col" class="col-extra" :title="t('pointsFormat.playedFull')">{{ t('pointsFormat.played') }}</th>
           <th scope="col">{{ t('pointsFormat.won') }}</th>
-          <th v-if="hasDraws" scope="col">{{ t('pointsFormat.drawn') }}</th>
-          <th scope="col">{{ t('pointsFormat.lost') }}</th>
+          <th v-if="hasDraws" scope="col" class="col-extra">{{ t('pointsFormat.drawn') }}</th>
+          <th scope="col" class="col-extra">{{ t('pointsFormat.lost') }}</th>
           <th scope="col">{{ t('pointsFormat.diff') }}</th>
-          <th scope="col">{{ t('pointsFormat.pointsFor') }}</th>
-          <th v-if="hasRests" scope="col" :title="compensationHint">{{ t('pointsFormat.compensation') }}</th>
+          <th scope="col" class="col-extra">{{ t('pointsFormat.pointsFor') }}</th>
+          <th v-if="hasRests" scope="col" class="col-extra" :title="compensationHint">{{ t('pointsFormat.compensation') }}</th>
           <th scope="col">{{ t('pointsFormat.total') }}</th>
         </tr>
       </thead>
@@ -48,13 +48,13 @@ const compensationHint = computed(() => t('pointsFormat.compensationHint', { n: 
           <td class="standings__rank">{{ r.rank }}</td>
           <th scope="row" class="standings__team">{{ r.display_name }}</th>
           <td v-if="kotc">{{ r.court ?? '—' }}</td>
-          <td>{{ r.played }}</td>
+          <td class="col-extra">{{ r.played }}</td>
           <td>{{ r.won }}</td>
-          <td v-if="hasDraws">{{ r.drawn }}</td>
-          <td>{{ r.lost }}</td>
+          <td v-if="hasDraws" class="col-extra">{{ r.drawn }}</td>
+          <td class="col-extra">{{ r.lost }}</td>
           <td>{{ r.diff > 0 ? `+${r.diff}` : r.diff }}</td>
-          <td>{{ r.points_for }}</td>
-          <td v-if="hasRests" class="muted">{{ r.compensation ? `+${r.compensation}` : '—' }}</td>
+          <td class="col-extra">{{ r.points_for }}</td>
+          <td v-if="hasRests" class="muted col-extra">{{ r.compensation ? `+${r.compensation}` : '—' }}</td>
           <td><strong>{{ r.total }}</strong></td>
         </tr>
       </tbody>
@@ -65,7 +65,7 @@ const compensationHint = computed(() => t('pointsFormat.compensationHint', { n: 
 </template>
 
 <style scoped>
-.standings-wrap { overflow-x: auto; }
+.standings-wrap { overflow-x: auto; container-type: inline-size; }
 .standings { width: 100%; border-collapse: collapse; font-size: var(--font-sm, 0.9rem); }
 .standings th,
 .standings td {
@@ -98,4 +98,11 @@ const compensationHint = computed(() => t('pointsFormat.compensationHint', { n: 
 .standings td:last-child strong { color: var(--primary); font-family: var(--font-mono); }
 .points-standings__leader .standings__rank { color: var(--primary); font-weight: 700; }
 .points-standings__hint { margin: var(--space-2) 0 0; font-size: 0.8rem; line-height: 1.45; }
+/* Phone width: the ranking columns (wins, difference, total) stay on screen
+   instead of the total hiding behind a horizontal scroll. */
+@container (max-width: 480px) {
+  .standings .col-extra { display: none; }
+  .standings th, .standings td { padding: 10px 6px; }
+  .standings .standings__team { min-width: 0; }
+}
 </style>
