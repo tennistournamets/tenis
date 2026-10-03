@@ -8,6 +8,7 @@ import StandingsTable from '../components/StandingsTable.vue'
 import RoundRobinCrossTable from '../components/RoundRobinCrossTable.vue'
 import RoundRobinStandings from '../components/RoundRobinStandings.vue'
 import MatchScoreModal from '../components/MatchScoreModal.vue'
+import MatchStreamModal from '../components/admin/MatchStreamModal.vue'
 import FootballScoreEditor from '../components/FootballScoreEditor.vue'
 import GroupStageBoard from '../components/GroupStageBoard.vue'
 import DoubleElimBoard from '../components/DoubleElimBoard.vue'
@@ -798,6 +799,17 @@ const groupsView = computed(() =>
   buildGroupsView(groups.value, matches.value, groupStandings.value),
 )
 const selectedRrMatch = ref(null)
+// YouTube broadcast link of one match (MatchStreamModal), opened beside "Start live".
+const streamMatchId = ref(null)
+const streamMatch = computed(() => matches.value.find(row => row.id === streamMatchId.value) || null)
+// Court and time from a bracket card: the schedule tab's modal, on the stored match.
+function openMatchSchedule(match) {
+  const current = matches.value.find(row => row.id === match?.id)
+  if (canManageTournament.value && current) scheduleMatch.value = current
+}
+function openMatchStream(match) {
+  if (canLiveScoreRole.value && match?.id) streamMatchId.value = match.id
+}
 
 function openRrMatch(match) {
   const current = matches.value.find(row => row.id === match?.id)
@@ -2325,10 +2337,10 @@ onBeforeUnmount(() => {
         <div id="admin-mobile-panel" :role="isNarrowLayout && isTournamentActive && matches.length ? 'tabpanel' : undefined" :aria-labelledby="isNarrowLayout && isTournamentActive && matches.length ? `admin-surface-${adminMobileBracketSurface}` : undefined">
           <section v-if="isNarrowLayout && isTournamentActive && matches.length && adminMobileBracketSurface === 'matches' && isPointsFmt" class="card stack stack--sm mt-3">
             <h2 class="section-title">{{ t('pointsFormat.roundsTitle') }}</h2>
-            <PointsRoundsBoard :rounds="pointsRoundsList" :entries-map="entriesMap" :live-scores-by-match="liveScoresByMatch" :format="tournament.format" :planned-rounds="plannedRounds" :can-edit-final="canEditFinalScores" :can-live-score="canUseLiveScoring" @edit-result="openRrMatch" @view-live="openLiveScoring" />
+            <PointsRoundsBoard :rounds="pointsRoundsList" :entries-map="entriesMap" :live-scores-by-match="liveScoresByMatch" :format="tournament.format" :planned-rounds="plannedRounds" :can-edit-final="canEditFinalScores" :can-live-score="canUseLiveScoring" :can-stream="canLiveScoreRole" @edit-stream="openMatchStream" @edit-result="openRrMatch" @view-live="openLiveScoring" />
           </section>
           <section v-else-if="isNarrowLayout && isTournamentActive && matches.length && adminMobileBracketSurface === 'matches'" class="card mobile-score-center mt-3">
-            <TournamentMatchList :format="tournament.format" :matches="matches" :groups="groups" :entries-map="entriesMap" :sets-by-match="setsByMatch" :live-scores-by-match="liveScoresByMatch" :can-edit-final="canEditFinalScores" :can-live-score="canUseLiveScoring" @edit-result="openRrMatch" @view-live="openLiveScoring" />
+            <TournamentMatchList :format="tournament.format" :matches="matches" :groups="groups" :entries-map="entriesMap" :sets-by-match="setsByMatch" :live-scores-by-match="liveScoresByMatch" :can-edit-final="canEditFinalScores" :can-live-score="canUseLiveScoring" :can-stream="canLiveScoreRole" @edit-stream="openMatchStream" @edit-result="openRrMatch" @view-live="openLiveScoring" />
           </section>
         <!-- Padel points formats: schedule, next rounds, points table, rounds of courts -->
         <template v-if="isPointsFmt">
@@ -2392,7 +2404,7 @@ onBeforeUnmount(() => {
 
           <section v-if="hasBracket && (!isNarrowLayout || !isTournamentActive)" class="card stack stack--sm mt-4">
             <h2 class="section-title">{{ t('pointsFormat.roundsTitle') }}</h2>
-            <PointsRoundsBoard :rounds="pointsRoundsList" :entries-map="entriesMap" :live-scores-by-match="liveScoresByMatch" :format="tournament.format" :planned-rounds="plannedRounds" :can-edit-final="canEditFinalScores" :can-live-score="canUseLiveScoring" @edit-result="openRrMatch" @view-live="openLiveScoring" />
+            <PointsRoundsBoard :rounds="pointsRoundsList" :entries-map="entriesMap" :live-scores-by-match="liveScoresByMatch" :format="tournament.format" :planned-rounds="plannedRounds" :can-edit-final="canEditFinalScores" :can-live-score="canUseLiveScoring" :can-stream="canLiveScoreRole" @edit-stream="openMatchStream" @edit-result="openRrMatch" @view-live="openLiveScoring" />
           </section>
         </template>
 
@@ -2437,7 +2449,7 @@ onBeforeUnmount(() => {
               :live-scores-by-match="liveScoresByMatch"
               :can-edit-final="canEditFinalScores"
               :can-live-score="canUseLiveScoring"
-              @edit-result="openRrMatch"
+              :can-stream="canLiveScoreRole" @edit-stream="openMatchStream" @edit-result="openRrMatch"
               @view-live="openLiveScoring"
             />
           </section>
@@ -2520,6 +2532,10 @@ onBeforeUnmount(() => {
               :entries-map="entriesMap"
               :live-scores-by-match="liveScoresByMatch"
               :can-live-score="canEditScores"
+            :can-stream="canLiveScoreRole"
+            @edit-stream="openMatchStream"
+            :can-schedule="canManageTournament"
+            @edit-schedule="openMatchSchedule"
               @view-live="openLiveScoring"
             />
           </section>
@@ -2599,6 +2615,10 @@ onBeforeUnmount(() => {
             :entries-map="entriesMap"
             :live-scores-by-match="liveScoresByMatch"
             :can-live-score="canEditScores"
+            :can-stream="canLiveScoreRole"
+            @edit-stream="openMatchStream"
+            :can-schedule="canManageTournament"
+            @edit-schedule="openMatchSchedule"
             :editable-slots="slotsEditable"
             @swap-slots="swapBracketSlots"
             @view-live="openLiveScoring"
@@ -2611,6 +2631,10 @@ onBeforeUnmount(() => {
           :live-scores-by-match="liveScoresByMatch"
           :editable-slots="slotsEditable"
           :can-live-score="canEditScores"
+          :can-stream="canLiveScoreRole"
+          @edit-stream="openMatchStream"
+          :can-schedule="canManageTournament"
+          @edit-schedule="openMatchSchedule"
           @swap-slots="swapBracketSlots"
           @view-live="openLiveScoring"
         />
@@ -2709,7 +2733,7 @@ onBeforeUnmount(() => {
         <template v-else-if="isPointsFmt">
           <section class="card stack stack--sm">
             <h2 class="section-title">{{ t('pointsFormat.roundsTitle') }}</h2>
-            <PointsRoundsBoard :rounds="pointsRoundsList" :entries-map="entriesMap" :live-scores-by-match="liveScoresByMatch" :format="tournament.format" :planned-rounds="plannedRounds" :can-edit-final="canEditFinalScores" :can-live-score="canUseLiveScoring" @edit-result="openRrMatch" @view-live="openLiveScoring" />
+            <PointsRoundsBoard :rounds="pointsRoundsList" :entries-map="entriesMap" :live-scores-by-match="liveScoresByMatch" :format="tournament.format" :planned-rounds="plannedRounds" :can-edit-final="canEditFinalScores" :can-live-score="canUseLiveScoring" :can-stream="canLiveScoreRole" @edit-stream="openMatchStream" @edit-result="openRrMatch" @view-live="openLiveScoring" />
           </section>
           <section v-if="pointsStandings.length" class="card stack stack--sm mt-4">
             <h2 class="section-title">{{ t(isIndividualFormat(tournament.format) ? 'pointsFormat.playersTable' : 'pointsFormat.pairsTable') }}</h2>
@@ -2726,7 +2750,7 @@ onBeforeUnmount(() => {
             :live-scores-by-match="liveScoresByMatch"
             :can-edit-final="canEditFinalScores"
             :can-live-score="canUseLiveScoring"
-            @edit-result="openRrMatch"
+            :can-stream="canLiveScoreRole" @edit-stream="openMatchStream" @edit-result="openRrMatch"
             @view-live="openLiveScoring"
           />
         </section>
@@ -2757,7 +2781,9 @@ onBeforeUnmount(() => {
           :matches="matches"
           :entries-map="entriesMap"
           :disabled="!canEditFinalScores"
+          :can-stream="canLiveScoreRole"
           @saved="refreshScoreData"
+          @edit-stream="openMatchStream"
         />
         <ScoreEditor
           v-else
@@ -2772,8 +2798,10 @@ onBeforeUnmount(() => {
           :disabled="!canEditFinalScores"
           :can-live-score="canUseLiveScoring"
           :live-scores-by-match="liveScoresByMatch"
+          :can-stream="canLiveScoreRole"
           @saved="refreshScoreData"
           @start-live="openLiveScoring"
+          @edit-stream="openMatchStream"
         />
       </div>
 
@@ -2972,7 +3000,17 @@ onBeforeUnmount(() => {
         :live-status="liveScoresByMatch[selectedRrMatch.id]?.status || null"
         @close="closeAdminScoreModal"
         @saved="refreshScoreData"
+        :can-stream="canLiveScoreRole"
         @start-live="startLiveFromRrModal"
+        @edit-stream="openMatchStream"
+      />
+      <MatchStreamModal
+        v-if="streamMatch && canLiveScoreRole"
+        :key="streamMatch.id"
+        :match="streamMatch"
+        :entries-map="entriesMap"
+        @close="streamMatchId = null"
+        @saved="refreshScoreData"
       />
     </template>
   </div>

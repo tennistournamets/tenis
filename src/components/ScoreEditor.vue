@@ -9,6 +9,7 @@ import { useUnsavedChanges } from '../lib/unsavedChanges'
 import { saveMatchResult } from '../lib/saveMatchResult'
 import { confirmDialog } from '../lib/confirmDialog'
 import TennisSetInputs from './TennisSetInputs.vue'
+import MatchStreamButton from './admin/MatchStreamButton.vue'
 import { knockoutTotals, matchRoundName, matchStageRoundLabel } from '../lib/roundLabels'
 import { groupIndexOfRound, groupNamesById, roundInGroup } from '../lib/groupsFlow'
 import { scoreRows, buildSetPayload, scoringError, matchScoreCheck } from '../lib/tennisRules'
@@ -43,6 +44,8 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  // Organizers attach a YouTube broadcast link (owner, editor, counter).
+  canStream: { type: Boolean, default: false },
   liveScoresByMatch: {
     type: Object,
     default: () => ({}),
@@ -52,7 +55,7 @@ const props = defineProps({
   format: { type: String, default: '' },
 })
 
-const emit = defineEmits(['saved', 'start-live'])
+const emit = defineEmits(['saved', 'start-live', 'edit-stream'])
 
 const { t } = useI18n()
 const setForms = reactive({})
@@ -319,15 +322,24 @@ async function save(match) {
               <span class="se-status__dot" aria-hidden="true" />
               {{ matchStatus(match) === 'live' ? t('live.live') : t(`scoringFlow.status${matchStatus(match).charAt(0).toUpperCase()}${matchStatus(match).slice(1)}`) }}
             </span>
-            <button
-              v-if="canLiveScore && match.status !== 'finished' && canScore(match)"
-              class="btn btn--ghost btn--sm se-card__live"
-              type="button"
-              @click="emit('start-live', match)"
-            >
-              <span class="live-dot" aria-hidden="true" />
-              {{ liveStatus(match.id) === 'active' ? t('live.openLive') : t('live.start') }}
-            </button>
+            <div class="se-card__tools">
+              <button
+                v-if="canLiveScore && match.status !== 'finished' && canScore(match)"
+                class="btn btn--ghost btn--sm se-card__live"
+                type="button"
+                @click="emit('start-live', match)"
+              >
+                <span class="live-dot" aria-hidden="true" />
+                {{ liveStatus(match.id) === 'active' ? t('live.openLive') : t('live.start') }}
+              </button>
+              <MatchStreamButton
+                v-if="canStream && !removed(match.id)"
+                class="se-card__live"
+                :match="match"
+                :label="t('stream.buttonAria', { teamA: teamLabel(match.side_a_entry_id, match), teamB: teamLabel(match.side_b_entry_id, match) })"
+                @open="emit('edit-stream', match)"
+              />
+            </div>
           </header>
 
           <!-- Both players still unknown: nothing to type yet. -->
@@ -442,7 +454,8 @@ async function save(match) {
 .se-status--finished .se-status__dot { background: var(--success); }
 .se-status--live { color: var(--accent-text); }
 .se-status--live .se-status__dot { background: var(--accent); animation: livePulse 1.5s ease-in-out infinite; }
-.se-card__live { margin-left: auto; min-height: 32px; height: 32px; padding: 0 10px; font-size: 0.8125rem; }
+.se-card__tools { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; margin-left: auto; }
+.se-card__live { min-height: 32px; height: 32px; padding: 0 10px; font-size: 0.8125rem; }
 .se-card__teams-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin: 0; font-weight: 600; }
 /* --muted, not --disabled: this is readable information (WCAG AA 4.5:1 in both themes). */
 .se-card__teams-line .is-tbd { color: var(--muted); font-weight: 500; }

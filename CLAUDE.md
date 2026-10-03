@@ -39,6 +39,7 @@ src/
     ScoreEditor.vue           # Final set score editing (sets sports)
     LiveScoreViewerModal.vue  # Read-only live score display (spectator)
     LiveScoringModal.vue      # Point-by-point tennis scoring input (admin)
+    MatchStreamLink.vue       # "Watch" YouTube link of a match (every board + live viewer); admin/MatchStreamButton + admin/MatchStreamModal set it
     RegistrationForm.vue      # Public registration form (sport-aware labels)
     LanguageSwitcher.vue      # RU/EN/LT locale selector
     MadeWithBracketa.vue      # "Made with Bracketa" footer on public pages (growth link with utm)
@@ -63,6 +64,7 @@ src/
     sponsorshipRequests.js    # Paid-feature gate: request/list/decide RPCs, cached is_sponsorship_approved
     useTennisScoring.js       # Tennis scoring composable (sets family; reused by padel)
     entryDisplay.js           # Entry/member name display helper
+    matchStream.js            # YouTube stream link of a match: normalize/validate (mirrors matches_stream_url_ck)
     shareLink.js              # Tournament link generation
     headerTitle.js            # Public header title ref
   router/
@@ -130,6 +132,7 @@ supabase/
 - **entry_members** - individual member names (doubles = 2), optional `player_id`
 - **groups**, **group_entries** - group-stage buckets (round_robin uses none; groups_playoff uses both)
 - **matches** - canonical aggregate `side_a_score`/`side_b_score` (points total in points formats; partners in `side_a2_entry_id`/`side_b2_entry_id`) (+ `side_a_pens`/`side_b_pens` for football knockout); `stage` (main/group/winners/losers/grand_final/third_place); `group_id`; winner tree via `next_match_id`/`next_slot`; loser routing via `loser_next_match_id`/`loser_next_slot` (double-elim); unique on `(tournament_id, stage, round_number, match_number)`
+  `stream_url` - YouTube broadcast link (https youtube.com / youtu.be only), set via `set_match_stream()`; changing only it keeps `score_revision`
 - **match_sets** - per-set game scores (tennis/padel only)
 - **bracket_versions** - bracket snapshots for undo
 - **live_scores** - real-time point-by-point scoring state (JSON state/history/revision)
@@ -159,6 +162,7 @@ supabase/
 - Points formats: `generate_points_format(id, rounds, courts, first_round)` (Americano schedule: full partner cycle by default, cyclic whist designs for 8/12/13/16/17/20/21/24/25 players, else circle/greedy with rest spread ≤ 1; Team Americano RR; Mexicano/KotC round 1, roster stored in `format_config.roster`), `generate_next_round()`, `undo_last_round()`, `update_match_points(match, a, b, rev)`, `get_points_standings()`; live `record_point` counts rallies to N; triggers `guard_points_format` (padel only, forced pick_random, odd N for KotC), `guard_individual_entry_members`, `guard_points_match_sets`
 - `set_entry_seed_order(tournament_id, entry_ids[])` - manual seeding of the approved field before the draw (feeds manual draw and group snake); snapshot entries carry `seed_order`
 - `start_live_match()`, `record_point()`, `stop_live_match()` - live scoring lifecycle
+- `set_match_stream(match, url)` - sets/clears ('') a match's YouTube link; `can_live_score()` (owner, editor, counter), any tournament status; raises `stream.invalidUrl`
 - `add_tournament_admin_by_email()`, `remove_tournament_admin()` - co-organizer management
 - `is_tournament_admin()`, `can_live_score()`, `is_platform_admin()` - access checks
 - `is_feature_enabled(key)` / `set_feature_flag(key, enabled, description)` - feature flags; `create_tournament()` rejects a sport whose `sport.<x>` flag is off

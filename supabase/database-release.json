@@ -1,5 +1,5 @@
 {
-  "release": "2026-09-30-skip-placeholder-emails",
+  "release": "2026-10-02-match-stream-links",
   "forwardMigrations": [
     {
       "path": "supabase/migrations/20260908120000_mobile_tournament_details.sql",
@@ -162,6 +162,10 @@
       "sha256": "d151d610bcc08cac01478fd9a15ad0761397d20068470b485c28f3ed339a06dc",
       "tenisAppliedVersion": "20260930204416",
       "tenisNote": "Applied 2026-09-30 with supabase db push --db-url (session pooler) after logical backup (tenis-public-20260930-2347-pre-skip-placeholder-emails.dump + migrations journal dump); function replacement only."
+    },
+    {
+      "path": "supabase/migrations/20261002140818_match_stream_links.sql",
+      "sha256": "78788b6f49860917fe08938fa3ab834d49c07731bf996cfe32ced6a8061b2eca"
     }
   ],
   "baseline": {

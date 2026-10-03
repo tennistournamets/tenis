@@ -7,13 +7,16 @@ import { supabase } from '../lib/supabase'
 import { useUnsavedChanges } from '../lib/unsavedChanges'
 import { sameForm } from '../lib/formDraft'
 import { saveMatchResult } from '../lib/saveMatchResult'
+import MatchStreamButton from './admin/MatchStreamButton.vue'
 
 const props = defineProps({
   matches: { type: Array, default: () => [] },
   entriesMap: { type: Object, default: () => ({}) },
   disabled: { type: Boolean, default: false },
+  // Organizers attach a YouTube broadcast link (owner, editor, counter).
+  canStream: { type: Boolean, default: false },
 })
-const emit = defineEmits(['saved'])
+const emit = defineEmits(['saved', 'edit-stream'])
 const { t } = useI18n()
 
 const savingId = ref('')
@@ -175,14 +178,22 @@ async function save(m) {
         />
       </div>
 
-      <button
-        class="btn btn--primary btn--sm fb-row__save"
-        type="button"
-        :disabled="disabled || removed(m.id) || savingId === m.id || fieldsFor(m).revision !== m.score_revision"
-        @click="save(m)"
-      >
-        {{ t(m.status === 'finished' ? 'scoringFlow.correct' : 'scoringFlow.finish') }}
-      </button>
+      <div class="fb-row__save">
+        <button
+          class="btn btn--primary btn--sm"
+          type="button"
+          :disabled="disabled || removed(m.id) || savingId === m.id || fieldsFor(m).revision !== m.score_revision"
+          @click="save(m)"
+        >
+          {{ t(m.status === 'finished' ? 'scoringFlow.correct' : 'scoringFlow.finish') }}
+        </button>
+        <MatchStreamButton
+          v-if="canStream && !removed(m.id)"
+          :match="m"
+          :label="t('stream.buttonAria', { teamA: name(m.side_a_entry_id), teamB: name(m.side_b_entry_id) })"
+          @open="emit('edit-stream', m)"
+        />
+      </div>
       <Transition name="saved-pop">
         <span v-if="savedFlash[m.id]" class="score-saved-badge">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
@@ -265,5 +276,8 @@ async function save(m) {
 .fb-row__save {
   grid-column: 1 / -1;
   justify-self: start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
 }
 </style>

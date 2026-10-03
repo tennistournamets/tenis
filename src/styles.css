@@ -3053,6 +3053,12 @@ html.ic-pseudo-fullscreen-open body {
   background: transparent;
 }
 
+.modal-backdrop--full {
+  align-items: stretch;
+  padding: 0;
+  background: #000;
+}
+
 .modal-backdrop:not([open]) {
   display: none;
 }

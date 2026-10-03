@@ -11,10 +11,14 @@ const props = defineProps({
   entriesMap: { type: Object, default: () => ({}) },
   liveScoresByMatch: { type: Object, default: () => ({}) },
   canLiveScore: { type: Boolean, default: false },
+  // Organizers attach a YouTube broadcast link (owner, editor, counter).
+  canStream: { type: Boolean, default: false },
+  // Managers assign a court and time from the card.
+  canSchedule: { type: Boolean, default: false },
   // Manual draw: players are rearranged in the first upper-bracket round only.
   editableSlots: { type: Boolean, default: false },
 })
-const emit = defineEmits(['view-live', 'swap-slots'])
+const emit = defineEmits(['view-live', 'swap-slots', 'edit-stream', 'edit-schedule'])
 const { t } = useI18n()
 const isNarrowLayout = useNarrowLayout()
 const activeStage = ref('winners')
@@ -64,6 +68,10 @@ watch(panels, (next) => {
           :entries-map="entriesMap"
           :live-scores-by-match="liveScoresByMatch"
           :can-live-score="canLiveScore"
+          :can-stream="canStream"
+          :can-schedule="canSchedule"
+          @edit-stream="emit('edit-stream', $event)"
+          @edit-schedule="emit('edit-schedule', $event)"
           :editable-slots="editableSlots"
           @swap-slots="emit('swap-slots', $event)"
           @view-live="emit('view-live', $event)"
@@ -82,6 +90,10 @@ watch(panels, (next) => {
           :entries-map="entriesMap"
           :live-scores-by-match="liveScoresByMatch"
           :can-live-score="canLiveScore"
+          :can-stream="canStream"
+          :can-schedule="canSchedule"
+          @edit-stream="emit('edit-stream', $event)"
+          @edit-schedule="emit('edit-schedule', $event)"
           @view-live="emit('view-live', $event)"
         />
       </div>
@@ -98,6 +110,10 @@ watch(panels, (next) => {
           :entries-map="entriesMap"
           :live-scores-by-match="liveScoresByMatch"
           :can-live-score="canLiveScore"
+          :can-stream="canStream"
+          :can-schedule="canSchedule"
+          @edit-stream="emit('edit-stream', $event)"
+          @edit-schedule="emit('edit-schedule', $event)"
           @view-live="emit('view-live', $event)"
         />
       </div>

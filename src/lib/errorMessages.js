@@ -15,6 +15,7 @@ const NAMESPACES = {
   'drafts.': 'drafts.',
   'lifecycle.': 'lifecycle.',
   'venue.': 'venue.errors.',
+  'stream.': 'stream.errors.',
   'tennisRules.': 'tennisRules.',
   'scoringFlow.': 'scoringFlow.',
   'seeding.': 'seeding.',

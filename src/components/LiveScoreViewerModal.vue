@@ -2,6 +2,7 @@
 import { computed, defineAsyncComponent, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppModal from './AppModal.vue'
+import MatchStreamLink from './MatchStreamLink.vue'
 
 import { liveRuleHint } from '../lib/tennisRules'
 import { pointLabel, scoreLine } from '../lib/useTennisScoring'
@@ -77,6 +78,8 @@ const props = defineProps({
     type: String,
     required: true,
   },
+  // The match, for its YouTube broadcast link.
+  match: { type: Object, default: null },
 })
 
 const emit = defineEmits(['close'])
@@ -147,6 +150,7 @@ function teamName(side) {
         <p class="live-scoreboard__sets">{{ scoreLine(state) }}</p>
         <div v-if="liveRuleHint(state, t)" class="alert alert--info" role="status">{{ liveRuleHint(state, t) }}</div>
       </template>
+      <MatchStreamLink v-if="match" :match="match" block :label="t('stream.watchAria', { teamA, teamB })" />
       <div v-if="liveLockup" class="live-modal__sponsor">
         <SponsorLockup :lockup="liveLockup" />
       </div>
