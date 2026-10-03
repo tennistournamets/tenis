@@ -165,7 +165,9 @@
     },
     {
       "path": "supabase/migrations/20261002140818_match_stream_links.sql",
-      "sha256": "78788b6f49860917fe08938fa3ab834d49c07731bf996cfe32ced6a8061b2eca"
+      "sha256": "78788b6f49860917fe08938fa3ab834d49c07731bf996cfe32ced6a8061b2eca",
+      "tenisAppliedVersion": "20261002140818",
+      "tenisNote": "Applied 2026-10-04 with supabase db push --db-url (session pooler) after logical backup (tenis-public-20261004-0012-pre-match-stream-links.dump + migrations journal dump)."
     }
   ],
   "baseline": {
