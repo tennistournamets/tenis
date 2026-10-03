@@ -5,6 +5,8 @@ import { lockPageScroll } from '../lib/modalScrollLock'
 defineProps({
   label: { type: String, required: true },
   role: { type: String, default: 'dialog' },
+  // Edge to edge, no padding around the content (the phone stream view).
+  fullscreen: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['close'])
@@ -79,6 +81,7 @@ function onBackdropClick(event) {
     <dialog
       ref="dialog"
       class="modal-backdrop"
+      :class="{ 'modal-backdrop--full': fullscreen }"
       :style="viewportStyle"
       :role="role"
       aria-modal="true"

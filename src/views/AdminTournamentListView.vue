@@ -5,7 +5,7 @@ import { useI18n } from 'vue-i18n'
 
 import { supabase } from '../lib/supabase'
 import CopyTournamentLink from '../components/CopyTournamentLink.vue'
-import TournamentProgressIcon from '../components/TournamentProgressIcon.vue'
+import AppIcon from '../components/AppIcon.vue'
 import { categoryLabelKey } from '../lib/sportConfig'
 import { useAuthStore } from '../stores/auth'
 import { displayStatus, statusBadgeClass } from '../lib/tournamentStatus'
@@ -199,34 +199,28 @@ function nextStep(item) {
   }
 }
 
-// Ring fill and its words: seats while registering, matches once the draw exists.
+// The figure on the right: seats while registering, matches once the draw exists.
 function itemProgress(item) {
   const p = progress.value[item.id]
   const status = displayStatus(item)
-  if (!p) return { value: null, text: '' }
+  if (!p) return null
   const toPlay = p.matches - p.byes
   if ((status === 'in_progress' || status === 'completed') && toPlay > 0) {
-    return { value: p.played / toPlay, text: t('admin.listMetaMatches', { n: p.played, total: toPlay }) }
+    return { value: p.played / toPlay, n: p.played, total: toPlay, label: t('admin.listProgressMatches'), text: t('admin.listMetaMatches', { n: p.played, total: toPlay }) }
   }
   if (item.registration_capacity && status !== 'completed') {
-    return { value: p.approved / item.registration_capacity, text: t('admin.listMetaSeats', { n: p.approved, total: item.registration_capacity }) }
+    return { value: p.approved / item.registration_capacity, n: p.approved, total: item.registration_capacity, label: t('admin.listProgressSeats'), text: t('admin.listMetaSeats', { n: p.approved, total: item.registration_capacity }) }
   }
-  return { value: null, text: '' }
+  return null
 }
 
-function iconLabel(item) {
-  const parts = [t(`sport.${item.sport}`), t(`tournament.${displayStatus(item)}`)]
-  const { text } = itemProgress(item)
-  if (text) parts.push(text)
-  return parts.join(', ')
-}
+const progressWidth = item => `${Math.round(Math.min(Math.max(itemProgress(item)?.value || 0, 0), 1) * 100)}%`
 
+// One quiet line of facts under the name; the progress figure has its own column.
 function itemMeta(item) {
   const parts = [itemSubtitle(item)]
   const p = progress.value[item.id]
-  const { text } = itemProgress(item)
-  if (text) parts.push(text)
-  else if (p?.approved) parts.push(t('admin.listMetaEntries', { n: p.approved }))
+  if (p?.approved) parts.push(t('admin.listMetaEntries', { n: p.approved }))
   parts.push(t('admin.listMetaCreated', { date: formatDate(item.created_at) }))
   return parts.join(' · ')
 }
@@ -301,41 +295,40 @@ onMounted(async () => {
         v-for="item in filteredTournaments"
         :key="item.id"
         class="t-card"
+        :class="`t-card--${displayStatus(item)}`"
         tabindex="0"
         role="link"
         @click="router.push(tournamentTarget(item))"
         @keydown.enter="router.push(tournamentTarget(item))"
       >
-        <div class="t-card__main">
-          <TournamentProgressIcon
-            :sport="item.sport"
-            :status="displayStatus(item)"
-            :value="itemProgress(item).value"
-            :label="iconLabel(item)"
-          />
-          <div class="t-card__info">
-            <div class="t-card__title-row">
-              <h2 class="t-card__title">{{ item.name }}</h2>
-              <span class="badge" :class="statusBadgeClass(displayStatus(item))">
-                {{ t(`tournament.${displayStatus(item)}`) }}
-              </span>
-              <span v-if="item.currentRole && item.currentRole !== 'owner'" class="badge badge--neutral">{{ t(`admin.${item.currentRole}`) }}</span>
-              <span v-if="item.visibility && item.visibility !== 'link'" class="badge badge--neutral">{{ t(`access.visibility.${item.visibility}`) }}</span>
-            </div>
-            <p class="t-card__meta">{{ itemMeta(item) }}</p>
+        <span class="t-card__icon" aria-hidden="true"><AppIcon :name="item.sport" :size="20" /></span>
+        <div class="t-card__info">
+          <div class="t-card__title-row">
+            <h2 class="t-card__title">{{ item.name }}</h2>
+            <span class="t-card__status"><i aria-hidden="true"></i>{{ t(`tournament.${displayStatus(item)}`) }}</span>
+            <span v-if="item.currentRole && item.currentRole !== 'owner'" class="badge badge--neutral">{{ t(`admin.${item.currentRole}`) }}</span>
+            <span v-if="item.visibility && item.visibility !== 'link'" class="badge badge--neutral">{{ t(`access.visibility.${item.visibility}`) }}</span>
           </div>
-          <CopyTournamentLink
-            v-if="item.currentRole !== 'counter' && hasPublicShareLink(item.status)"
-            class="t-card__copy"
-            :slug="item.slug"
-            :name="item.name"
-            compact
-          />
+          <p class="t-card__meta"><span class="sr-only">{{ t(`sport.${item.sport}`) }} · </span>{{ itemMeta(item) }}</p>
+          <p v-if="nextStep(item)" class="t-card__next" :class="`t-card__next--${nextStep(item).tone}`">
+            <span v-if="nextStep(item).tone === 'live' && progress[item.id]?.live" class="live-dot" aria-hidden="true"></span>
+            <span class="t-card__next-text">{{ nextStep(item).text }}</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+          </p>
         </div>
-        <div v-if="nextStep(item)" class="t-card__next" :class="`t-card__next--${nextStep(item).tone}`">
-          <span class="t-card__next-text">{{ nextStep(item).text }}</span>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>
+        <div v-if="itemProgress(item)" class="t-card__progress" :aria-label="itemProgress(item).text" role="img">
+          <span class="t-card__figure" aria-hidden="true">{{ itemProgress(item).n }}/{{ itemProgress(item).total }}</span>
+          <span class="t-card__figure-label" aria-hidden="true">{{ itemProgress(item).label }}</span>
+          <span class="t-card__bar" aria-hidden="true"><span :style="{ width: progressWidth(item) }"></span></span>
         </div>
+        <CopyTournamentLink
+          v-if="item.currentRole !== 'counter' && hasPublicShareLink(item.status)"
+          class="t-card__copy"
+          :slug="item.slug"
+          :name="item.name"
+          compact
+        />
+        <svg class="t-card__chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
       </article>
     </div>
 
@@ -353,89 +346,89 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+/* Status as a thin left accent and a dot, one quiet line of facts, the
+   progress as a figure read at a glance, the next step as a coloured link. */
 .t-card {
+  --tone: var(--muted);
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-4) 18px var(--space-4) 20px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: var(--space-4);
+  overflow: hidden;
   cursor: pointer;
-  transition: border-color 0.15s, box-shadow 0.15s, transform 0.1s;
+  transition: border-color 0.15s, background 0.15s;
 }
+.t-card::before { content: ''; position: absolute; inset: 0 auto 0 0; width: 3px; background: var(--tone); }
+.t-card:hover { border-color: var(--border-strong); background: var(--surface-hover); }
+.t-card:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+/* Same colours as the status badges (lib/tournamentStatus.js). */
+.t-card--registration_open, .t-card--registration_closed { --tone: var(--warning); }
+.t-card--in_progress { --tone: var(--success); }
+.t-card--completed { --tone: var(--done-dot); }
 
-.t-card:hover {
-  border-color: var(--border-strong);
-  box-shadow: var(--shadow-md);
-}
-
-.t-card:active { transform: scale(0.995); }
-
-.t-card:focus-visible {
-  outline: 2px solid var(--primary);
-  outline-offset: 2px;
-}
-
-.t-card__main {
-  display: flex;
+.t-card__icon {
+  display: inline-flex;
   align-items: center;
-  gap: var(--space-3);
-}
-
-.t-card__info { flex: 1; min-width: 0; }
-
-.t-card__title-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-}
-
-.t-card__title {
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 1.05rem;
-  letter-spacing: -0.01em;
-  color: var(--text);
-  margin: 0;
-}
-
-.t-card__meta {
-  margin: 4px 0 0;
-  font-size: 0.85rem;
-  color: var(--muted);
-}
-
-.t-card__copy { flex-shrink: 0; }
-
-.t-card__next {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-  margin-top: var(--space-3);
-  padding: 10px 14px;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
   border-radius: var(--radius-sm);
-  font-size: 0.9rem;
-  font-weight: 500;
+  background: var(--surface-row);
+  color: var(--tone);
 }
+.t-card__info { min-width: 0; }
+.t-card__title-row { display: flex; align-items: center; gap: var(--space-2) 10px; flex-wrap: wrap; }
+.t-card__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.0625rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--heading);
+  overflow-wrap: anywhere;
+}
+.t-card__status { display: inline-flex; align-items: center; gap: 6px; font-size: 0.8125rem; font-weight: 600; color: var(--tone); }
+.t-card--registration_open .t-card__status, .t-card--registration_closed .t-card__status { color: var(--warning-text); }
+.t-card--in_progress .t-card__status { color: var(--success-text); }
+.t-card__status i { width: 6px; height: 6px; border-radius: 50%; background: var(--tone); }
+.t-card__meta { margin: 3px 0 0; font-size: 0.875rem; color: var(--muted); }
+.t-card__next { margin: var(--space-2) 0 0; font-size: 0.875rem; font-weight: 600; line-height: 1.45; }
+/* Dot and arrow ride the text, so a wrapped hint keeps its arrow at the end. */
+.t-card__next .live-dot { display: inline-block; margin-right: 6px; vertical-align: 1px; }
+.t-card__next svg { display: inline; margin-left: 6px; vertical-align: -2px; }
+.t-card__next--warn { color: var(--warning-text); }
+.t-card__next--live { color: var(--success-text); }
+.t-card__next--setup { color: var(--primary); }
 
-.t-card__next--warn {
-  color: var(--warning-text);
-  background: var(--warning-bg);
-}
-
-.t-card__next--live {
-  color: var(--success-text);
-  background: var(--success-bg);
-}
-
-.t-card__next--setup {
-  color: var(--primary);
-  background: var(--primary-muted);
-}
+.t-card__progress { display: grid; justify-items: end; gap: 2px; min-width: 84px; }
+.t-card__figure { font-family: var(--font-mono); font-size: 1.25rem; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; color: var(--text); }
+.t-card__figure-label { font-size: 0.75rem; color: var(--muted); }
+.t-card__bar { width: 84px; height: 4px; margin-top: 4px; border-radius: 999px; background: var(--border); overflow: hidden; }
+.t-card__bar span { display: block; height: 100%; border-radius: inherit; background: var(--tone); }
+.t-card__copy { flex-shrink: 0; }
+.t-card__chevron { color: var(--muted); }
 
 @media (max-width: 560px) {
-  .t-card__main { align-items: flex-start; flex-wrap: wrap; }
-  .t-card__copy { width: 100%; padding-left: 64px; }
-  .t-card__copy :deep(.btn:not(.btn--icon)) { min-height: 44px; flex: 1 1 120px; }
+  /* Phone: the text gets the full width; progress and the link share a row below. */
+  .t-card {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas: 'icon info info' '. progress copy';
+    align-items: start;
+    gap: var(--space-3);
+    padding-left: 16px;
+  }
+  .t-card__icon { grid-area: icon; }
+  .t-card__info { grid-area: info; }
+  .t-card__progress { grid-area: progress; display: flex; align-items: center; align-self: center; gap: var(--space-2); min-width: 0; }
+  .t-card__figure { font-size: 1rem; }
+  .t-card__bar { flex: 1; width: auto; max-width: 120px; margin-top: 0; }
+  .t-card__copy { grid-area: copy; }
+  .t-card__chevron { display: none; }
 }
+@media (prefers-reduced-motion: reduce) { .t-card { transition: none; } }
 </style>

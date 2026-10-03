@@ -29,13 +29,17 @@ const props = defineProps({
     type: Object,
     default: () => ({}),
   },
+  // Organizers attach a YouTube broadcast link (owner, editor, counter).
+  canStream: { type: Boolean, default: false },
+  // Managers assign a court and time from the card.
+  canSchedule: { type: Boolean, default: false },
   canLiveScore: {
     type: Boolean,
     default: false,
   },
 })
 
-const emit = defineEmits(['swap-slots', 'view-live'])
+const emit = defineEmits(['swap-slots', 'view-live', 'edit-stream', 'edit-schedule'])
 
 const { t } = useI18n()
 // Title partner line over the final (public page and organizer preview).
@@ -343,6 +347,10 @@ watch(splitSectionsFlat, () => scheduleUpdate(), { deep: true })
             :selected-slot-key="selectedSlot ? `${selectedSlot.matchId}-${selectedSlot.side}` : ''"
             :live-score="liveScoresByMatch[match.id]"
             :can-live-score="canLiveScore"
+            :can-stream="canStream"
+            :can-schedule="canSchedule"
+            @edit-stream="emit('edit-stream', $event)"
+            @edit-schedule="emit('edit-schedule', $event)"
             @swap-slots="emit('swap-slots', $event)"
             @select-slot="selectSlot"
             @view-live="emit('view-live', $event)"
@@ -364,6 +372,10 @@ watch(splitSectionsFlat, () => scheduleUpdate(), { deep: true })
             :selected-slot-key="selectedSlot ? `${selectedSlot.matchId}-${selectedSlot.side}` : ''"
             :live-score="liveScoresByMatch[match.id]"
             :can-live-score="canLiveScore"
+            :can-stream="canStream"
+            :can-schedule="canSchedule"
+            @edit-stream="emit('edit-stream', $event)"
+            @edit-schedule="emit('edit-schedule', $event)"
             @swap-slots="emit('swap-slots', $event)"
             @select-slot="selectSlot"
             @view-live="emit('view-live', $event)"

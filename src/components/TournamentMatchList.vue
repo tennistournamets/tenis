@@ -8,6 +8,9 @@ import { formatSetScore } from '../lib/tennisRules'
 import { knockoutTotals, matchRoundName } from '../lib/roundLabels'
 import { pointLabel, scoreLine } from '../lib/useTennisScoring'
 import { compareGroupMatches, groupNamesById, groupRoundLabel } from '../lib/groupsFlow'
+import { matchStreamUrl } from '../lib/matchStream'
+import MatchStreamLink from './MatchStreamLink.vue'
+import MatchStreamButton from './admin/MatchStreamButton.vue'
 
 const props = defineProps({
   matches: { type: Array, default: () => [] },
@@ -16,11 +19,13 @@ const props = defineProps({
   liveScoresByMatch: { type: Object, default: () => ({}) },
   canEditFinal: { type: Boolean, default: false },
   canLiveScore: { type: Boolean, default: false },
+  // Organizers attach a YouTube broadcast link (owner, editor, counter).
+  canStream: { type: Boolean, default: false },
   format: { type: String, default: '' },
   groups: { type: Array, default: () => [] },
 })
 
-const emit = defineEmits(['edit-result', 'view-live'])
+const emit = defineEmits(['edit-result', 'view-live', 'edit-stream'])
 const { t, locale } = useI18n()
 const titleId = useId()
 const search = ref('')
@@ -43,6 +48,7 @@ const stageOrder = { group: 0, winners: 1, main: 1, losers: 2, grand_final: 3, t
 
 // One entry per side, or both players of a points-format match (Americano…).
 const sideLabel = (match, side) => matchSideLabel(match, side, props.entriesMap, t('bracket.tbd'))
+const sidesText = match => ({ teamA: sideLabel(match, 'a'), teamB: sideLabel(match, 'b') })
 // Points formats count rallies (state.points), tennis counts games and sets.
 const isPointsState = state => state?.family === 'points'
 const liveLine = state => (isPointsState(state) ? t('pointsFormat.liveTarget', { n: state.target }) : scoreLine(state))
@@ -218,7 +224,7 @@ const visibleMatches = computed(() => {
           <span>{{ t('mobile.finalScore') }}</span><strong>{{ finalScore(match) }}</strong>
         </div>
 
-        <footer v-if="isLive(match) || (canEditFinal && match.side_a_entry_id && match.side_b_entry_id) || (canLiveScore && match.status !== 'finished' && match.side_a_entry_id && match.side_b_entry_id)" class="mobile-match__actions">
+        <footer v-if="isLive(match) || matchStreamUrl(match) || canStream || (canEditFinal && match.side_a_entry_id && match.side_b_entry_id) || (canLiveScore && match.status !== 'finished' && match.side_a_entry_id && match.side_b_entry_id)" class="mobile-match__actions">
           <button
             v-if="isLive(match)"
             type="button"
@@ -237,6 +243,8 @@ const visibleMatches = computed(() => {
             class="btn btn--ghost btn--sm"
             @click="emit('view-live', match)"
           >{{ t('live.start') }}</button>
+          <MatchStreamButton v-if="canStream" :match="match" :label="t('stream.buttonAria', sidesText(match))" @open="emit('edit-stream', match)" />
+          <MatchStreamLink :match="match" :label="t('stream.watchAria', sidesText(match))" />
         </footer>
       </article>
     </div>

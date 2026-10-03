@@ -8,6 +8,8 @@ import { normalizeTennisState, pointLabel, scoreLine } from '../lib/useTennisSco
 import { scheduleSummary } from '../lib/schedule'
 import { roundInGroup } from '../lib/groupsFlow'
 import { completedSetCount } from '../lib/bracketDisplay'
+import { matchStreamUrl } from '../lib/matchStream'
+import MatchStreamLink from './MatchStreamLink.vue'
 
 const props = defineProps({
   groups: { type: Array, default: () => [] }, // [{ id, name, standings, rounds }]
@@ -110,6 +112,9 @@ const liveCount = g => g.rounds.reduce((n, r) => n + r.list.filter(isLive).lengt
                 <span>{{ scheduleLine(m) }}</span>
                 <span v-if="scheduleIsDraft(m)" class="badge badge--warn">{{ t('schedule.draft') }}</span>
               </p>
+              <p v-if="matchStreamUrl(m)" class="gs-match__stream">
+                <MatchStreamLink :match="m" :label="t('stream.watchAria', { teamA: name(m.side_a_entry_id), teamB: name(m.side_b_entry_id) })" />
+              </p>
 
               <!-- Hover / focus card with the full score, tie-breaks included -->
               <div v-if="hasDetails(m)" class="gs-tip" role="tooltip">
@@ -204,6 +209,7 @@ button.gs-match__body { cursor: pointer; }
   color: var(--muted);
   overflow-wrap: anywhere;
 }
+.gs-match__stream { margin: 6px 2px 0; }
 .gs-match__status { grid-column: 2; grid-row: 1 / span 2; justify-self: end; }
 .gs-match__pending { font-size: 0.8125rem; color: var(--muted); }
 

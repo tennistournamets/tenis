@@ -10,6 +10,8 @@ import RoundRobinCrossTable from '../components/RoundRobinCrossTable.vue'
 import GroupStageBoard from '../components/GroupStageBoard.vue'
 import DoubleElimBoard from '../components/DoubleElimBoard.vue'
 import LiveScoreViewerModal from '../components/LiveScoreViewerModal.vue'
+import MatchStreamView from '../components/MatchStreamView.vue'
+import { matchStreamUrl, youtubeEmbedUrl } from '../lib/matchStream'
 import RegistrationForm from '../components/RegistrationForm.vue'
 import RegistrationConditions from '../components/RegistrationConditions.vue'
 import TournamentUnlock from '../components/TournamentUnlock.vue'
@@ -200,6 +202,68 @@ function syncPublicLiveFromRoute() {
   }
   selectedLiveMatchId.value = null
   if (tournament.value && !loading.value) replaceWithoutLiveQuery()
+}
+
+// Phone stream view (?watch=<match id>): the score above the YouTube player.
+// Opened by MatchStreamLink on narrow screens; it replaces an open live viewer.
+const watchMatchId = ref(null)
+let pushedWatchMatchId = null
+const watchMatch = computed(() => (
+  watchMatchId.value ? matches.value.find(match => match.id === watchMatchId.value) || null : null
+))
+const watchable = match => Boolean(youtubeEmbedUrl(matchStreamUrl(match)))
+
+function openMatchStream(match) {
+  const current = matches.value.find(row => row.id === match?.id)
+  if (!current || !watchable(current)) return
+  const { live, ...query } = route.query
+  watchMatchId.value = current.id
+  selectedLiveMatchId.value = null
+  if (queryValue(route.query.watch) === current.id) return
+  if (live !== undefined) {
+    // The live viewer's history entry becomes the stream's: Back still closes it.
+    if (pushedLiveMatchId) pushedWatchMatchId = current.id
+    pushedLiveMatchId = null
+    void router.replace(routeLocation({ ...query, watch: current.id }))
+    return
+  }
+  pushedWatchMatchId = current.id
+  void router.push(routeLocation({ ...query, watch: current.id })).catch(() => {
+    if (pushedWatchMatchId === current.id) pushedWatchMatchId = null
+    watchMatchId.value = null
+  })
+}
+provide('openMatchStream', openMatchStream)
+
+function replaceWithoutWatchQuery() {
+  const { watch: _watch, ...query } = route.query
+  if (_watch === undefined) return
+  void router.replace(routeLocation(query))
+}
+
+function closeMatchStream() {
+  const matchId = watchMatchId.value || queryValue(route.query.watch)
+  const shouldGoBack = Boolean(matchId && pushedWatchMatchId === matchId && queryValue(route.query.watch) === matchId)
+  watchMatchId.value = null
+  pushedWatchMatchId = null
+  if (shouldGoBack) router.back()
+  else replaceWithoutWatchQuery()
+}
+
+function syncMatchStreamFromRoute() {
+  const matchId = queryValue(route.query.watch)
+  if (!matchId) {
+    watchMatchId.value = null
+    pushedWatchMatchId = null
+    return
+  }
+  const current = matches.value.find(match => match.id === matchId)
+  if (current && watchable(current)) {
+    watchMatchId.value = matchId
+    return
+  }
+  watchMatchId.value = null
+  if (tournament.value && !loading.value) replaceWithoutWatchQuery()
 }
 
 // A side of a match: one entry, or both players in the points formats.
@@ -419,6 +483,12 @@ watch(() => route.query.view, value => {
 watch(
   [() => route.query.live, matches, liveScores, loading, () => tournament.value?.id],
   syncPublicLiveFromRoute,
+  { immediate: true },
+)
+
+watch(
+  [() => route.query.watch, matches, loading, () => tournament.value?.id],
+  syncMatchStreamFromRoute,
   { immediate: true },
 )
 
@@ -846,7 +916,18 @@ onBeforeUnmount(() => {
         :live-score="selectedLiveScore"
         :team-a="sideLabel(selectedLiveMatch, 'a')"
         :team-b="sideLabel(selectedLiveMatch, 'b')"
+        :match="selectedLiveMatch"
         @close="closePublicLive"
+      />
+      <MatchStreamView
+        v-if="watchMatch"
+        :match="watchMatch"
+        :team-a="sideLabel(watchMatch, 'a')"
+        :team-b="sideLabel(watchMatch, 'b')"
+        :sets="setsByMatch[watchMatch.id] || []"
+        :live-score="liveScoresByMatch[watchMatch.id] || null"
+        :family="isPointsFmt ? 'points' : sportCfg.scoringFamily"
+        @close="closeMatchStream"
       />
     </template>
   </div>

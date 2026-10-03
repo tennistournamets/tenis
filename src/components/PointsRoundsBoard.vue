@@ -7,6 +7,9 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { entryDisplayNames, matchSideLabel, matchSidesReady } from '../lib/entryDisplay'
 import { currentRound } from '../lib/pointsFormat'
+import { matchStreamUrl } from '../lib/matchStream'
+import MatchStreamLink from './MatchStreamLink.vue'
+import MatchStreamButton from './admin/MatchStreamButton.vue'
 
 const props = defineProps({
   rounds: { type: Array, default: () => [] },
@@ -17,8 +20,10 @@ const props = defineProps({
   plannedRounds: { type: Number, default: null },
   canEditFinal: { type: Boolean, default: false },
   canLiveScore: { type: Boolean, default: false },
+  // Organizers attach a YouTube broadcast link (owner, editor, counter).
+  canStream: { type: Boolean, default: false },
 })
-const emit = defineEmits(['edit-result', 'view-live'])
+const emit = defineEmits(['edit-result', 'view-live', 'edit-stream'])
 const { t } = useI18n()
 
 const current = computed(() => currentRound(props.rounds))
@@ -33,6 +38,7 @@ const sidePlayers = (match, side) => [match[`side_${side}_entry_id`], match[`sid
   .filter(Boolean)
   .map(id => entryDisplayNames(props.entriesMap[id]).join(' / ') || t('bracket.tbd'))
 const sideLabel = (match, side) => matchSideLabel(match, side, props.entriesMap, t('bracket.tbd'))
+const sidesText = match => ({ teamA: sideLabel(match, 'a'), teamB: sideLabel(match, 'b') })
 const restingNames = round => round.resting.map(id => entryDisplayNames(props.entriesMap[id]).join(' / ')).filter(Boolean).join(', ')
 
 const live = match => props.liveScoresByMatch[match.id]
@@ -92,7 +98,7 @@ function matchAria(match) {
               <span v-for="(name, i) in sidePlayers(match, 'b')" :key="i">{{ name }}</span>
             </div>
           </div>
-          <footer v-if="matchSidesReady(match) && (isLive(match) || canEditFinal || canLiveScore)" class="points-court__actions">
+          <footer v-if="matchSidesReady(match) && (isLive(match) || canEditFinal || canLiveScore || canStream || matchStreamUrl(match))" class="points-court__actions">
             <button v-if="isLive(match)" type="button" class="btn btn--primary btn--sm" :aria-label="matchAria(match)" @click="emit('view-live', match)">
               {{ canLiveScore ? t('mobile.continueLive') : t('mobile.watchLive') }}
             </button>
@@ -102,6 +108,8 @@ function matchAria(match) {
             <button v-if="canLiveScore && !isLive(match) && match.status !== 'finished'" type="button" class="btn btn--ghost btn--sm" @click="emit('view-live', match)">
               {{ t('live.start') }}
             </button>
+            <MatchStreamButton v-if="canStream" :match="match" :label="t('stream.buttonAria', sidesText(match))" @open="emit('edit-stream', match)" />
+            <MatchStreamLink :match="match" :label="t('stream.watchAria', sidesText(match))" />
           </footer>
         </article>
       </div>

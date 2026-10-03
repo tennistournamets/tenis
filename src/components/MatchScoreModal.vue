@@ -17,6 +17,7 @@ import { saveMatchResult } from '../lib/saveMatchResult'
 import { confirmDialog } from '../lib/confirmDialog'
 import { useAuthStore } from '../stores/auth'
 import TennisSetInputs from './TennisSetInputs.vue'
+import MatchStreamButton from './admin/MatchStreamButton.vue'
 import { scoreRows, buildSetPayload, scoringError } from '../lib/tennisRules'
 
 const props = defineProps({
@@ -32,9 +33,11 @@ const props = defineProps({
   canEditFinal: { type: Boolean, default: false },
   canLiveScore: { type: Boolean, default: false },
   liveStatus: { type: String, default: null },
+  // Organizers attach a YouTube broadcast link (owner, editor, counter).
+  canStream: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['close', 'saved', 'start-live'])
+const emit = defineEmits(['close', 'saved', 'start-live', 'edit-stream'])
 
 const { t } = useI18n()
 const auth = useAuthStore()
@@ -321,6 +324,13 @@ async function save() {
         >
           {{ liveStatus === 'active' ? t('live.openLive') : t('live.start') }}
         </button>
+        <MatchStreamButton
+          v-if="canStream && exists"
+          :match="match"
+          :label="t('stream.buttonAria', { teamA: sideLabel('a'), teamB: sideLabel('b') })"
+          :disabled="saving"
+          @open="emit('edit-stream', match)"
+        />
         <span v-if="liveStatus === 'active'" class="badge badge--warn">
           <span class="live-dot"></span>
           {{ t('live.live') }}
@@ -402,6 +412,7 @@ async function save() {
 }
 .msm-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
   padding-top: var(--space-2);

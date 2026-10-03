@@ -7,6 +7,8 @@ import { entryDisplayNames } from '../lib/entryDisplay'
 import { isByeMatch } from '../lib/bracketDisplay'
 import { formatSetScore } from '../lib/tennisRules'
 import { pointLabel, scoreLine } from '../lib/useTennisScoring'
+import MatchStreamLink from './MatchStreamLink.vue'
+import { matchStreamUrl } from '../lib/matchStream'
 
 const props = defineProps({
   match: {
@@ -34,9 +36,13 @@ const props = defineProps({
     default: false,
   },
   selectedSlotKey: { type: String, default: '' },
+  // Organizers attach a YouTube broadcast link (owner, editor, counter).
+  canStream: { type: Boolean, default: false },
+  // Managers assign a court and time (the schedule tab's modal).
+  canSchedule: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['swap-slots', 'view-live', 'select-slot'])
+const emit = defineEmits(['swap-slots', 'view-live', 'select-slot', 'edit-stream', 'edit-schedule'])
 
 const { t, locale } = useI18n()
 
@@ -85,6 +91,21 @@ const hasLiveScore = () => props.liveScore?.status === 'active'
 const canScoreMatch = () =>
   props.canLiveScore
   && !matchFinished()
+  && Boolean(props.match.side_a_entry_id)
+  && Boolean(props.match.side_b_entry_id)
+
+// The stream icon sits beside the score icon, finished matches included
+// (a recording link can be added after the match).
+const canEditStream = () =>
+  props.canStream
+  && Boolean(props.match.side_a_entry_id)
+  && Boolean(props.match.side_b_entry_id)
+const hasStream = () => Boolean(matchStreamUrl(props.match))
+// A formed pair that is still to be played: a finished or live match keeps its slot.
+const canEditSchedule = () =>
+  props.canSchedule
+  && !matchFinished()
+  && !hasLiveScore()
   && Boolean(props.match.side_a_entry_id)
   && Boolean(props.match.side_b_entry_id)
 
@@ -180,8 +201,37 @@ function selectSlot(event, side) {
 
 <template>
   <article class="match-card" :class="{ 'match-card--live': hasLiveScore() }" :data-match-id="match.id">
-    <div v-if="canScoreMatch()" class="match-card__meta match-card__meta--top">
+    <div v-if="canScoreMatch() || canEditStream() || canEditSchedule()" class="match-card__meta match-card__meta--top">
       <button
+        v-if="canEditSchedule()"
+        class="match-card__score-btn"
+        :class="{ 'match-card__schedule-btn--set': scheduleLine }"
+        type="button"
+        :aria-label="`${t(scheduleLine ? 'schedule.change' : 'schedule.assign')}: ${memberLines(match.side_a_entry_id).join(' / ')} — ${memberLines(match.side_b_entry_id).join(' / ')}`"
+        :title="t(scheduleLine ? 'schedule.change' : 'schedule.assign')"
+        @click="emit('edit-schedule', match)"
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 7v5l3 2" />
+        </svg>
+      </button>
+      <button
+        v-if="canEditStream()"
+        class="match-card__score-btn match-card__stream-btn"
+        :class="{ 'match-card__stream-btn--set': hasStream() }"
+        type="button"
+        :aria-label="t('stream.buttonAria', { teamA: memberLines(match.side_a_entry_id).join(' / '), teamB: memberLines(match.side_b_entry_id).join(' / ') })"
+        :title="t('stream.title')"
+        @click="emit('edit-stream', match)"
+      >
+        <svg width="18" height="13" viewBox="0 0 18 13" aria-hidden="true">
+          <rect x="0.75" y="0.75" width="16.5" height="11.5" rx="3" :fill="hasStream() ? '#FF0033' : 'none'" :stroke="hasStream() ? '#FF0033' : 'currentColor'" stroke-width="1.5" />
+          <path d="M7.2 3.8v5.4L11.7 6.5z" :fill="hasStream() ? '#fff' : 'currentColor'" />
+        </svg>
+      </button>
+      <button
+        v-if="canScoreMatch()"
         class="match-card__score-btn"
         type="button"
         :aria-label="`${t('standings.matchScore')}: ${memberLines(match.side_a_entry_id).join(' / ')} — ${memberLines(match.side_b_entry_id).join(' / ')}`"
@@ -266,6 +316,12 @@ function selectSlot(event, side) {
         <span class="match-card__score">{{ scoreLine(liveScore.state) }}</span>
         <span class="match-card__score">{{ pointLabel(liveScore.state, 'a') }}:{{ pointLabel(liveScore.state, 'b') }}</span>
       </button>
+      <MatchStreamLink
+        class="match-card__stream"
+        :match="match"
+        compact
+        :label="t('stream.watchAria', { teamA: memberLines(match.side_a_entry_id).join(' / '), teamB: memberLines(match.side_b_entry_id).join(' / ') })"
+      />
     </div>
     <div v-if="scheduleLine" class="match-card__meta match-card__schedule">
       <span aria-hidden="true">🕒</span>
@@ -278,6 +334,10 @@ function selectSlot(event, side) {
 <style scoped>
 .match-card__schedule { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 0.8rem; }
 .match-card__schedule-text { overflow-wrap: anywhere; }
+.match-card__stream { float: right; margin: -3px 0 -3px 6px; }
+.match-card__meta--top { gap: 12px; }
+.match-card__stream-btn--set { color: #FF0033; }
+.match-card__schedule-btn--set { color: var(--primary); }
 .match-card__unfinished {
   color: var(--muted);
   font-size: 0.75rem;
