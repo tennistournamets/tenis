@@ -1,5 +1,5 @@
 {
-  "release": "2026-10-02-match-stream-links",
+  "release": "2026-10-03-list-my-tournaments",
   "forwardMigrations": [
     {
       "path": "supabase/migrations/20260908120000_mobile_tournament_details.sql",
@@ -168,6 +168,12 @@
       "sha256": "78788b6f49860917fe08938fa3ab834d49c07731bf996cfe32ced6a8061b2eca",
       "tenisAppliedVersion": "20261002140818",
       "tenisNote": "Applied 2026-10-04 with supabase db push --db-url (session pooler) after logical backup (tenis-public-20261004-0012-pre-match-stream-links.dump + migrations journal dump)."
+    },
+    {
+      "path": "supabase/migrations/20261003213338_list_my_tournaments.sql",
+      "sha256": "fd9217e5dab469c68e30070193e6d806de89b78319032761cfef522b4d7c1fa2",
+      "tenisAppliedVersion": "20261003213338",
+      "tenisNote": "Applied 2026-10-04 with supabase db push --db-url (session pooler) after logical backup (tenis-public-20261004-0041-pre-list-my-tournaments.dump + migrations journal dump); new function only."
     }
   ],
   "baseline": {

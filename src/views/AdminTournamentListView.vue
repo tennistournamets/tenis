@@ -1,6 +1,6 @@
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
-import { RouterLink, useRouter } from 'vue-router'
+import { computed, nextTick, onMounted, ref, useId, watch } from 'vue'
+import { RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 
 import { supabase } from '../lib/supabase'
@@ -8,11 +8,10 @@ import CopyTournamentLink from '../components/CopyTournamentLink.vue'
 import AppIcon from '../components/AppIcon.vue'
 import { categoryLabelKey } from '../lib/sportConfig'
 import { useAuthStore } from '../stores/auth'
-import { displayStatus, statusBadgeClass } from '../lib/tournamentStatus'
+import { displayStatus, statusBadgeClass, statusText } from '../lib/tournamentStatus'
 import { errorMessage } from '../lib/errorMessages'
 
 const { t, locale } = useI18n()
-const router = useRouter()
 const auth = useAuthStore()
 
 const loading = ref(false)
@@ -20,6 +19,13 @@ const loadError = ref('')
 
 const tournaments = ref([])
 const statusFilter = ref('active')
+// On a phone the tabs scroll sideways: keep the chosen one in view.
+function scrollTabIntoView(event) {
+  const tab = event.currentTarget
+  const smooth = !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+  // After the list re-renders, which would cancel a smooth scroll started now.
+  nextTick(() => tab.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: smooth ? 'smooth' : 'auto' }))
+}
 
 const hasManagerTournament = computed(() =>
   tournaments.value.some((item) => item.currentRole === 'owner' || item.currentRole === 'editor'),
@@ -42,48 +48,67 @@ const pageHint = computed(() =>
 )
 
 const filteredTournaments = computed(() => {
-  if (hasCounterOnlyTournaments.value) return tournaments.value
-  const list = tournaments.value
-  if (statusFilter.value === 'all') {
-    return list
-  }
-  if (statusFilter.value === 'completed') {
-    return list.filter((t) => t.status === 'completed')
-  }
-  return list.filter((t) => t.status !== 'completed')
+  const list = hasCounterOnlyTournaments.value || statusFilter.value === 'all'
+    ? tournaments.value
+    : tournaments.value.filter((t) => listPhase(t) === statusFilter.value)
+  const sign = sort.value.dir === 'asc' ? 1 : -1
+  // Equal keys: the newest tournament first, whatever the direction.
+  return [...list].sort((a, b) => sign * compareTournaments(a, b, sort.value.key) || byCreated(b, a))
 })
+
+const phaseCounts = computed(() => {
+  const counts = { active: 0, registration: 0, completed: 0, all: tournaments.value.length }
+  for (const item of tournaments.value) counts[listPhase(item)] += 1
+  return counts
+})
+
+// Filter bucket of a tournament: running, finished, or not started yet
+// (draft, open or closed registration) under "Registration".
+function listPhase(tournament) {
+  if (tournament.status === 'in_progress') return 'active'
+  if (tournament.status === 'completed') return 'completed'
+  return 'registration'
+}
 
 // Running tournaments first, then the ones that need the organizer's next step.
 const STATUS_ORDER = { in_progress: 0, registration_closed: 1, registration_open: 2, draft: 3, completed: 4 }
-// Per-tournament counts behind each card's next step. Best effort: without
-// them the card falls back to the status-only hint.
-const progress = ref({})
-async function loadProgress(ids) {
-  if (!ids.length) { progress.value = {}; return }
+
+// Sorting: one choice for every filter tab, remembered in this browser.
+// Picking a field resets the direction to the natural one for it.
+const SORT_DEFAULT_DIR = { status: 'asc', created: 'desc', name: 'asc' }
+const SORT_LABEL_KEYS = { status: 'admin.sortStatus', created: 'admin.sortCreated', name: 'admin.sortName' }
+const SORT_STORAGE_KEY = 'bracketa_list_sort'
+const sortSelectId = useId()
+function readSort() {
   try {
-    const [entries, matchRows, live] = await Promise.all([
-      supabase.from('entries').select('tournament_id,status').in('tournament_id', ids),
-      supabase.from('matches').select('tournament_id,status,side_a_entry_id,side_b_entry_id').in('tournament_id', ids),
-      supabase.from('live_scores').select('tournament_id,status').in('tournament_id', ids).eq('status', 'active'),
-    ])
-    const next = Object.fromEntries(ids.map(id => [id, { approved: 0, pending: 0, matches: 0, played: 0, byes: 0, live: 0 }]))
-    for (const e of entries.data || []) if (next[e.tournament_id] && (e.status === 'approved' || e.status === 'pending')) next[e.tournament_id][e.status] += 1
-    for (const m of matchRows.data || []) {
-      const p = next[m.tournament_id]
-      if (!p) continue
-      p.matches += 1
-      // A finished match with an empty side is a BYE: not a match to play.
-      if (m.status === 'finished' && (!m.side_a_entry_id || !m.side_b_entry_id)) p.byes += 1
-      else if (m.status === 'finished') p.played += 1
-    }
-    for (const l of live.data || []) if (next[l.tournament_id]) next[l.tournament_id].live += 1
-    progress.value = next
-  } catch { progress.value = {} }
+    const saved = JSON.parse(localStorage.getItem(SORT_STORAGE_KEY) || 'null')
+    if (Object.hasOwn(SORT_DEFAULT_DIR, saved?.key) && ['asc', 'desc'].includes(saved?.dir)) return saved
+  } catch { /* Storage may be unavailable. */ }
+  return { key: 'status', dir: 'asc' }
 }
+const sort = ref(readSort())
+watch(sort, (value) => {
+  try { localStorage.setItem(SORT_STORAGE_KEY, JSON.stringify(value)) } catch { /* Storage may be unavailable. */ }
+})
+function setSortKey(key) { sort.value = { key, dir: SORT_DEFAULT_DIR[key] } }
+function toggleSortDir() { sort.value = { ...sort.value, dir: sort.value.dir === 'asc' ? 'desc' : 'asc' } }
+// What comes first in the current order, for the direction button.
+const sortDirLabel = computed(() => t(`admin.sortFirst.${sort.value.key}.${sort.value.dir}`))
+
+const byCreated = (a, b) => new Date(a.created_at) - new Date(b.created_at)
+function compareTournaments(a, b, key) {
+  if (key === 'name') return a.name.localeCompare(b.name, locale.value, { sensitivity: 'base', numeric: true })
+  if (key === 'created') return byCreated(a, b)
+  return (STATUS_ORDER[displayStatus(a)] ?? 9) - (STATUS_ORDER[displayStatus(b)] ?? 9)
+}
+// Per-tournament counts behind each card's next step; they arrive with the
+// list in one request (list_my_tournaments).
+const progress = ref({})
 
 async function loadTournaments() {
   if (!auth.user) {
     tournaments.value = []
+    progress.value = {}
     return
   }
 
@@ -91,47 +116,22 @@ async function loadTournaments() {
   loadError.value = ''
 
   try {
-    const { data, error } = await supabase
-      .from('tournament_admins')
-      .select(
-        `
-        tournament_id,
-        role,
-        tournaments (
-          id,
-          name,
-          slug,
-          sport,
-          format,
-          category,
-          status,
-          set_format,
-          doubles_pairing_mode,
-          visibility,
-          registration_deadline,
-          registration_capacity,
-          created_at
-        )
-      `,
-      )
-      .eq('user_id', auth.user.id)
+    const { data, error } = await supabase.rpc('list_my_tournaments')
 
     if (error) {
       loadError.value = errorMessage(error, t, 'drafts.unavailable')
       tournaments.value = []
+      progress.value = {}
       return
     }
 
-    const rows = data || []
-    const list = rows
-      .map((row) => row.tournaments ? { ...row.tournaments, currentRole: row.role } : null)
-      .filter((t) => t != null)
-    list.sort((a, b) => (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9) || new Date(b.created_at) - new Date(a.created_at))
+    const list = (data || []).map(({ role, progress: _counts, ...item }) => ({ ...item, currentRole: role }))
+    progress.value = Object.fromEntries((data || []).map(item => [item.id, item.progress]))
     tournaments.value = list
-    await loadProgress(list.map(item => item.id))
   } catch (error) {
     loadError.value = errorMessage(error, t, 'drafts.unavailable')
     tournaments.value = []
+    progress.value = {}
   } finally {
     loading.value = false
   }
@@ -257,34 +257,61 @@ onMounted(async () => {
     </div>
     <p v-if="hasCounterOnlyTournaments" class="muted">{{ pageHint }}</p>
 
-    <div v-if="!hasCounterOnlyTournaments" class="filter-segment" role="group" :aria-label="t('admin.filterLabel')">
-      <button
-        type="button"
-        class="filter-segment__btn"
-        :class="{ 'filter-segment__btn--active': statusFilter === 'active' }"
-        :aria-pressed="statusFilter === 'active'"
-        @click="statusFilter = 'active'"
-      >
-        {{ t('admin.filterActive') }}
-      </button>
-      <button
-        type="button"
-        class="filter-segment__btn"
-        :class="{ 'filter-segment__btn--active': statusFilter === 'completed' }"
-        :aria-pressed="statusFilter === 'completed'"
-        @click="statusFilter = 'completed'"
-      >
-        {{ t('admin.filterCompleted') }}
-      </button>
-      <button
-        type="button"
-        class="filter-segment__btn"
-        :class="{ 'filter-segment__btn--active': statusFilter === 'all' }"
-        :aria-pressed="statusFilter === 'all'"
-        @click="statusFilter = 'all'"
-      >
-        {{ t('admin.filterAll') }}
-      </button>
+    <div class="list-toolbar">
+      <div v-if="!hasCounterOnlyTournaments" class="list-tabs" role="group" :aria-label="t('admin.filterLabel')">
+        <button
+          type="button"
+          class="list-tabs__tab"
+          :class="{ 'list-tabs__tab--active': statusFilter === 'active' }"
+          :aria-pressed="statusFilter === 'active'"
+          @click="statusFilter = 'active'; scrollTabIntoView($event)"
+        >
+          {{ t('admin.filterActive') }}<span class="list-tabs__count">{{ phaseCounts.active }}</span>
+        </button>
+        <button
+          type="button"
+          class="list-tabs__tab"
+          :class="{ 'list-tabs__tab--active': statusFilter === 'registration' }"
+          :aria-pressed="statusFilter === 'registration'"
+          @click="statusFilter = 'registration'; scrollTabIntoView($event)"
+        >
+          {{ t('admin.filterRegistration') }}<span class="list-tabs__count">{{ phaseCounts.registration }}</span>
+        </button>
+        <button
+          type="button"
+          class="list-tabs__tab"
+          :class="{ 'list-tabs__tab--active': statusFilter === 'completed' }"
+          :aria-pressed="statusFilter === 'completed'"
+          @click="statusFilter = 'completed'; scrollTabIntoView($event)"
+        >
+          {{ t('admin.filterCompleted') }}<span class="list-tabs__count">{{ phaseCounts.completed }}</span>
+        </button>
+        <button
+          type="button"
+          class="list-tabs__tab"
+          :class="{ 'list-tabs__tab--active': statusFilter === 'all' }"
+          :aria-pressed="statusFilter === 'all'"
+          @click="statusFilter = 'all'; scrollTabIntoView($event)"
+        >
+          {{ t('admin.filterAll') }}<span class="list-tabs__count">{{ phaseCounts.all }}</span>
+        </button>
+      </div>
+      <div v-if="tournaments.length > 1" class="list-sort">
+        <label class="sr-only" :for="sortSelectId">{{ t('admin.sortLabel') }}</label>
+        <span class="tooltip-wrapper" :data-tooltip="sortDirLabel">
+          <button type="button" class="list-sort__dir" :aria-label="sortDirLabel" @click="toggleSortDir">
+            <svg class="list-sort__icon" :class="{ 'list-sort__icon--asc': sort.dir === 'asc' }" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M6 12h12"/><path d="M10 18h4"/></svg>
+          </button>
+        </span>
+        <!-- The visible text sizes the control to the current choice; the native select lies over it. -->
+        <span class="list-sort__field">
+          <span aria-hidden="true">{{ t(SORT_LABEL_KEYS[sort.key]) }}</span>
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4.5l3 3 3-3"/></svg>
+          <select :id="sortSelectId" class="list-sort__select" :value="sort.key" @change="setSortKey($event.target.value)">
+            <option v-for="(key, value) in SORT_LABEL_KEYS" :key="value" :value="value">{{ t(key) }}</option>
+          </select>
+        </span>
+      </div>
     </div>
 
     <p v-if="loading" class="muted">{{ t('actions.loading') }}</p>
@@ -296,16 +323,12 @@ onMounted(async () => {
         :key="item.id"
         class="t-card"
         :class="`t-card--${displayStatus(item)}`"
-        tabindex="0"
-        role="link"
-        @click="router.push(tournamentTarget(item))"
-        @keydown.enter="router.push(tournamentTarget(item))"
       >
         <span class="t-card__icon" aria-hidden="true"><AppIcon :name="item.sport" :size="20" /></span>
         <div class="t-card__info">
           <div class="t-card__title-row">
-            <h2 class="t-card__title">{{ item.name }}</h2>
-            <span class="t-card__status"><i aria-hidden="true"></i>{{ t(`tournament.${displayStatus(item)}`) }}</span>
+            <h2 class="t-card__title"><RouterLink class="t-card__link" :to="tournamentTarget(item)">{{ item.name }}</RouterLink></h2>
+            <span class="t-card__status"><i aria-hidden="true"></i>{{ statusText(t, locale, item) }}</span>
             <span v-if="item.currentRole && item.currentRole !== 'owner'" class="badge badge--neutral">{{ t(`admin.${item.currentRole}`) }}</span>
             <span v-if="item.visibility && item.visibility !== 'link'" class="badge badge--neutral">{{ t(`access.visibility.${item.visibility}`) }}</span>
           </div>
@@ -348,6 +371,96 @@ onMounted(async () => {
 <style scoped>
 /* Status as a thin left accent and a dot, one quiet line of facts, the
    progress as a figure read at a glance, the next step as a coloured link. */
+/* Toolbar: quiet text tabs on a hairline, sorting as one ghost control on the right. */
+.list-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--border);
+}
+.list-tabs { display: flex; gap: var(--space-5); min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.list-tabs::-webkit-scrollbar { display: none; }
+.list-tabs__tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--touch-min);
+  margin-bottom: -1px;
+  padding: 0 2px;
+  font: inherit;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--muted);
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.list-tabs__tab:hover { color: var(--text); }
+.list-tabs__tab--active { color: var(--heading); border-bottom-color: var(--primary); }
+.list-tabs__tab:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; border-radius: 6px; }
+.list-tabs__count { font-size: 0.8125rem; font-weight: 500; font-variant-numeric: tabular-nums; color: var(--muted); }
+
+.list-sort { display: flex; align-items: center; gap: 2px; margin-left: auto; color: var(--muted); }
+.list-sort__field {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--touch-min);
+  padding: 0 10px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--text);
+  border-radius: 10px;
+  transition: background-color 0.15s;
+}
+.list-sort__field svg { flex: none; color: var(--muted); }
+.list-sort__select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  font: inherit;
+  opacity: 0;
+  border: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+}
+.list-sort__dir {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--touch-min);
+  height: var(--touch-min);
+  padding: 0;
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s;
+}
+.list-sort__field:hover, .list-sort__dir:hover { background-color: color-mix(in srgb, var(--text) 7%, transparent); }
+.list-sort__dir:hover { color: var(--text); }
+.list-sort__field:has(:focus-visible), .list-sort__dir:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+/* Long-to-short bars: descending; flipped for ascending. */
+.list-sort__icon { display: block; transition: transform 0.15s; }
+.list-sort__icon--asc { transform: scaleY(-1); }
+@media (max-width: 560px) {
+  /* Phone: sorting above, the tabs sit on the hairline and scroll sideways. */
+  .list-sort { order: -1; }
+  .list-tabs { flex: 1 1 100%; gap: var(--space-4); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .list-tabs__tab, .list-sort__field, .list-sort__dir, .list-sort__icon { transition: none; }
+}
+
 .t-card {
   --tone: var(--muted);
   position: relative;
@@ -365,9 +478,10 @@ onMounted(async () => {
 }
 .t-card::before { content: ''; position: absolute; inset: 0 auto 0 0; width: 3px; background: var(--tone); }
 .t-card:hover { border-color: var(--border-strong); background: var(--surface-hover); }
-.t-card:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.t-card:has(.t-card__link:focus-visible) { outline: 2px solid var(--primary); outline-offset: 2px; }
 /* Same colours as the status badges (lib/tournamentStatus.js). */
-.t-card--registration_open, .t-card--registration_closed { --tone: var(--warning); }
+.t-card--registration_open { --tone: var(--warning); }
+.t-card--registration_closed { --tone: var(--closed-dot); }
 .t-card--in_progress { --tone: var(--success); }
 .t-card--completed { --tone: var(--done-dot); }
 
@@ -392,9 +506,16 @@ onMounted(async () => {
   color: var(--heading);
   overflow-wrap: anywhere;
 }
+/* The title link stretches over the whole card (a click anywhere opens the tournament);
+   the copy/share buttons sit above it. */
+.t-card__link { color: inherit; text-decoration: none; }
+.t-card__link:focus-visible { outline: none; }
+.t-card__link::after { content: ''; position: absolute; inset: 0; }
 .t-card__status { display: inline-flex; align-items: center; gap: 6px; font-size: 0.8125rem; font-weight: 600; color: var(--tone); }
-.t-card--registration_open .t-card__status, .t-card--registration_closed .t-card__status { color: var(--warning-text); }
+.t-card--registration_open .t-card__status { color: var(--warning-text); }
+.t-card--registration_closed .t-card__status { color: var(--closed); }
 .t-card--in_progress .t-card__status { color: var(--success-text); }
+.t-card--completed .t-card__status { color: var(--done); }
 .t-card__status i { width: 6px; height: 6px; border-radius: 50%; background: var(--tone); }
 .t-card__meta { margin: 3px 0 0; font-size: 0.875rem; color: var(--muted); }
 .t-card__next { margin: var(--space-2) 0 0; font-size: 0.875rem; font-weight: 600; line-height: 1.45; }
@@ -410,7 +531,7 @@ onMounted(async () => {
 .t-card__figure-label { font-size: 0.75rem; color: var(--muted); }
 .t-card__bar { width: 84px; height: 4px; margin-top: 4px; border-radius: 999px; background: var(--border); overflow: hidden; }
 .t-card__bar span { display: block; height: 100%; border-radius: inherit; background: var(--tone); }
-.t-card__copy { flex-shrink: 0; }
+.t-card__copy { position: relative; z-index: 1; flex-shrink: 0; }
 .t-card__chevron { color: var(--muted); }
 
 @media (max-width: 560px) {

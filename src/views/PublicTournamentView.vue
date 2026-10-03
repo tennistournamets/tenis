@@ -32,7 +32,7 @@ import { registrationDisplayState, closedReasonKey } from '../lib/registrationRu
 import { currentPlatform, hasVenue, venueRouteLinks } from '../lib/venue'
 import { effectiveSchedule, timezoneOf } from '../lib/schedule'
 import { clearAccessToken, isAccessExpiredError, readAccessToken, setRobotsMeta, storeAccessToken, visibilityOf } from '../lib/access'
-import { displayStatus, statusBadgeClass } from '../lib/tournamentStatus'
+import { displayStatus, statusBadgeClass, statusText } from '../lib/tournamentStatus'
 import TournamentChampion from '../components/TournamentChampion.vue'
 import { applyTournamentHead, clearTournamentHead, scheduleSpan, tournamentImageUrl, tournamentJsonLd } from '../lib/seo'
 import { siteOrigin } from '../lib/siteOrigin'
@@ -604,7 +604,7 @@ onBeforeUnmount(() => {
           <div class="pub-hero__title-row">
             <h1 class="page-title" style="margin: 0">{{ tournament.name }}</h1>
             <span class="badge" :class="statusBadgeClass(badgeStatus)">
-              {{ t(`tournament.${badgeStatus}`) }}
+              {{ statusText(t, locale, { ...tournament, registration_deadline: registration?.deadline_at || tournament?.registration_deadline }, badgeStatus) }}
             </span>
             <span v-if="liveMatchCount" class="badge badge--live pub-live-badge" :title="t('tournament.liveNowHint', { n: liveMatchCount })">
               {{ t('tournament.liveNow', { n: liveMatchCount }) }}

@@ -8,7 +8,7 @@ test('selected sport/format cards and list filters expose aria-pressed', () => {
   assert.match(read('src/components/SportPicker.vue'), /:aria-pressed="modelValue === s"/)
   assert.match(read('src/components/FormatPicker.vue'), /:aria-pressed="modelValue === f"/)
   const list = read('src/views/AdminTournamentListView.vue')
-  for (const value of ['active', 'completed', 'all']) assert.match(list, new RegExp(`:aria-pressed="statusFilter === '${value}'"`))
+  for (const value of ['active', 'registration', 'completed', 'all']) assert.match(list, new RegExp(`:aria-pressed="statusFilter === '${value}'"`))
 })
 
 test('invalid registration fields are marked and linked to their messages', () => {
