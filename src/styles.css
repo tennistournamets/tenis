@@ -52,6 +52,11 @@
   --done-bg: #F2ECFB;
   --done-dot: #8B5CF6;
 
+  /* регистрация закончена, турнир не начат — синий */
+  --closed: #175CD3;
+  --closed-bg: #EFF8FF;
+  --closed-dot: #2E90FA;
+
   --border: #E4E7E2;
   --border-strong: #D8DCD6;
   --input-bg: #FFFFFF;
@@ -132,6 +137,10 @@
     --done: #B79CF6;
     --done-bg: rgba(139, 92, 246, 0.14);
     --done-dot: #8B5CF6;
+
+    --closed: #84CAFF;
+    --closed-bg: rgba(46, 144, 250, 0.14);
+    --closed-dot: #2E90FA;
 
     --border: #263029;
     --border-strong: #33403A;
@@ -1703,6 +1712,15 @@ summary:focus-visible,
 
 .badge--done::before {
   background: var(--done-dot);
+}
+
+.badge--closed {
+  color: var(--closed);
+  background: var(--closed-bg);
+}
+
+.badge--closed::before {
+  background: var(--closed-dot);
 }
 
 .badge--neutral {

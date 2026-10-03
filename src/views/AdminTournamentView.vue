@@ -43,7 +43,7 @@ import { accessError, assignableRoles, canEditMembership, visibilityOf } from '.
 import { applyScheduleAction, draftDiff, effectiveSchedule, indexSchedule, scheduleError, timezoneOf } from '../lib/schedule'
 import TournamentMatchList from '../components/TournamentMatchList.vue'
 import { scoringError } from '../lib/tennisRules'
-import { registrationDisplayState, registrationError } from '../lib/registrationRules'
+import { formatDeadline, registrationDisplayState, registrationError } from '../lib/registrationRules'
 import { sameForm, cloneForm, matchVersions } from '../lib/formDraft'
 import { useUnsavedChanges, confirmDiscard, withApprovedDeparture } from '../lib/unsavedChanges'
 import { customDisplayName, entryDisplayNames, entryMemberNames, matchSideLabel } from '../lib/entryDisplay'
@@ -58,7 +58,7 @@ import { useAuthStore } from '../stores/auth'
 import { useNarrowLayout } from '../lib/useNarrowLayout'
 import { useHeaderTitle } from '../lib/headerTitle'
 import { onTabKeydown as onSurfaceTabKeydown } from '../lib/tabNavigation'
-import { displayStatus, statusBadgeClass } from '../lib/tournamentStatus'
+import { displayStatus, statusBadgeClass, statusText } from '../lib/tournamentStatus'
 import { errorMessage } from '../lib/errorMessages'
 import { usePageAlerts } from '../lib/pageAlerts'
 import { pluralParams } from '../lib/plural'
@@ -338,6 +338,9 @@ const regState = computed(() => registrationDisplayState(registration.value, Dat
 const seatsFull = computed(() => registration.value?.capacity != null && registration.value?.occupied != null && registration.value.occupied >= registration.value.capacity)
 // Past the deadline an open registration accepts nothing: the badge says closed.
 const badgeStatus = computed(() => (regState.value.deadlinePassed && tournament.value?.status === 'registration_open' ? 'registration_closed' : displayStatus(tournament.value)))
+// The deadline as the server reports it (the tournament row as a fallback).
+const deadlineIso = computed(() => registration.value?.deadline_at || tournament.value?.registration_deadline || '')
+const badgeText = computed(() => statusText(t, locale.value, { ...tournament.value, registration_deadline: deadlineIso.value }, badgeStatus.value))
 const showDeadlineHint = computed(() => canManageTournament.value && regState.value.deadlinePassed && tournament.value?.status === 'registration_open')
 const waitlistSeatFree = computed(() => Boolean(registration.value?.capacity) && !registration.value.is_full && waitlistedEntries.value.length > 0)
 // Applicants' contacts: owners and editors only, re-read when the entry list changes.
@@ -1664,7 +1667,7 @@ onBeforeUnmount(() => {
             <div class="admin-tournament-overview__title-row">
               <h1 id="adm-tournament-title" class="page-title">{{ tournament.name }}</h1>
               <span class="badge" :class="statusBadgeClass(badgeStatus)">
-                {{ t(`tournament.${badgeStatus}`) }}
+                {{ badgeText }}
               </span>
             </div>
             <p v-if="tournament.description" class="muted">{{ tournament.description }}</p>
@@ -1749,6 +1752,7 @@ onBeforeUnmount(() => {
         :group-matches-total="groupProgress.total"
         :group-matches-done="groupProgress.done"
         :has-playoff="hasPlayoff"
+        :deadline-passed-at="showDeadlineHint ? formatDeadline(deadlineIso, locale) : ''"
         :busy="actionLoading || settingsSaving"
         @go="setTab"
         @close-registration="closeRegistration"
@@ -1767,7 +1771,7 @@ onBeforeUnmount(() => {
         @finish="finishTournament"
       />
 
-      <p v-if="showDeadlineHint" class="alert alert--info" role="status">{{ t('registrationRules.deadlineCloseHint') }}</p>
+      <p v-if="showDeadlineHint" class="alert alert--info" role="status">{{ t('registrationRules.deadlineCloseHint', { date: formatDeadline(deadlineIso, locale) }) }}</p>
 
       <div role="tablist" class="tab-group" @keydown="onTabKeydown">
         <button

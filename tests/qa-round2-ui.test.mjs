@@ -155,7 +155,8 @@ test('R2-15: registration open past its deadline shows as closed', () => {
   assert.equal(displayStatus({ status: 'registration_open', registration_deadline: '2026-09-27T12:00:00Z' }, now), 'registration_open')
   assert.equal(displayStatus({ status: 'registration_open', registration_deadline: null }, now), 'registration_open')
   assert.equal(displayStatus({ status: 'in_progress', registration_deadline: '2026-09-25T12:00:00Z' }, now), 'in_progress')
-  assert.match(read('src/views/AdminTournamentListView.vue'), /registration_deadline,/)
+  assert.match(read('src/views/AdminTournamentListView.vue'), /rpc\('list_my_tournaments'\)/)
+  assert.match(read('supabase/schema.sql'), /'registration_deadline', t\.registration_deadline,/)
 })
 
 test('R2-16: padel has no badminton emoji on the public page', () => {

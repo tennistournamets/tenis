@@ -19,6 +19,8 @@ const props = defineProps({
   groupMatchesTotal: { type: Number, default: 0 },
   groupMatchesDone: { type: Number, default: 0 },
   hasPlayoff: Boolean,
+  // Formatted deadline when open registration is past it (it takes no entries).
+  deadlinePassedAt: { type: String, default: '' },
   busy: Boolean,
 })
 const emit = defineEmits(['go', 'close-registration', 'start', 'start-playoff'])
@@ -72,7 +74,9 @@ const steps = computed(() => {
       key: 'registration',
       done: registrationClosed.value,
       title: t('nextStep.registration'),
-      detail: registrationClosed.value ? t('nextStep.registrationClosed') : t('nextStep.registrationOpen'),
+      detail: registrationClosed.value ? t('nextStep.registrationClosed')
+        : props.deadlinePassedAt ? t('nextStep.registrationDeadlinePassed', { date: props.deadlinePassedAt })
+          : t('nextStep.registrationOpen'),
       action: registrationClosed.value ? null : {
         label: t('nextStep.closeRegistration'),
         disabled: props.approvedCount < 2,

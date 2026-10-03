@@ -87,10 +87,10 @@ onUnmounted(() => document.removeEventListener('pointerdown', onPointerdown))
       :aria-expanded="open"
       aria-haspopup="listbox"
       :aria-controls="open ? menuId : undefined"
-      aria-label="Language / Язык / Kalba"
       @click="toggle"
     >
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.5"/><path d="M1.5 8h13"/><ellipse cx="8" cy="8" rx="3" ry="6.5"/></svg>
+      <span class="sr-only">Language / Язык / Kalba:</span>
       <span>{{ currentLocale().label }}</span>
       <svg class="lang-dropdown__chevron" :class="{ 'lang-dropdown__chevron--open': open }" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5l3 3 3-3"/></svg>
     </button>
