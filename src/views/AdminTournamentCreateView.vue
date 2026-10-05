@@ -106,6 +106,13 @@ watch(() => form.format, format => {
     form.points_per_match = defaultPointsTarget(format)
   }
 })
+// Mixed (man + woman) needs fixed pairs: individual formats rotate partners every round.
+const mixedAllowed = computed(() => effectiveCategory.value === 'doubles' && !individualFormat.value)
+// Like the category, the organizer's choice survives a look at singles; the payload sees the valid value.
+const gender = computed({
+  get: () => (form.gender === 'mixed' && !mixedAllowed.value ? initialForm.gender : form.gender),
+  set: value => { form.gender = value },
+})
 const pairingMode = computed(() => (individualFormat.value || form.doubles_pairing_random ? 'pick_random' : 'pre_agreed'))
 
 const previewMeta = computed(() => {
@@ -272,10 +279,10 @@ async function createTournament() {
         category === 'doubles' && cfg.value.supportsDoublesPairing ? pairingMode.value : null,
       p_format_config: form.format === 'groups_playoff' ? { advance_per_group: Number(form.advance_per_group) || 2 } : {},
       p_scoring_config: pointsFormat.value
-        ? { points_per_match: Number(form.points_per_match), gender: form.gender }
+        ? { points_per_match: Number(form.points_per_match), gender: gender.value }
         : form.sport === 'tennis'
-        ? { ...form.scoring_config, gender: form.gender }
-        : cfg.value.supportsSetFormat ? { tiebreak_to: Number(form.tiebreak_to), gender: form.gender } : { gender: form.gender },
+        ? { ...form.scoring_config, gender: gender.value }
+        : cfg.value.supportsSetFormat ? { tiebreak_to: Number(form.tiebreak_to), gender: gender.value } : { gender: gender.value },
       p_contact_phone: form.contact_phone.trim() || null,
       p_contact_email: form.contact_email.trim() || null,
       p_venue_address: form.venue_address.trim() || null,
@@ -362,7 +369,7 @@ onMounted(async () => {
     if (!getSportConfig(form.sport).allowedFormats.includes(form.format)) form.format = initialForm.format
     if (!['singles', 'doubles'].includes(form.category)) form.category = initialForm.category
     if (!['best_of_3', 'best_of_5'].includes(form.set_format)) form.set_format = initialForm.set_format
-    if (!['men', 'women'].includes(form.gender)) form.gender = initialForm.gender
+    if (!['men', 'women', 'mixed'].includes(form.gender)) form.gender = initialForm.gender
     if (!CREATE_VISIBILITY_MODES.includes(form.visibility)) form.visibility = initialForm.visibility
     step.value = stored.step
     draftRestored.value = hasDraftChanges()
@@ -545,9 +552,10 @@ watch(step, (next, prev) => { if (draftReady.value && next === prev + 1) track('
 
             <div class="form-field">
               <label for="create-gender">{{ t('admin.divisionLabel') }}</label>
-              <select id="create-gender" v-model="form.gender" class="input">
+              <select id="create-gender" v-model="gender" class="input">
                 <option value="men">{{ t('admin.genderMen') }}</option>
                 <option value="women">{{ t('admin.genderWomen') }}</option>
+                <option v-if="mixedAllowed" value="mixed">{{ t('admin.genderMixed') }}</option>
               </select>
             </div>
           </div>
