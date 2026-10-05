@@ -960,12 +960,17 @@ watch(step, (next, prev) => { if (draftReady.value && next === prev + 1) track('
 
 @media (max-width: 760px) {
   .wizard { padding: 16px; }
-  .wizard__head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; }
-  .wizard__brand { min-width: 0; flex-wrap: wrap; gap: 8px; }
-  .wizard__head > .btn { min-height: 44px; }
-  .wizard__progress-wrap { display: flex; grid-column: 1 / -1; grid-row: 2; width: 100%; justify-content: space-between; margin: 0; }
+  /* Long texts (translations, browser auto-translate, large system font) wrap instead of
+     widening the page: the exit button moves under the title when both do not fit, the step
+     name wraps and the segments shrink. */
+  .wizard__head { flex-wrap: wrap; gap: 12px; }
+  .wizard__brand { flex: 1 1 12rem; flex-wrap: wrap; gap: 8px; }
+  .wizard__head > .btn { min-height: 44px; margin-left: auto; }
+  .wizard__progress-wrap { order: 1; flex: 1 1 100%; display: flex; min-width: 0; justify-content: space-between; margin: 0; }
+  .wizard__progress { flex: 1 1 auto; min-width: 0; max-width: calc(6 * 34px + 5 * 6px); }
+  .wizard__seg { flex: 1 1 0; width: auto; min-width: 8px; }
   .wizard__sport-pill { min-height: 44px; }
-  .wizard__step-count { white-space: nowrap; }
+  .wizard__step-count { flex: 0 1 auto; min-width: 0; text-align: right; overflow-wrap: anywhere; }
 }
 .wizard__link-preview {
   display: flex; align-items: center; gap: 6px; margin: 0;
