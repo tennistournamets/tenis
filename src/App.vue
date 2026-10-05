@@ -151,7 +151,7 @@ function goToPlatform() {
     <header v-if="layout === 'admin'" class="app-header">
       <RouterLink class="app-header__brand" :to="{ name: 'admin-tournaments' }">
         <BrandLogo />
-        {{ t('app.title') }}
+        <span translate="no">{{ t('app.title') }}</span>
       </RouterLink>
       <div class="app-header__actions">
         <ThemeToggle />
@@ -193,7 +193,7 @@ function goToPlatform() {
     </header>
 
     <header v-else-if="layout === 'public'" class="app-header">
-      <span class="app-header__brand"><BrandLogo />{{ t('app.title') }}</span>
+      <span class="app-header__brand"><BrandLogo /><span translate="no">{{ t('app.title') }}</span></span>
       <div class="app-header__actions">
         <ThemeToggle />
         <LanguageSwitcher />
