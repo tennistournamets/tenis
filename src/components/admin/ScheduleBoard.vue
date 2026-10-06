@@ -23,7 +23,7 @@ const props = defineProps({
   busy: Boolean,
   canManage: Boolean,
 })
-const emit = defineEmits(['assign', 'publish', 'revert', 'move', 'open-courts'])
+const emit = defineEmits(['assign', 'publish', 'revert', 'move', 'open-courts', 'auto'])
 const { t, locale } = useI18n()
 
 const view = ref('round')
@@ -233,6 +233,9 @@ const scheduledCount = computed(() => schedulable.value.filter(m => index.value.
 const progressPct = computed(() => (schedulable.value.length ? Math.round((scheduledCount.value / schedulable.value.length) * 100) : 0))
 // A match played without a schedule row needs no slot any more.
 const playedUnscheduled = match => match.status === 'finished' && !index.value.draft[match.id]
+// Automatic schedule: plan once, then recalculate from now while the tournament runs.
+const canAutoSchedule = computed(() => props.canManage && props.courts.length > 0 && schedulable.value.some(m => m.status !== 'finished'))
+const canRecalculate = computed(() => canAutoSchedule.value && props.tournament.status === 'in_progress' && Boolean(props.tournament.schedule_config?.match_minutes))
 const statusTone = computed(() => (diff.value.count ? 'dirty' : props.tournament.schedule_published_at ? 'live' : 'never'))
 
 // Court board: a horizontal row of lanes. Arrows and edge fades appear only
@@ -361,6 +364,14 @@ onBeforeUnmount(() => { clearTimeout(conflictsTimer); conflictsVersion += 1 })
       </div>
 
       <div class="sb-status__actions">
+        <button v-if="canRecalculate" class="btn btn--outline btn--sm" type="button" :disabled="disabled" @click="emit('auto', 'recalc')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7L21 8" /><path d="M21 3v5h-5" /><path d="M12 7v5l3 2" /></svg>
+          {{ t('schedule.auto.recalcButton') }}
+        </button>
+        <button v-else-if="canAutoSchedule" class="btn btn--outline btn--sm" type="button" :disabled="disabled" @click="emit('auto', 'plan')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z" /></svg>
+          {{ t('schedule.auto.button') }}
+        </button>
         <button v-if="diff.count" class="btn btn--ghost btn--sm" type="button" :disabled="disabled" @click="emit('revert')">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7v6h6" /><path d="M21 17a9 9 0 0 0-15-6.7L3 13" /></svg>
           {{ t('schedule.revert') }}

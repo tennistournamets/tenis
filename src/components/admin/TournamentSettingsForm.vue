@@ -209,7 +209,9 @@ async function saveTournamentSettings() {
     for (const key of REGISTRATION_DRAFT_KEYS) delete patch[key]
     Object.assign(patch, registrationPatch(regForm, props.tournament))
     delete patch.schedule_min_rest; delete patch.schedule_timezone
-    patch.schedule_config = {}
+    // The form edits rest and zone; the automatic schedule's duration and start stay as saved.
+    const { min_rest_minutes: _rest, timezone: _zone, ...autoSchedule } = props.tournament.schedule_config || {}
+    patch.schedule_config = { ...autoSchedule }
     if (minRest !== '') patch.schedule_config.min_rest_minutes = Number(minRest)
     if (submitted.schedule_timezone.trim()) patch.schedule_config.timezone = submitted.schedule_timezone.trim()
     if (deadlineChanged && patch.registration_deadline && new Date(patch.registration_deadline).getTime() <= Date.now()
