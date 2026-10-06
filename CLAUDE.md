@@ -123,7 +123,7 @@ supabase/
 - **players** - global person records linked to auth.users (display_name, avatar_url, contact_hash)
 - **platform_admins** - super-admin user_ids; `is_platform_admin()` checks membership
 - **feature_flags** - platform-wide toggles (`key` PK, `enabled`, `description`, `updated_at/by`). Sports are gated by `sport.<enum>` keys; missing key = disabled. Seeded: tennis/padel on, football off (`on conflict do nothing`). Public read; write only super-admin.
-- **tournaments** - name, slug, **sport**, **format**, category (singles/doubles), status, `set_format` (nullable; sets sports only), `visibility` (public/link/private/password; `is_public` is derived from it by trigger and stays the RLS gate), doubles_pairing_mode, **format_config** jsonb, **scoring_config** jsonb, `created_by` (owner), `settings_revision` (CAS for settings writes), contacts + `publish_contact`, registration rules (`registration_capacity`, `capacity_public`, `registration_deadline`, `entry_fee_mode/minor/currency/unit`, `waitlist_enabled`), `schedule_config` jsonb + `schedule_published_at`, `access_password_hash`/`access_password_version` (never granted to API roles)
+- **tournaments** - name, slug, **sport**, **format**, category (singles/doubles), status, `set_format` (nullable; sets sports only), `visibility` (public/link/private/password; `is_public` is derived from it by trigger and stays the RLS gate), doubles_pairing_mode, **format_config** jsonb, **scoring_config** jsonb, `created_by` (owner), `settings_revision` (CAS for settings writes), contacts + `publish_contact`, registration rules (`registration_capacity`, `capacity_public`, `registration_deadline`, `entry_fee_mode/minor/currency/unit`, `waitlist_enabled`), `schedule_config` jsonb (`min_rest_minutes`, `timezone`, `match_minutes`, `start_at`) + `schedule_published_at`, `access_password_hash`/`access_password_version` (never granted to API roles)
 - **tournament_admins** - roles: owner, editor, counter (`counter` = "results only": live scoring plus final results/corrections/stop; no management). Writes only via RPC; ownership is granted/removed by owners only; the last owner is protected.
 - **tournament_admin_events** - journal of ownership transfers (admins read, nobody writes directly)
 - **entries** - registrations with approval status (pending/approved/rejected/waitlisted), seed_order. Capacity is enforced by triggers when an entry becomes approved (approved entries occupy seats; pick_random doubles count people).
@@ -145,6 +145,7 @@ supabase/
 - `create_tournament()` - inserts tournament (forces padel→doubles, football→singles, nulls set_format for goals) + owner row; `register_entry(..., p_access_token)` returns `{id, status}` (pending or waitlisted) and enforces deadline, capacity and waitlist
 - `tournament_registration_state()`, `approve_pending_entries()` - registration rules; `update_tournament_settings(p_patch, p_expected_revision)` - whitelisted settings write with CAS
 - Schedule: `save_courts()`, `check_match_schedule()`, `set_match_schedule()`, `clear_match_schedule()`, `schedule_draft_conflicts()`, `publish_schedule()`, `revert_schedule_draft()`
+- Automatic schedule: `src/lib/autoSchedule.js` plans every unplayed match as court + queue place + "not before" time (start, one match duration, rest; waits for feeder matches, group stage before playoff, previous round in points formats; exact-time rows stay pinned); `apply_auto_schedule(tournament, rows, config)` replaces the draft of unplayed matches in one step (played/live rows kept) and saves `match_minutes`/`start_at` to `schedule_config` (validated by `assert_schedule_config()`). "Recalculate from now" reuses it while the tournament runs
 - Access: `add_tournament_admin_by_email()`/`remove_tournament_admin()` (owner rules), `transfer_tournament_ownership()`, `set_tournament_password()`, `tournament_access_mode()`, `unlock_tournament()` (returns `{ok, ...}`), `get_tournament_sync_state_with_token()`
 - `get_tournament_sync_state()` - one RLS-respecting snapshot for public and admin pages (tournament, registration state, entries, matches, sets, live, groups, courts, schedule, standings)
 - `generate_bracket()` / `rebuild_bracket()` - single-elimination; **dispatches to `generate_double_elim()`** when format is double_elimination
@@ -188,7 +189,7 @@ Tables `tournaments`, `entries`, `matches`, `match_sets`, `tournament_admins`, `
 
 ### v1 limitations (documented)
 - Double-elim requires a power-of-two participant count; single grand final (no bracket reset).
-- Schedule conflicts: without match durations a court/participant clash is detected only for identical fixed start times; minimum rest is a warning between start times. No automatic scheduling.
+- Schedule conflicts: without match durations a court/participant clash is detected only for identical fixed start times; minimum rest is a warning between start times. Automatic scheduling uses one duration for all matches and is recalculated only on request (no breaks, no per-stage durations).
 - Group playoff seeding tuned for `advance_per_group = 2`.
 - Standings head-to-head handles pairwise/group ties; circular ties fall through to goal difference.
 - Football live scoring not implemented (final result entry only).
@@ -215,7 +216,6 @@ Planned/known gaps, roughly by priority. Not implemented yet.
 ### Tournament management
 - **Seeding UI** — drag-and-drop reordering (today: move up/down in the entry row menu via `set_entry_seed_order`).
 - **Withdrawals / byes / re-open** after generation without full regen.
-- **Scheduling** — dates/times/venue-court per match.
 - **Undo/rebuild** across all formats — `bracket_versions` is single-elim oriented; extend snapshots to RR/groups/double-elim.
 
 ### Public & UX

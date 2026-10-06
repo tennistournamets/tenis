@@ -29,6 +29,7 @@ import TournamentSettingsForm from '../components/admin/TournamentSettingsForm.v
 import ScheduleBoard from '../components/admin/ScheduleBoard.vue'
 import CourtsEditor from '../components/admin/CourtsEditor.vue'
 import MatchScheduleModal from '../components/admin/MatchScheduleModal.vue'
+import AutoScheduleModal from '../components/admin/AutoScheduleModal.vue'
 import AccessMatrix from '../components/admin/AccessMatrix.vue'
 import SponsorsTab from '../components/admin/SponsorsTab.vue'
 import { provideSponsorship } from '../lib/sponsorship'
@@ -654,6 +655,14 @@ async function moveScheduleItem(action) {
     errorText.value = scheduleError(error?.message, t)
     await refreshScoreData()
   }
+}
+
+// "plan" or "recalc" while the automatic schedule dialog is open.
+const autoScheduleMode = ref('')
+async function onAutoScheduled({ planned }) {
+  errorText.value = ''
+  noticeText.value = t('schedule.auto.done', { count: planned })
+  await loadAll()
 }
 
 async function publishSchedule() {
@@ -2712,6 +2721,7 @@ onBeforeUnmount(() => {
           @revert="revertSchedule"
           @move="moveScheduleItem"
           @open-courts="setTab('courts')"
+          @auto="autoScheduleMode = $event"
         />
       </div>
 
@@ -2955,6 +2965,18 @@ onBeforeUnmount(() => {
         @changed="scheduleScoreReload"
       />
 
+      <AutoScheduleModal
+        v-if="autoScheduleMode && tournament"
+        :mode="autoScheduleMode"
+        :tournament="tournament"
+        :matches="matches"
+        :groups="groups"
+        :courts="courts"
+        :schedule="schedule"
+        :live-scores-by-match="liveScoresByMatch"
+        @close="autoScheduleMode = ''"
+        @saved="onAutoScheduled"
+      />
       <MatchScheduleModal
         v-if="scheduleMatch && tournament"
         :match="scheduleMatch"
