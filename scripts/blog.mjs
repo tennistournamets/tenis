@@ -12,9 +12,9 @@ import { OG_IMAGE_PATH, SITE_NAME, escapeHtml, jsonLdScript } from '../src/lib/s
 const root = fileURLToPath(new URL('..', import.meta.url))
 
 export const BLOG_LABELS = {
-  lt: { blog: 'Straipsniai', blogIntro: 'Patarimai, kaip surengti teniso, padelio ir futbolo turnyrus.', cta: 'Sukurti turnyrą nemokamai', ctaText: 'Registracija, tinklelis ir rezultatai tiesiogiai vienoje vietoje. Dalyviams paskyros nereikia.', more: 'Kiti straipsniai', read: 'Skaityti', home: 'Pradžia', privacy: 'Privatumo politika', terms: 'Naudojimo sąlygos', updated: 'Atnaujinta' },
-  ru: { blog: 'Статьи', blogIntro: 'Советы, как провести турнир по теннису, паделу и футболу.', cta: 'Создать турнир бесплатно', ctaText: 'Регистрация, сетка и live-счёт в одном месте. Участникам не нужен аккаунт.', more: 'Другие статьи', read: 'Читать', home: 'Главная', privacy: 'Политика конфиденциальности', terms: 'Условия использования', updated: 'Обновлено' },
-  en: { blog: 'Guides', blogIntro: 'Practical advice on running tennis, padel and football tournaments.', cta: 'Create a tournament for free', ctaText: 'Registration, brackets and live scores in one place. Players need no account.', more: 'More guides', read: 'Read', home: 'Home', privacy: 'Privacy policy', terms: 'Terms of use', updated: 'Updated' },
+  lt: { blog: 'Straipsniai', blogIntro: 'Patarimai, kaip surengti teniso ir padelio turnyrus.', cta: 'Sukurti turnyrą nemokamai', ctaText: 'Registracija, tinklelis ir rezultatai tiesiogiai vienoje vietoje. Dalyviams paskyros nereikia.', more: 'Kiti straipsniai', read: 'Skaityti', home: 'Pradžia', privacy: 'Privatumo politika', terms: 'Naudojimo sąlygos', updated: 'Atnaujinta' },
+  ru: { blog: 'Статьи', blogIntro: 'Советы, как провести турнир по теннису и паделу.', cta: 'Создать турнир бесплатно', ctaText: 'Регистрация, сетка и live-счёт в одном месте. Участникам не нужен аккаунт.', more: 'Другие статьи', read: 'Читать', home: 'Главная', privacy: 'Политика конфиденциальности', terms: 'Условия использования', updated: 'Обновлено' },
+  en: { blog: 'Guides', blogIntro: 'Practical advice on running tennis and padel tournaments.', cta: 'Create a tournament for free', ctaText: 'Registration, brackets and live scores in one place. Players need no account.', more: 'More guides', read: 'Read', home: 'Home', privacy: 'Privacy policy', terms: 'Terms of use', updated: 'Updated' },
 }
 
 const INTL = { ru: 'ru-RU', en: 'en-GB', lt: 'lt-LT' }
