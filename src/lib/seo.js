@@ -30,8 +30,8 @@ export const LABELS = {
       completed: 'Турнир завершён — итоги и сетка',
     },
     chip: { registration_open: 'Регистрация открыта', registration_closed: 'Регистрация закрыта', in_progress: 'LIVE', completed: 'Завершён' },
-    siteTitle: 'Bracketa — турниры по теннису, паделу и футболу',
-    siteDescription: 'Бесплатный сервис для турниров по теннису, паделу и футболу: регистрация участников, турнирная сетка, live-счёт и расписание кортов. Зрителям не нужен аккаунт.',
+    siteTitle: 'Bracketa — турниры по теннису и паделу',
+    siteDescription: 'Бесплатный сервис для турниров по теннису и паделу: регистрация участников, турнирная сетка, live-счёт и расписание кортов. Зрителям не нужен аккаунт.',
     open: 'Открыть турнир',
   },
   en: {
@@ -52,8 +52,8 @@ export const LABELS = {
       completed: 'Finished — results and bracket',
     },
     chip: { registration_open: 'Registration open', registration_closed: 'Registration closed', in_progress: 'LIVE', completed: 'Finished' },
-    siteTitle: 'Bracketa — tennis, padel and football tournaments',
-    siteDescription: 'Free app for tennis, padel and football tournaments: player registration, brackets, live scores and court schedule. Spectators need no account.',
+    siteTitle: 'Bracketa — tennis and padel tournaments',
+    siteDescription: 'Free app for tennis and padel tournaments: player registration, brackets, live scores and court schedule. Spectators need no account.',
     open: 'Open tournament',
   },
   lt: {
@@ -74,8 +74,8 @@ export const LABELS = {
       completed: 'Turnyras baigtas – galutiniai rezultatai',
     },
     chip: { registration_open: 'Registracija atvira', registration_closed: 'Registracija uždaryta', in_progress: 'LIVE', completed: 'Baigtas' },
-    siteTitle: 'Bracketa – teniso, padelio ir futbolo turnyrai',
-    siteDescription: 'Nemokama programa teniso, padelio ir futbolo turnyrams: dalyvių registracija, turnyrų tinkleliai, rezultatai tiesiogiai ir kortų tvarkaraštis. Žiūrovams paskyros nereikia.',
+    siteTitle: 'Bracketa – teniso ir padelio turnyrai',
+    siteDescription: 'Nemokama programa teniso ir padelio turnyrams: dalyvių registracija, turnyrų tinkleliai, rezultatai tiesiogiai ir kortų tvarkaraštis. Žiūrovams paskyros nereikia.',
     open: 'Atidaryti turnyrą',
   },
 }

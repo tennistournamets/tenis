@@ -107,7 +107,8 @@ const LandingScene3D = defineAsyncComponent({
   }),
 })
 
-const sports = ['tennis', 'padel', 'football']
+// Football is behind the sport.football flag (off), so the landing does not advertise it.
+const sports = ['tennis', 'padel']
 const formats = ['knockout', 'league', 'groups', 'double']
 const steps = ['step1', 'step2', 'step3']
 // Static articles (scripts/blog.mjs): a plain link, the blog is not part of the app.
