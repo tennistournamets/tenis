@@ -2069,6 +2069,12 @@ textarea.input:focus {
   border: 1px solid var(--border);
 }
 
+.alert--warning {
+  background: var(--warning-bg);
+  color: var(--warning-text);
+  border: 1px solid var(--warning-border);
+}
+
 /* Empty state */
 .empty-state {
   display: flex;

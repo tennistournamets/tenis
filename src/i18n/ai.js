@@ -18,7 +18,6 @@ export const aiMessages = {
       notConfigured: 'AI временно недоступен. Мы уже знаем об этом.',
     },
     platform: {
-      title: 'AI-функции',
       hint: 'Функция работает, только когда включены и общий выключатель, и её собственный. Выключение сразу прячет AI-кнопки у всех организаторов.',
       master: {
         title: 'Все AI-функции',
@@ -30,10 +29,13 @@ export const aiMessages = {
         score: { title: 'Ввод счёта голосом или текстом', hint: 'Для организаторов и судей у корта.' },
         posts: { title: 'Посты для соцсетей', hint: 'Тексты с итогами раунда и турнира.' },
       },
+      featuresTitle: 'Функции',
+      allOff: 'Общий выключатель выключен, поэтому не работает ни одна AI-функция. Функции ниже можно настроить заранее: они заработают, когда вы включите общий выключатель.',
       masterOff: 'выключено общим выключателем',
       usage: {
         title: 'Расход за {days} дней',
         empty: 'AI-запросов пока не было.',
+        refresh: 'Обновить',
         loadError: 'Не удалось загрузить расход.',
         feature: 'Функция',
         calls: 'Запросы',
@@ -63,7 +65,6 @@ export const aiMessages = {
       notConfigured: 'AI is temporarily unavailable. We already know about it.',
     },
     platform: {
-      title: 'AI features',
       hint: 'A feature works only while both the master switch and its own switch are on. Switching off hides the AI buttons from every organizer at once.',
       master: {
         title: 'All AI features',
@@ -75,10 +76,13 @@ export const aiMessages = {
         score: { title: 'Score entry by voice or text', hint: 'For organizers and score keepers at the court.' },
         posts: { title: 'Social media posts', hint: 'Texts with round and tournament results.' },
       },
+      featuresTitle: 'Features',
+      allOff: 'The master switch is off, so no AI feature works. You can set up the features below in advance: they start working when you turn the master switch on.',
       masterOff: 'off by the master switch',
       usage: {
         title: 'Usage in the last {days} days',
         empty: 'No AI requests yet.',
+        refresh: 'Refresh',
         loadError: 'Could not load the usage.',
         feature: 'Feature',
         calls: 'Requests',
@@ -108,7 +112,6 @@ export const aiMessages = {
       notConfigured: 'DI laikinai nepasiekiamas. Jau žinome apie tai.',
     },
     platform: {
-      title: 'DI funkcijos',
       hint: 'Funkcija veikia tik tada, kai įjungti ir bendras jungiklis, ir jos pačios jungiklis. Išjungus DI mygtukai iškart dingsta visiems organizatoriams.',
       master: {
         title: 'Visos DI funkcijos',
@@ -120,10 +123,13 @@ export const aiMessages = {
         score: { title: 'Rezultato įvedimas balsu ar tekstu', hint: 'Organizatoriams ir rezultatų teisėjams prie korto.' },
         posts: { title: 'Įrašai socialiniams tinklams', hint: 'Tekstai su rato ir turnyro rezultatais.' },
       },
+      featuresTitle: 'Funkcijos',
+      allOff: 'Bendras jungiklis išjungtas, todėl neveikia nė viena DI funkcija. Toliau esančias funkcijas galite nustatyti iš anksto: jos ims veikti, kai įjungsite bendrą jungiklį.',
       masterOff: 'išjungta bendru jungikliu',
       usage: {
         title: 'Sąnaudos per {days} d.',
         empty: 'DI užklausų dar nebuvo.',
+        refresh: 'Atnaujinti',
         loadError: 'Nepavyko įkelti sąnaudų.',
         feature: 'Funkcija',
         calls: 'Užklausos',
