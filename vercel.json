@@ -126,6 +126,9 @@
   "functions": {
     "api/og.js": {
       "includeFiles": "api/_fonts/**"
+    },
+    "api/ai.js": {
+      "maxDuration": 60
     }
   }
 }

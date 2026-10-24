@@ -1,7 +1,7 @@
 ---
 title: Privacy policy
 description: What personal data Bracketa collects, why, where it is stored and how to exercise your rights.
-updated: 2026-10-01
+updated: 2026-10-24
 ---
 
 Bracketa (braketa.top) is a free service for organizing tennis, padel and football tournaments. This policy explains what personal data we process, why, and what rights you have under the EU General Data Protection Regulation (GDPR).
@@ -23,6 +23,7 @@ There are two roles:
 - **Tournaments you create:** name, venue and its address, dates and schedule, rules, registration settings, results. Optionally a contact phone and email, which are published only if you turn on "show contact".
 - **Co-organizers:** when you add someone by email, we store only a link to their existing account.
 - **Sponsorship:** requests to enable sponsors (your message and the decision), sponsor names, links, captions and images you upload.
+- **AI features** (when the platform has switched them on): text or a file you send to an AI feature yourself (a tournament description, a participant list, a phrase with a score) goes to the DeepSeek service to be turned into settings, a list or a score. We keep only the fact of the request: which feature, when and how many tokens, without the text itself.
 
 ### Participants
 
@@ -54,6 +55,7 @@ Participants do not need an account.
 | A short line "create your own tournament" in those emails | Our legitimate interest in growing the service, art. 6(1)(f); you can object at any time |
 | Security: password lockout, abuse prevention, logs | Legitimate interest, art. 6(1)(f) |
 | Cookie-free statistics | Legitimate interest in improving the service, art. 6(1)(f) |
+| AI features: reading text the organizer sent themselves | Performance of the service requested by the organizer, art. 6(1)(b), and the organizer's legitimate interest in entering tournament data quickly, art. 6(1)(f) |
 
 We do not sell personal data, do not use it for advertising profiles and do not make automated decisions with legal effects.
 
@@ -67,8 +69,11 @@ We do not sell personal data, do not use it for advertising profiles and do not 
 | Umami | Cookie-free statistics | EU |
 | Google | Sign-in with Google; fonts loaded from Google servers (your browser sends its IP address to Google) | USA / global |
 | IndexNow (Bing and others) | Notifying search engines about new public pages; only page addresses are sent | USA / global |
+| DeepSeek | Reading text for AI features, only when the organizer starts one | China |
 
 Where a provider is outside the European Economic Area, the transfer relies on the EU–US Data Privacy Framework or the European Commission's standard contractual clauses.
+
+China has no adequacy decision from the European Commission. That is why text goes to DeepSeek only when an organizer starts an AI feature themselves, and we send as little as possible: for example, result posts use placeholder labels instead of names.
 
 ## How long we keep data
 
@@ -76,6 +81,7 @@ Where a provider is outside the European Economic Area, the transfer relies on t
 - **Tournaments and participant data:** until the organizer deletes the tournament. Deleting a tournament also deletes its participants, matches and email queue.
 - **Password access tokens:** 12 hours. Password attempt counters: about a day.
 - **Server logs:** according to the providers' own retention periods.
+- **AI request log** (feature, time, tokens, no text): the link to your account is removed together with the account.
 
 If you want your data deleted earlier, write to us or to the tournament organizer.
 

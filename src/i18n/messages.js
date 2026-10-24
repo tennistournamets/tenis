@@ -12,6 +12,7 @@ import { serverErrorMessages } from './serverErrors'
 import { pluralMessages } from './plurals'
 import { groupsFlowMessages } from './groupsFlow'
 import { pointsFormatMessages } from './pointsFormat'
+import { aiMessages } from './ai'
 
 export const messages = {
   ru: {
@@ -354,6 +355,7 @@ export const messages = {
     plural: pluralMessages.ru,
     groupsFlow: groupsFlowMessages.ru,
     pointsFormat: pointsFormatMessages.ru,
+    ai: aiMessages.ru,
     app: {
       title: 'Bracketa',
       subtitle: 'Организация турниров, жеребьёвка и live-сетка',
@@ -1614,6 +1616,7 @@ export const messages = {
     plural: pluralMessages.en,
     groupsFlow: groupsFlowMessages.en,
     pointsFormat: pointsFormatMessages.en,
+    ai: aiMessages.en,
     app: {
       title: 'Bracketa',
       subtitle: 'Run tournaments, draws, and live brackets',
@@ -2874,6 +2877,7 @@ export const messages = {
     plural: pluralMessages.lt,
     groupsFlow: groupsFlowMessages.lt,
     pointsFormat: pointsFormatMessages.lt,
+    ai: aiMessages.lt,
     app: {
       title: 'Bracketa',
       subtitle: 'Turnyrai, burtai ir tinkleliai tiesiogiai',

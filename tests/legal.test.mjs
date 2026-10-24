@@ -57,7 +57,7 @@ test('a legal page carries canonical, translations and the update date', () => {
   assert.ok(html.includes('<link rel="canonical" href="https://braketa.top/ru/privacy">'))
   assert.ok(html.includes('hreflang="lt" href="https://braketa.top/privacy"'))
   assert.ok(html.includes('hreflang="x-default" href="https://braketa.top/privacy"'))
-  assert.ok(html.includes('<time datetime="2026-10-01">'))
+  assert.ok(html.includes('<time datetime="2026-10-24">'))
 })
 
 test('blog pages and participant emails link to the legal pages', () => {

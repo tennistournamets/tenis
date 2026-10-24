@@ -84,7 +84,7 @@ src/
   App.vue                     # Root component
   main.js                     # App entry point
   styles.css                  # Global styles
-api/                          # Vercel functions: preview.js (OG tags for messenger bots), og.js (per-tournament PNG via @vercel/og; _og-card.js layout, _fonts/), robots.js, sitemap.js, notifications.js (email sender; _notifier.js, _email.js)
+api/                          # Vercel functions: preview.js (OG tags for messenger bots), og.js (per-tournament PNG via @vercel/og; _og-card.js layout, _fonts/), robots.js, sitemap.js, notifications.js (email sender; _notifier.js, _email.js), ai.js (DeepSeek AI tasks; _ai-*.js helpers, tasks in _ai-tasks.js; served locally by the dev plugin in vite.config.js)
 content/blog/<lang>/*.md      # Blog articles (front matter: title, description, key, date); every key in all 3 languages
 content/legal/<lang>/{privacy,terms}.md  # Privacy policy + terms of use (scripts/legal.mjs -> /privacy, /terms, /ru/…, /en/…; linked from footers, registration form, emails)
 public/embed.js               # Club-site loader: iframe + auto height (postMessage, origin-checked)
@@ -138,6 +138,7 @@ supabase/
 - **live_scores** - real-time point-by-point scoring state (JSON state/history/revision)
 - **sponsorship_requests** - paid-feature gate, one row per tournament: `status` pending/approved/rejected, `message`, `requested_by`, `decided_by/at`. Read: tournament admins + platform admin (RLS); no direct writes
 - **tournament_sponsorship** - one JSON document per tournament (sponsors, places, banners; shape in `src/lib/sponsorship.js`) + `revision`. Read: organizers always, others while the tournament is readable and sponsorship approved + `feature.sponsorship` on. Written only by `save_sponsorship()`. Images: public Storage bucket `sponsor-assets` (2 MB, webp/png/jpeg/gif, no SVG), upload/delete only by `can_manage_sponsorship()` of the folder's tournament
+- **ai_usage** - AI call journal (user, task, tournament, tokens, ok/error code; never the request text). Read: platform admin only; written by `ai_begin_call()`/`ai_finish_call()`
 - **notification_outbox** - participant emails queued by triggers on `entries` (received/waitlisted/approved/rejected) and by `enqueue_match_reminders()`; no addresses stored; closed to API roles. `entries.notify_locale` comes from the `x-bracketa-locale` request header (RegistrationForm sets it)
 
 ### Key PL/pgSQL Functions
@@ -168,6 +169,7 @@ supabase/
 - `is_tournament_admin()`, `can_live_score()`, `is_platform_admin()` - access checks
 - `is_feature_enabled(key)` / `set_feature_flag(key, enabled, description)` - feature flags; `create_tournament()` rejects a sport whose `sport.<x>` flag is off
 - Sponsorship: `request_sponsorship(tournament, message)` (owner only; approved stays approved, rejected → pending again), `decide_sponsorship_request(id, status)` and `list_sponsorship_requests()` (platform admin; owner name/email + tournament), `is_sponsorship_approved(tournament)` (anon ok; public sponsor slots render only when true); `can_manage_sponsorship(tournament)` (admin + approved + flag on), `save_sponsorship(tournament, config, expected_revision)` (validates http(s) links, own-folder/demo image refs, size; raises `Sponsorship changed` on a stale revision)
+- AI: `is_ai_feature_enabled(feature)` (`ai` master switch AND `ai.<feature>`; features import/create/score/posts, seeded off), `ai_begin_call(task, tournament)` (switches, rights, 24 h limit per user and task; raises `ai.disabled`/`ai.forbidden`/`ai.limit`), `ai_finish_call()`, `ai_usage_summary(days)` (platform admin)
 - `claim_notifications(limit)`, `complete_notification(id, ok, error)`, `notifications_due()` - email sender (service_role only; `api/notifications.js`, triggered by pg_cron — setup in docs/GROWTH.md)
 
 ### Security
@@ -183,6 +185,7 @@ Tables `tournaments`, `entries`, `matches`, `match_sets`, `tournament_admins`, `
 
 - **Canonical aggregate:** every sport in every format writes `matches.side_a_score`/`side_b_score` + `winner_entry_id`. Standings/propagation/badges read only this. Sport specifics (tennis sets, football penalties) live in satellites the aggregate consumers ignore.
 - **Sport/format registries drive the UI:** `lib/sportConfig.js` (`getSportConfig`, `scoringFamily`) gates form fields and chooses which board/editor renders; `lib/scoringEngines.js` maps family → state/format helpers.
+- **AI features:** `api/ai.js` calls DeepSeek with the server-only `DEEPSEEK_API_KEY` (never `VITE_*`) after `ai_begin_call()` runs as the user (their access token, no service key). The super-admin switches all AI (`ai`) or each feature (`ai.<feature>`) in `/admin/platform`; the UI checks `useAiFeature()` (`src/lib/aiFeatures.js`), the client calls `callAi()` (`src/lib/ai.js`), error codes `ai.*` translate via `src/i18n/ai.js`.
 - **Feature flags gate sports:** `SPORTS` in `sportConfig.js` is the full registry; `SportPicker` renders only `featureFlags.enabledSports`. Adding a sport = enum + `sportConfig` + i18n + flip its `sport.<x>` flag in `/admin/platform` (or seed row in schema.sql).
 - **Bracket vs standings:** single/double-elim & group playoff render bracket boards (tree via `next_match_id`); round_robin & group stage render `StandingsTable` + fixtures.
 - **Tournaments accessed by slug** (public sharing).
