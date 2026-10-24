@@ -4,15 +4,17 @@ import { AiError } from './_ai-errors.js'
 
 export const GROQ_TRANSCRIBE_URL = 'https://api.groq.com/openai/v1/audio/transcriptions'
 export const DEFAULT_WHISPER_MODEL = 'whisper-large-v3-turbo'
-const LANGUAGES = ['lt', 'ru', 'en']
 // Words Whisper should spell as the app does; a prompt only nudges the spelling.
 const VOCABULARY = 'Bracketa, tenisas, padelis, turnyras, kortas, Americano, Mexicano, King of the Court, теннис, падел, турнир, корт, tennis, padel, tournament, court.'
 
 const EXTENSIONS = { 'audio/webm': 'webm', 'audio/ogg': 'ogg', 'audio/mp4': 'm4a', 'audio/mpeg': 'mp3', 'audio/wav': 'wav', 'audio/x-wav': 'wav' }
 export const audioExtension = type => EXTENSIONS[String(type ?? '').split(';')[0].trim().toLowerCase()] ?? null
 
-/** { text, seconds } for one recording; `language` is the UI language, a hint, not a filter. */
-export async function transcribe({ env, fetchImpl, audio, type, language, timeoutMs = 30000 }) {
+/**
+ * { text, seconds } for one recording. Whisper detects the language itself: a hint from the UI
+ * language garbled Lithuanian speech when the interface was in Russian.
+ */
+export async function transcribe({ env, fetchImpl, audio, type, timeoutMs = 30000 }) {
   const extension = audioExtension(type)
   if (!extension) throw new AiError('ai.badRequest', 400)
   const form = new FormData()
@@ -21,7 +23,6 @@ export async function transcribe({ env, fetchImpl, audio, type, language, timeou
   form.append('response_format', 'verbose_json')
   form.append('temperature', '0')
   form.append('prompt', VOCABULARY)
-  if (LANGUAGES.includes(language)) form.append('language', language)
 
   let response
   try {

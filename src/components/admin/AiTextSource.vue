@@ -29,6 +29,7 @@ const fileNote = ref('')
 const fileError = ref('')
 const clipped = computed(() => props.modelValue.length > TEXT_MAX)
 const dictating = ref(false)
+const voiceError = ref('')
 
 function addText(text) {
   const current = props.modelValue.trim()
@@ -65,32 +66,38 @@ async function onFile(event) {
   <div class="ai-source stack stack--sm">
     <div class="form-field">
       <label :for="id">{{ label }}</label>
-      <textarea
-        :id="id"
-        class="input ai-source__text"
-        :rows="rows"
-        :value="modelValue"
-        :placeholder="placeholder"
-        :disabled="disabled || reading || dictating"
-        spellcheck="false"
-        @input="emit('update:modelValue', $event.target.value)"
-      ></textarea>
+      <div class="ai-source__field">
+        <textarea
+          :id="id"
+          class="input ai-source__text"
+          :class="{ 'ai-source__text--voice': voice }"
+          :rows="rows"
+          :value="modelValue"
+          :placeholder="placeholder"
+          :disabled="disabled || reading"
+          spellcheck="false"
+          @input="emit('update:modelValue', $event.target.value)"
+        ></textarea>
+        <VoiceInputButton
+          v-if="voice"
+          class="ai-source__mic"
+          :disabled="disabled || reading"
+          :tournament-id="tournamentId"
+          @busy="dictating = $event"
+          @error="voiceError = $event"
+          @text="addText"
+        />
+      </div>
     </div>
     <div class="ai-source__bar">
       <button type="button" class="btn btn--outline btn--sm" :disabled="disabled || reading || dictating" @click="pickFile">
         <AppIcon name="attach" :size="16" />
         {{ !reading ? t('ai.source.attach') : progress == null ? t('ai.source.reading') : t('ai.source.readingImage', { percent: progress }) }}
       </button>
-      <VoiceInputButton
-        v-if="voice"
-        :disabled="disabled || reading"
-        :tournament-id="tournamentId"
-        @busy="dictating = $event"
-        @text="addText"
-      />
       <span class="ai-source__formats">{{ t('ai.source.formats') }}</span>
       <input ref="fileInput" type="file" hidden :accept="FILE_ACCEPT" @change="onFile" />
     </div>
+    <p v-if="voiceError" class="alert alert--error" role="alert">{{ voiceError }}</p>
     <p v-if="fileError" class="alert alert--error" role="alert">{{ fileError }}</p>
     <p v-else-if="fileNote" class="ai-source__note" role="status">{{ fileNote }}</p>
     <p v-if="clipped" class="alert alert--warning" role="status">{{ t('ai.source.clipped', { max: TEXT_MAX.toLocaleString() }) }}</p>
@@ -102,12 +109,29 @@ async function onFile(event) {
 </template>
 
 <style scoped>
+.ai-source__field {
+  position: relative;
+}
 .ai-source__text {
+  display: block;
+  width: 100%;
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 0.875rem;
   line-height: 1.5;
   min-height: 9rem;
   resize: vertical;
+}
+/* Room for the microphone in the bottom-right corner; the field grows with its text. */
+.ai-source__text--voice {
+  padding-bottom: 56px;
+  resize: none;
+  field-sizing: content;
+  max-height: 24rem;
+}
+.ai-source__mic {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
 }
 .ai-source__bar {
   display: flex;

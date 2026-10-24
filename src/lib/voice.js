@@ -49,15 +49,14 @@ export async function startRecording() {
 }
 
 /** Text of a recording; `tournamentId` when recorded inside a tournament (score entry). */
-export async function transcribeAudio(audio, { locale, tournamentId = null, signal } = {}) {
+export async function transcribeAudio(audio, { tournamentId = null, signal } = {}) {
   const { data } = await supabase.auth.getSession()
   const token = data?.session?.access_token
   if (!token) throw new AiCallError('ai.auth')
-  const query = new URLSearchParams({ lang: locale || '' })
-  if (tournamentId) query.set('tournament', tournamentId)
+  const query = tournamentId ? `?${new URLSearchParams({ tournament: tournamentId })}` : ''
   let response
   try {
-    response = await fetch(`/api/transcribe?${query}`, {
+    response = await fetch(`/api/transcribe${query}`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': audio.type || 'audio/webm' },
       body: audio,

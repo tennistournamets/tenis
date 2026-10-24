@@ -1,8 +1,8 @@
 <script setup>
-// "Dictate" next to an AI text field: record, stop, and the transcript is emitted as text.
+// Microphone inside an AI text field: tap to record, tap again to stop; the transcript is
+// emitted as text. Sits in the field's bottom-right corner (see AiTextSource).
 import { computed, onBeforeUnmount, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import AppIcon from '../AppIcon.vue'
 import { errorMessage } from '../../lib/errorMessages'
 import { VOICE_MAX_SECONDS, canRecord, startRecording, transcribeAudio } from '../../lib/voice'
 
@@ -10,44 +10,39 @@ const props = defineProps({
   disabled: Boolean,
   tournamentId: { type: String, default: null },
 })
-const emit = defineEmits(['text', 'busy'])
-const { t, locale } = useI18n()
+const emit = defineEmits(['text', 'busy', 'error'])
+const { t } = useI18n()
 
 const state = ref('idle') // idle | recording | transcribing
 const seconds = ref(0)
-const error = ref('')
 const supported = canRecord()
 let recording = null
 let ticker = null
 
-const clock = computed(() => {
-  const left = Math.max(0, VOICE_MAX_SECONDS - seconds.value)
-  return `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`
-})
+const clock = computed(() => `${Math.floor(seconds.value / 60)}:${String(seconds.value % 60).padStart(2, '0')}`)
+const label = computed(() => (state.value === 'recording' ? t('ai.voice.stop')
+  : state.value === 'transcribing' ? t('ai.voice.transcribing') : t('ai.voice.start')))
 
 function setState(next) {
   state.value = next
   emit('busy', next !== 'idle')
 }
 
-async function start() {
+async function toggle() {
+  if (state.value === 'recording') { recording?.stop(); return }
   if (props.disabled || state.value !== 'idle') return
-  error.value = ''
+  emit('error', '')
   try {
     recording = await startRecording()
   } catch (err) {
-    error.value = errorMessage(err, t, 'ai.errors.mic')
+    emit('error', errorMessage(err, t, 'ai.errors.mic'))
     return
   }
   seconds.value = 0
-  ticker = setInterval(() => { seconds.value += 1 }, 1000)
+  ticker = setInterval(() => { seconds.value = Math.min(VOICE_MAX_SECONDS, seconds.value + 1) }, 1000)
   setState('recording')
   // The time limit stops the recording on its own; the same path then transcribes it.
   recording.done.then(audio => finish(audio))
-}
-
-function stop() {
-  recording?.stop()
 }
 
 async function finish(audio) {
@@ -56,10 +51,9 @@ async function finish(audio) {
   if (!audio) { setState('idle'); return }
   setState('transcribing')
   try {
-    const text = await transcribeAudio(audio, { locale: locale.value, tournamentId: props.tournamentId })
-    emit('text', text)
+    emit('text', await transcribeAudio(audio, { tournamentId: props.tournamentId }))
   } catch (err) {
-    error.value = errorMessage(err, t, 'ai.errors.unavailable')
+    emit('error', errorMessage(err, t, 'ai.errors.unavailable'))
   } finally {
     setState('idle')
   }
@@ -72,56 +66,113 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <span v-if="supported" class="voice-input">
+  <div v-if="supported" class="mic" :class="`mic--${state}`">
+    <span v-if="state === 'recording'" class="mic__timer" aria-hidden="true">
+      <span class="mic__dot"></span>{{ clock }}
+    </span>
     <button
-      v-if="state !== 'recording'"
       type="button"
-      class="btn btn--outline btn--sm voice-input__button"
-      :disabled="disabled || state === 'transcribing'"
-      @click="start"
+      class="mic__button"
+      :aria-label="label"
+      :title="label"
+      :aria-pressed="state === 'recording'"
+      :aria-busy="state === 'transcribing'"
+      :disabled="(disabled && state === 'idle') || state === 'transcribing'"
+      @click="toggle"
     >
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0" /><path d="M12 18v3" />
+      <!-- Microphone / stop square / spinner -->
+      <svg v-if="state === 'idle'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="9" y="3" width="6" height="12" rx="3" /><path d="M5 11a7 7 0 0 0 14 0" /><path d="M12 18v3" />
       </svg>
-      {{ state === 'transcribing' ? t('ai.voice.transcribing') : t('ai.voice.start') }}
+      <svg v-else-if="state === 'recording'" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="5" y="5" width="14" height="14" rx="3" fill="currentColor" />
+      </svg>
+      <svg v-else class="mic__spinner" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true">
+        <path d="M21 12a9 9 0 1 1-6.2-8.56" />
+      </svg>
     </button>
-    <button v-else type="button" class="btn btn--danger btn--sm voice-input__button" @click="stop">
-      <span class="voice-input__dot" aria-hidden="true"></span>
-      {{ t('ai.voice.stop', { time: clock }) }}
-    </button>
-    <span v-if="state === 'recording'" class="sr-only" role="status">{{ t('ai.voice.recording') }}</span>
-    <span v-if="error" class="voice-input__error" role="alert">{{ error }}</span>
-  </span>
+    <span class="sr-only" role="status">{{ state === 'recording' ? t('ai.voice.recording') : state === 'transcribing' ? t('ai.voice.transcribing') : '' }}</span>
+  </div>
 </template>
 
 <style scoped>
-.voice-input {
+.mic {
   display: inline-flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 6px 10px;
+  gap: 8px;
 }
-.voice-input__button {
+.mic__button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong, var(--border));
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.mic__button:hover:not(:disabled) {
+  color: var(--primary);
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+.mic__button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+.mic__button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+.mic--recording .mic__button {
+  color: #fff;
+  border-color: var(--danger);
+  background: var(--danger);
+  animation: mic-pulse 1.4s ease-out infinite;
+}
+.mic--transcribing .mic__button:disabled {
+  opacity: 1;
+  color: var(--primary);
+}
+.mic__timer {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.8125rem;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
+  color: var(--danger);
+  background: var(--danger-bg);
 }
-.voice-input__dot {
-  width: 8px;
-  height: 8px;
+.mic__dot {
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   background: currentColor;
-  animation: voice-pulse 1s ease-in-out infinite;
+  animation: mic-blink 1s ease-in-out infinite;
 }
-.voice-input__error {
-  font-size: 0.8125rem;
-  color: var(--danger);
+.mic__spinner {
+  animation: mic-spin 0.8s linear infinite;
 }
-@keyframes voice-pulse {
+@keyframes mic-pulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--danger) 45%, transparent); }
+  100% { box-shadow: 0 0 0 12px color-mix(in srgb, var(--danger) 0%, transparent); }
+}
+@keyframes mic-blink {
   50% { opacity: 0.3; }
 }
+@keyframes mic-spin {
+  to { transform: rotate(360deg); }
+}
 @media (prefers-reduced-motion: reduce) {
-  .voice-input__dot { animation: none; }
+  .mic--recording .mic__button,
+  .mic__dot,
+  .mic__spinner { animation: none; }
 }
 </style>

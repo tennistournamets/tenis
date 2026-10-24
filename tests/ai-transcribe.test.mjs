@@ -50,15 +50,14 @@ test('speech becomes text after the database allowed the call; seconds go to the
   assert.equal(begin.headers.Authorization, 'Bearer user-jwt')
   assert.equal(groq.headers.Authorization, 'Bearer gsk_test')
   assert.equal(groq.form.model, 'whisper-large-v3-turbo')
-  assert.equal(groq.form.language, 'lt')
+  assert.equal(groq.form.language, undefined, 'Whisper detects the language itself')
   assert.deepEqual(groq.form.file, { name: 'speech.webm', type: 'audio/webm;codecs=opus', size: 2000 })
   assert.deepEqual(finish.body, { p_id: 'call-1', p_ok: true, p_tokens_in: 8, p_tokens_out: null, p_error_code: null })
 })
 
-test('the wizard records without a tournament; an unknown language is left to Whisper', async () => {
-  const { calls } = await run(request({ query: '?lang=de' }))
+test('the wizard records without a tournament', async () => {
+  const { calls } = await run(request({ query: '' }))
   assert.deepEqual(calls[0].body, { p_task: 'voice', p_tournament_id: null })
-  assert.equal(calls[1].form.language, undefined)
 })
 
 test('refusals and bad input never reach Groq', async () => {
