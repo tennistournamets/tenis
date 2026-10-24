@@ -183,7 +183,9 @@
     },
     {
       "path": "supabase/migrations/20261024174519_ai_foundation.sql",
-      "sha256": "e9fd365869e4f344c7fd8b77be11174c1450b94fe2f386a827ee92a85f9da659"
+      "sha256": "e9fd365869e4f344c7fd8b77be11174c1450b94fe2f386a827ee92a85f9da659",
+      "tenisAppliedVersion": "20261024174519",
+      "tenisNote": "Applied 2026-10-24 with supabase db push --db-url (session pooler) after logical backup (tenis-public-20261024-2101-pre-ai-foundation.dump + migrations journal export); new table ai_usage, AI functions and switches seeded off."
     }
   ],
   "baseline": {
