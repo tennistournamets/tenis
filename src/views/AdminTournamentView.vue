@@ -23,6 +23,7 @@ import EmbedCodeModal from '../components/EmbedCodeModal.vue'
 import ShareTournamentModal from '../components/ShareTournamentModal.vue'
 import ScoreEditor from '../components/ScoreEditor.vue'
 import ManualEntryForm from '../components/admin/ManualEntryForm.vue'
+import AiImportPanel from '../components/admin/AiImportPanel.vue'
 import EntryContact from '../components/admin/EntryContact.vue'
 import { loadEntryContacts } from '../lib/entryContacts'
 import TournamentSettingsForm from '../components/admin/TournamentSettingsForm.vue'
@@ -1898,6 +1899,16 @@ onBeforeUnmount(() => {
           </h2>
 
           <ManualEntryForm
+            :tournament="tournament"
+            :entries="entries"
+            :busy="actionLoading || settingsSaving"
+            :can-manage="canManageTournament"
+            :has-structure="hasBracket"
+            @update:busy="actionLoading = $event"
+            @saved="refreshScoreData"
+          />
+
+          <AiImportPanel
             :tournament="tournament"
             :entries="entries"
             :busy="actionLoading || settingsSaving"
