@@ -1,8 +1,11 @@
 // An attached file as plain text for the AI (DeepSeek reads text only). The file never leaves
-// the browser: only its text is sent. Each parser loads when such a file is picked, so the
+// the browser: only its text is sent. Pictures (screenshots, photos of a list) are read by
+// tesseract.js in the browser too. Each parser loads when such a file is picked, so the
 // main bundle does not grow.
-export const FILE_ACCEPT = '.txt,.csv,.tsv,.xlsx,.docx,.pdf'
+const IMAGE_TYPES = ['jpg', 'jpeg', 'png', 'webp', 'heic', 'heif']
+export const FILE_ACCEPT = `.txt,.csv,.tsv,.xlsx,.docx,.pdf,${IMAGE_TYPES.map(ext => `.${ext}`).join(',')}`
 export const FILE_MAX_BYTES = 5 * 1024 * 1024
+export const IMAGE_MAX_BYTES = 15 * 1024 * 1024
 export const TEXT_MAX = 30000
 
 export class FileTextError extends Error {
@@ -74,14 +77,77 @@ async function pdfText(file) {
   return pages.join('\n')
 }
 
-/** Text of a .txt/.csv/.tsv/.xlsx/.docx/.pdf file; throws FileTextError (type, tooBig, noText, unreadable). */
-export async function fileToText(file) {
+// Recognition works best on large, dark-on-light text: small screenshots are scaled up,
+// colours dropped, and a dark-theme chat (light text on dark) is inverted.
+export function prepareForOcr(pixels) {
+  let sum = 0
+  for (let i = 0; i < pixels.length; i += 4) {
+    const grey = 0.299 * pixels[i] + 0.587 * pixels[i + 1] + 0.114 * pixels[i + 2]
+    pixels[i] = pixels[i + 1] = pixels[i + 2] = grey
+    sum += grey
+  }
+  const dark = sum / (pixels.length / 4) < 110
+  if (dark) for (let i = 0; i < pixels.length; i += 4) pixels[i] = pixels[i + 1] = pixels[i + 2] = 255 - pixels[i]
+  return dark
+}
+
+async function imageCanvas(file) {
+  let bitmap
+  try {
+    bitmap = await createImageBitmap(file)
+  } catch {
+    // Chrome and Firefox cannot open HEIC; iPhones usually send JPEG from the file picker.
+    throw new FileTextError('imageType')
+  }
+  const scale = Math.min(3, Math.max(1, 1600 / bitmap.width))
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.round(bitmap.width * scale)
+  canvas.height = Math.round(bitmap.height * scale)
+  const context = canvas.getContext('2d', { willReadFrequently: true })
+  context.imageSmoothingQuality = 'high'
+  context.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+  bitmap.close?.()
+  const image = context.getImageData(0, 0, canvas.width, canvas.height)
+  prepareForOcr(image.data)
+  context.putImageData(image, 0, 0)
+  return canvas
+}
+
+async function imageText(file, onProgress) {
+  const [{ createWorker }, canvas] = await Promise.all([import('tesseract.js'), imageCanvas(file)])
+  // Worker, engine and lt/ru/en data come from our own domain (scripts/vite-ocr-assets.js).
+  // Absolute: tesseract.js starts its worker from a blob URL, where "/ocr/..." resolves nowhere.
+  const base = new URL(typeof __OCR_BASE__ === 'string' ? __OCR_BASE__ : '/ocr', window.location.origin).href
+  const worker = await createWorker(['lit', 'rus', 'eng'], 1, {
+    workerPath: `${base}/worker.min.js`,
+    corePath: `${base}/core`,
+    langPath: `${base}/lang`,
+    logger: message => {
+      if (message.status === 'recognizing text') onProgress?.(Math.round(message.progress * 100))
+    },
+  })
+  try {
+    const { data } = await worker.recognize(canvas)
+    return data.text
+  } finally {
+    await worker.terminate()
+  }
+}
+
+/**
+ * Text of a .txt/.csv/.tsv/.xlsx/.docx/.pdf file or a picture; throws FileTextError
+ * (type, imageType, tooBig, noText, noImageText, unreadable). `onProgress(percent)` follows
+ * picture recognition.
+ */
+export async function fileToText(file, { onProgress } = {}) {
   if (!file) throw new FileTextError('type')
-  if (file.size > FILE_MAX_BYTES) throw new FileTextError('tooBig')
   const ext = extension(file.name)
+  const image = IMAGE_TYPES.includes(ext)
+  if (file.size > (image ? IMAGE_MAX_BYTES : FILE_MAX_BYTES)) throw new FileTextError('tooBig')
   let text
   try {
-    if (['txt', 'csv', 'tsv'].includes(ext)) text = await file.text()
+    if (image) text = await imageText(file, onProgress)
+    else if (['txt', 'csv', 'tsv'].includes(ext)) text = await file.text()
     else if (ext === 'xlsx') text = await xlsxText(file)
     else if (ext === 'docx') text = await docxText(file)
     else if (ext === 'pdf') text = await pdfText(file)
@@ -92,8 +158,8 @@ export async function fileToText(file) {
     throw new FileTextError('unreadable')
   }
   text = String(text ?? '').replace(/\r\n?/g, '\n').replace(/ {2,}/g, ' ').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim()
-  // A scanned PDF has pictures, not text.
-  if (!text) throw new FileTextError('noText')
+  // A scanned PDF has pictures, not text; a picture may have no readable text at all.
+  if (!text) throw new FileTextError(image ? 'noImageText' : 'noText')
   return text
 }
 

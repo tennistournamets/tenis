@@ -2,6 +2,7 @@ import { defineConfig, loadEnv } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { siteOrigin } from './src/lib/seo.js'
 import { localeMessages } from './scripts/vite-locale-messages.js'
+import { OCR_BASE, ocrAssets } from './scripts/vite-ocr-assets.js'
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), 'VITE_')
@@ -9,10 +10,10 @@ export default defineConfig(({ mode }) => {
   if (privateNames.length) throw new Error(`Private credentials must not use the public VITE_ prefix: ${privateNames.join(', ')}`)
   const origin = siteOrigin(loadEnv(mode, process.cwd(), ['SITE_URL', 'VERCEL_PROJECT_PRODUCTION_URL']))
   return {
-    plugins: [vue(), localeMessages(), siteOriginHtml(origin), devAi(mode)],
+    plugins: [vue(), localeMessages(), siteOriginHtml(origin), devAi(mode), ocrAssets()],
     // All translations use the Composition API; keep the message compiler for
     // runtime RU/EN/LT switching, omit unused legacy API and template helpers.
-    define: { __VUE_I18N_FULL_INSTALL__: false, __VUE_I18N_LEGACY_API__: false, __SITE_ORIGIN__: JSON.stringify(origin) },
+    define: { __VUE_I18N_FULL_INSTALL__: false, __VUE_I18N_LEGACY_API__: false, __SITE_ORIGIN__: JSON.stringify(origin), __OCR_BASE__: JSON.stringify(OCR_BASE) },
     server: { host: true, port: 5173 },
     // scripts/prerender.mjs reads the manifest to link the landing's CSS, then deletes it.
     build: { manifest: true },

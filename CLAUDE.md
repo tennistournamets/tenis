@@ -47,7 +47,7 @@ src/
     ShareTournamentModal.vue  # WhatsApp/Telegram/Viber/email share, opened after create (?created=1) and after start
     sponsor/                  # Public sponsor units: SponsorMark (logo, dark variant), SponsorLockup ("Presented by"), SponsorBanner(+Slot), SponsorPartners
     admin/SponsorsTab.vue     # "Sponsors" tab: access request card, then ad places (cards with PlacementDiagram) as the entry point → PlacementEditorModal (who/caption, banners, partners); sponsor list is secondary (+ SponsorEditorModal, BannerEditorModal, SponsorImageField, SponsorshipAccessCard)
-    admin/AiImportPanel.vue    # AI participant import in the Entries tab (AiTextSource: text or TXT/CSV/XLSX/DOCX/PDF via lib/aiFileText.js; ParticipantImportPreview: editable rows) → add_manual_entries
+    admin/AiImportPanel.vue    # AI participant import in the Entries tab (AiTextSource: text or TXT/CSV/XLSX/DOCX/PDF or a picture via lib/aiFileText.js — pictures are read in the browser by tesseract.js, engine and lt/ru/en data served from /ocr/<version>/ by scripts/vite-ocr-assets.js; ParticipantImportPreview: editable rows) → add_manual_entries
     admin/SponsorshipRequestsPanel.vue  # Super-admin table of sponsorship requests (in AdminPlatformView)
   i18n/
     index.js                  # Vue I18n config; loads only the active locale (setAppLocale / loadLocaleMessages)
