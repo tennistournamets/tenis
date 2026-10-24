@@ -601,7 +601,6 @@ export const messages = {
       memberTwoOptional: 'Партнёр (по желанию)',
     },
     admin: {
-      platformFeatures: 'Функции платформы',
       platformFeaturesHint: 'Выключенная функция полностью скрыта: вкладки в турнирах нет, на публичных страницах ничего не показывается.',
       platformFeature: {
         sponsorship: {
@@ -611,7 +610,9 @@ export const messages = {
       },
       platformTabs: {
         sponsorship: 'Спонсорство',
-        features: 'Виды спорта и функции',
+        ai: 'AI-функции',
+        sports: 'Виды спорта',
+        other: 'Другое',
       },
       arrangeSlots: 'Переставить участников',
       arrangeDone: 'Готово',
@@ -1862,7 +1863,6 @@ export const messages = {
       memberTwoOptional: 'Partner (optional)',
     },
     admin: {
-      platformFeatures: 'Platform features',
       platformFeaturesHint: 'A switched-off feature is fully hidden: no tab in tournaments, nothing on the public pages.',
       platformFeature: {
         sponsorship: {
@@ -1872,7 +1872,9 @@ export const messages = {
       },
       platformTabs: {
         sponsorship: 'Sponsorship',
-        features: 'Sports and features',
+        ai: 'AI features',
+        sports: 'Sports',
+        other: 'Other',
       },
       arrangeSlots: 'Rearrange players',
       arrangeDone: 'Done',
@@ -3123,7 +3125,6 @@ export const messages = {
       memberTwoOptional: 'Partneris (nebūtina)',
     },
     admin: {
-      platformFeatures: 'Platformos funkcijos',
       platformFeaturesHint: 'Išjungta funkcija visiškai paslėpta: turnyruose nėra skilties, viešuose puslapiuose nieko nerodoma.',
       platformFeature: {
         sponsorship: {
@@ -3133,7 +3134,9 @@ export const messages = {
       },
       platformTabs: {
         sponsorship: 'Rėmimas',
-        features: 'Sporto šakos ir funkcijos',
+        ai: 'DI funkcijos',
+        sports: 'Sporto šakos',
+        other: 'Kita',
       },
       arrangeSlots: 'Perstatyti dalyvius',
       arrangeDone: 'Baigta',
