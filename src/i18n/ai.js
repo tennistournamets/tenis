@@ -34,6 +34,7 @@ export const aiMessages = {
     voice: {
       start: 'Надиктовать',
       stop: 'Остановить запись',
+      language: 'Язык речи',
       recording: 'Идёт запись. Нажмите «Остановить», когда закончите.',
       transcribing: 'Расшифровываю…',
     },
@@ -182,6 +183,7 @@ export const aiMessages = {
     voice: {
       start: 'Dictate',
       stop: 'Stop recording',
+      language: 'Speech language',
       recording: 'Recording. Press Stop when you are done.',
       transcribing: 'Transcribing…',
     },
@@ -330,6 +332,7 @@ export const aiMessages = {
     voice: {
       start: 'Padiktuoti',
       stop: 'Sustabdyti įrašymą',
+      language: 'Diktavimo kalba',
       recording: 'Vyksta įrašymas. Baigę spauskite „Sustabdyti“.',
       transcribing: 'Iššifruojama…',
     },

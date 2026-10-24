@@ -1,7 +1,8 @@
 // Voice input for organizers: the browser posts a short recording (body = audio, its type in
 // Content-Type) with the user's Supabase token; ai_begin_call('voice') checks the switches,
 // rights and the daily limit as that user, then Groq Whisper turns speech into text.
-// Query: ?tournament=<id> when recorded inside a tournament.
+// Query: ?lang=lt|ru|en (the speech language picked next to the microphone) and
+// ?tournament=<id> when recorded inside a tournament.
 // Needs VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY and GROQ_API_KEY.
 import { audioExtension, transcribe } from './_ai-groq.js'
 import { AiError } from './_ai-errors.js'
@@ -37,7 +38,7 @@ export async function handleTranscribe(request, { env = process.env, fetchImpl =
     if (audio.byteLength > MAX_AUDIO_BYTES) throw new AiError('ai.tooLong', 413)
 
     call = await userRpc({ env, token, fetchImpl, name: 'ai_begin_call', args: { p_task: 'voice', p_tournament_id: tournament || null } })
-    const result = await transcribe({ env, fetchImpl, audio, type })
+    const result = await transcribe({ env, fetchImpl, audio, type, language: url.searchParams.get('lang') })
     seconds = result.seconds
     if (!result.text) throw new AiError('ai.noSpeech', 422)
     await finish({ env, token, fetchImpl, call, ok: true, seconds })

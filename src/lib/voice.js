@@ -4,6 +4,22 @@ import { AiCallError } from './ai'
 import { supabase } from './supabase'
 
 export const VOICE_MAX_SECONDS = 120
+// Speech languages Whisper is asked for (it mistakes Lithuanian for Russian when left to guess).
+export const VOICE_LANGUAGES = ['lt', 'ru', 'en']
+const LANGUAGE_KEY = 'bracketa:voice-language'
+
+/** The organizer's last speech language, else the interface language. */
+export function savedVoiceLanguage(fallback) {
+  try {
+    const saved = localStorage.getItem(LANGUAGE_KEY)
+    if (VOICE_LANGUAGES.includes(saved)) return saved
+  } catch { /* storage blocked */ }
+  return VOICE_LANGUAGES.includes(fallback) ? fallback : 'lt'
+}
+
+export function saveVoiceLanguage(language) {
+  try { localStorage.setItem(LANGUAGE_KEY, language) } catch { /* storage blocked */ }
+}
 // Opus in WebM (Chrome, Firefox, Edge), MP4/AAC (Safari); every one is a type Groq reads.
 const TYPES = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus']
 
@@ -48,12 +64,15 @@ export async function startRecording() {
   }
 }
 
-/** Text of a recording; `tournamentId` when recorded inside a tournament (score entry). */
-export async function transcribeAudio(audio, { tournamentId = null, signal } = {}) {
+/** Text of a recording in `language`; `tournamentId` when recorded inside a tournament (score entry). */
+export async function transcribeAudio(audio, { language, tournamentId = null, signal } = {}) {
   const { data } = await supabase.auth.getSession()
   const token = data?.session?.access_token
   if (!token) throw new AiCallError('ai.auth')
-  const query = tournamentId ? `?${new URLSearchParams({ tournament: tournamentId })}` : ''
+  const params = new URLSearchParams()
+  if (VOICE_LANGUAGES.includes(language)) params.set('lang', language)
+  if (tournamentId) params.set('tournament', tournamentId)
+  const query = params.size ? `?${params}` : ''
   let response
   try {
     response = await fetch(`/api/transcribe${query}`, {

@@ -1,17 +1,23 @@
 <script setup>
 // Microphone inside an AI text field: tap to record, tap again to stop; the transcript is
-// emitted as text. Sits in the field's bottom-right corner (see AiTextSource).
+// emitted as text. Sits in the field's bottom-right corner (see AiTextSource). The speech
+// language (LT/RU/EN) is picked next to it: Whisper takes Lithuanian for Russian on its own.
 import { computed, onBeforeUnmount, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { errorMessage } from '../../lib/errorMessages'
-import { VOICE_MAX_SECONDS, canRecord, startRecording, transcribeAudio } from '../../lib/voice'
+import { VOICE_LANGUAGES, VOICE_MAX_SECONDS, canRecord, saveVoiceLanguage, savedVoiceLanguage, startRecording, transcribeAudio } from '../../lib/voice'
 
 const props = defineProps({
   disabled: Boolean,
   tournamentId: { type: String, default: null },
 })
 const emit = defineEmits(['text', 'busy', 'error'])
-const { t } = useI18n()
+const { t, locale } = useI18n()
+const language = ref(savedVoiceLanguage(locale.value))
+function pickLanguage(value) {
+  language.value = value
+  saveVoiceLanguage(value)
+}
 
 const state = ref('idle') // idle | recording | transcribing
 const seconds = ref(0)
@@ -51,7 +57,7 @@ async function finish(audio) {
   if (!audio) { setState('idle'); return }
   setState('transcribing')
   try {
-    emit('text', await transcribeAudio(audio, { tournamentId: props.tournamentId }))
+    emit('text', await transcribeAudio(audio, { language: language.value, tournamentId: props.tournamentId }))
   } catch (err) {
     emit('error', errorMessage(err, t, 'ai.errors.unavailable'))
   } finally {
@@ -70,6 +76,12 @@ onBeforeUnmount(() => {
     <span v-if="state === 'recording'" class="mic__timer" aria-hidden="true">
       <span class="mic__dot"></span>{{ clock }}
     </span>
+    <label v-else class="mic__lang" :title="t('ai.voice.language')">
+      <span class="sr-only">{{ t('ai.voice.language') }}</span>
+      <select :value="language" :disabled="state !== 'idle'" @change="pickLanguage($event.target.value)">
+        <option v-for="code in VOICE_LANGUAGES" :key="code" :value="code">{{ code.toUpperCase() }}</option>
+      </select>
+    </label>
     <button
       type="button"
       class="mic__button"
@@ -159,6 +171,29 @@ onBeforeUnmount(() => {
 }
 .mic__spinner {
   animation: mic-spin 0.8s linear infinite;
+}
+/* Speech language: a small pill; the native select keeps keyboard and screen readers working. */
+.mic__lang select {
+  appearance: none;
+  height: 28px;
+  padding: 0 22px 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  background: var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 8px center;
+  cursor: pointer;
+}
+.mic__lang select:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--border-strong, var(--border));
+}
+.mic__lang select:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }
 @keyframes mic-pulse {
   0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--danger) 45%, transparent); }
