@@ -18,6 +18,9 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "2.115.0",
+    "@tesseract.js-data/eng": "^1.0.0",
+    "@tesseract.js-data/lit": "^1.0.0",
+    "@tesseract.js-data/rus": "^1.0.0",
     "@vercel/og": "1.0.1",
     "@vuepic/vue-datepicker": "14.0.0",
     "date-fns": "4.4.0",
@@ -26,6 +29,7 @@
     "pinia": "3.0.4",
     "qrcode": "1.5.4",
     "read-excel-file": "^9.3.12",
+    "tesseract.js": "^7.0.0",
     "three": "0.185.1",
     "vue": "3.5.42",
     "vue-i18n": "11.4.10",

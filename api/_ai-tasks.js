@@ -48,6 +48,7 @@ export function importPrompt(input, context) {
     '- "note": a short remark written next to the name (level, rating, club, "paid", "reserve"), otherwise null.',
     '- Ignore lines that are not participants (titles, dates, rules, chat chatter). Lines that look like participants but cannot be read go to "unparsed" as written.',
     '- Keep the order of the list. Do not merge or drop repeated names, do not invent people.',
+    '- The text may be recognized from a photo or a screenshot: ignore stray symbols around the lines and repair only obvious recognition errors — a space or a lost dot in an email ("gmail com" → "gmail.com", "k klimas@" → "k.klimas@"), "1t"/"It" → "lt" in a domain, é → ė or similar in Lithuanian names. Name each repair in "warnings". Never guess a missing part: leave such a contact null.',
     `- "warnings": up to 5 short sentences about doubtful places, or []. Write them in ${language(context)}, whatever the language of the list.`,
   ].join('\n')
   // Repeated after the list: the model otherwise answers in the list's language.

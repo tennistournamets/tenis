@@ -19,6 +19,8 @@ const { t } = useI18n()
 
 const fileInput = ref(null)
 const reading = ref(false)
+// Picture recognition progress, 0–100 (null for documents, which read at once).
+const progress = ref(null)
 const fileNote = ref('')
 const fileError = ref('')
 const clipped = computed(() => props.modelValue.length > TEXT_MAX)
@@ -34,8 +36,9 @@ async function onFile(event) {
   fileError.value = ''
   fileNote.value = ''
   reading.value = true
+  progress.value = null
   try {
-    const text = await fileToText(file)
+    const text = await fileToText(file, { onProgress: percent => { progress.value = percent } })
     const current = props.modelValue.trim()
     emit('update:modelValue', current ? `${current}\n\n${text}` : text)
     fileNote.value = t('ai.source.fileAdded', { name: file.name })
@@ -43,6 +46,7 @@ async function onFile(event) {
     fileError.value = t(`ai.file.errors.${error?.code ?? 'unreadable'}`)
   } finally {
     reading.value = false
+    progress.value = null
   }
 }
 </script>
@@ -65,7 +69,7 @@ async function onFile(event) {
     <div class="ai-source__bar">
       <button type="button" class="btn btn--outline btn--sm" :disabled="disabled || reading" @click="pickFile">
         <AppIcon name="attach" :size="16" />
-        {{ reading ? t('ai.source.reading') : t('ai.source.attach') }}
+        {{ !reading ? t('ai.source.attach') : progress == null ? t('ai.source.reading') : t('ai.source.readingImage', { percent: progress }) }}
       </button>
       <span class="ai-source__formats">{{ t('ai.source.formats') }}</span>
       <input ref="fileInput" type="file" hidden :accept="FILE_ACCEPT" @change="onFile" />

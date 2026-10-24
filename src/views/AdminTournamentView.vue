@@ -1913,7 +1913,6 @@ onBeforeUnmount(() => {
             :entries="entries"
             :busy="actionLoading || settingsSaving"
             :can-manage="canManageTournament"
-            :has-structure="hasBracket"
             @update:busy="actionLoading = $event"
             @saved="refreshScoreData"
           />

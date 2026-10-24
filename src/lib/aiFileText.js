@@ -1,8 +1,11 @@
 // An attached file as plain text for the AI (DeepSeek reads text only). The file never leaves
-// the browser: only its text is sent. Each parser loads when such a file is picked, so the
+// the browser: only its text is sent. Pictures (screenshots, photos of a list) are read by
+// tesseract.js in the browser too. Each parser loads when such a file is picked, so the
 // main bundle does not grow.
-export const FILE_ACCEPT = '.txt,.csv,.tsv,.xlsx,.docx,.pdf'
+const IMAGE_TYPES = ['jpg', 'jpeg', 'png', 'webp', 'heic', 'heif']
+export const FILE_ACCEPT = `.txt,.csv,.tsv,.xlsx,.docx,.pdf,${IMAGE_TYPES.map(ext => `.${ext}`).join(',')}`
 export const FILE_MAX_BYTES = 5 * 1024 * 1024
+export const IMAGE_MAX_BYTES = 15 * 1024 * 1024
 export const TEXT_MAX = 30000
 
 export class FileTextError extends Error {
@@ -74,14 +77,150 @@ async function pdfText(file) {
   return pages.join('\n')
 }
 
-/** Text of a .txt/.csv/.tsv/.xlsx/.docx/.pdf file; throws FileTextError (type, tooBig, noText, unreadable). */
-export async function fileToText(file) {
+// Recognition works best on large, dark-on-light text: small screenshots are scaled up,
+// colours dropped, and a dark-theme chat (light text on dark) is inverted.
+export function prepareForOcr(pixels) {
+  let sum = 0
+  for (let i = 0; i < pixels.length; i += 4) {
+    const grey = 0.299 * pixels[i] + 0.587 * pixels[i + 1] + 0.114 * pixels[i + 2]
+    pixels[i] = pixels[i + 1] = pixels[i + 2] = grey
+    sum += grey
+  }
+  const dark = sum / (pixels.length / 4) < 110
+  if (dark) for (let i = 0; i < pixels.length; i += 4) pixels[i] = pixels[i + 1] = pixels[i + 2] = 255 - pixels[i]
+  return dark
+}
+
+/**
+ * Tilt of the text lines in degrees (photo of a sheet taken at an angle), from grey pixels
+ * with dark text on a light page. Lines are horizontal at the angle where the dark pixels
+ * pile into the fewest, fullest rows. Returns 0 when nothing is tilted or there is no text.
+ */
+export function skewAngle(grey, width, height, { maxDegrees = 20, step = 0.5 } = {}) {
+  let sum = 0
+  for (let i = 0; i < grey.length; i++) sum += grey[i]
+  const threshold = (sum / grey.length) * 0.55
+  const xs = []
+  const ys = []
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (grey[y * width + x] < threshold) {
+        xs.push(x)
+        ys.push(y)
+      }
+    }
+  }
+  if (xs.length < 50) return 0
+  const span = Math.ceil(Math.hypot(width, height)) * 2 + 1
+  const rows = new Float64Array(span)
+  let best = 0
+  let bestScore = -1
+  for (let degrees = -maxDegrees; degrees <= maxDegrees + 1e-9; degrees += step) {
+    const radians = (degrees * Math.PI) / 180
+    const cos = Math.cos(radians)
+    const sin = Math.sin(radians)
+    rows.fill(0)
+    for (let i = 0; i < xs.length; i++) rows[Math.round(ys[i] * cos - xs[i] * sin) + (span >> 1)]++
+    let score = 0
+    for (let r = 0; r < span; r++) score += rows[r] * rows[r]
+    if (score > bestScore + 1e-9 || (Math.abs(score - bestScore) <= 1e-9 && Math.abs(degrees) < Math.abs(best))) {
+      bestScore = score
+      best = degrees
+    }
+  }
+  return Math.round(best * 10) / 10
+}
+
+// The tilt is measured on a small copy: enough for the line structure, fast on phones.
+function measureSkew(canvas) {
+  const scale = Math.min(1, 800 / canvas.width)
+  const small = document.createElement('canvas')
+  small.width = Math.max(1, Math.round(canvas.width * scale))
+  small.height = Math.max(1, Math.round(canvas.height * scale))
+  const context = small.getContext('2d', { willReadFrequently: true })
+  context.drawImage(canvas, 0, 0, small.width, small.height)
+  const { data } = context.getImageData(0, 0, small.width, small.height)
+  const grey = new Uint8ClampedArray(small.width * small.height)
+  for (let i = 0; i < grey.length; i++) grey[i] = data[i * 4]
+  return skewAngle(grey, small.width, small.height)
+}
+
+function rotated(canvas, degrees) {
+  const radians = (degrees * Math.PI) / 180
+  const cos = Math.abs(Math.cos(radians))
+  const sin = Math.abs(Math.sin(radians))
+  const out = document.createElement('canvas')
+  out.width = Math.round(canvas.width * cos + canvas.height * sin)
+  out.height = Math.round(canvas.width * sin + canvas.height * cos)
+  const context = out.getContext('2d')
+  context.fillStyle = '#fff'
+  context.fillRect(0, 0, out.width, out.height)
+  context.translate(out.width / 2, out.height / 2)
+  context.rotate(-radians)
+  context.drawImage(canvas, -canvas.width / 2, -canvas.height / 2)
+  return out
+}
+
+async function imageCanvas(file) {
+  let bitmap
+  try {
+    bitmap = await createImageBitmap(file)
+  } catch {
+    // Chrome and Firefox cannot open HEIC; iPhones usually send JPEG from the file picker.
+    throw new FileTextError('imageType')
+  }
+  const scale = Math.min(3, Math.max(1, 1600 / bitmap.width))
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.round(bitmap.width * scale)
+  canvas.height = Math.round(bitmap.height * scale)
+  const context = canvas.getContext('2d', { willReadFrequently: true })
+  context.imageSmoothingQuality = 'high'
+  context.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+  bitmap.close?.()
+  const image = context.getImageData(0, 0, canvas.width, canvas.height)
+  prepareForOcr(image.data)
+  context.putImageData(image, 0, 0)
+  // A photo of a sheet is usually tilted; tesseract reads straight lines only.
+  const tilt = measureSkew(canvas)
+  return Math.abs(tilt) >= 0.5 ? rotated(canvas, tilt) : canvas
+}
+
+async function imageText(file, onProgress) {
+  const [{ createWorker }, canvas] = await Promise.all([import('tesseract.js'), imageCanvas(file)])
+  // Worker, engine and lt/ru/en data come from our own domain (scripts/vite-ocr-assets.js).
+  // Absolute: tesseract.js starts its worker from a blob URL, where "/ocr/..." resolves nowhere.
+  const base = new URL(typeof __OCR_BASE__ === 'string' ? __OCR_BASE__ : '/ocr', window.location.origin).href
+  const worker = await createWorker(['lit', 'rus', 'eng'], 1, {
+    workerPath: `${base}/worker.min.js`,
+    corePath: `${base}/core`,
+    langPath: `${base}/lang`,
+    logger: message => {
+      if (message.status === 'recognizing text') onProgress?.(Math.round(message.progress * 100))
+    },
+  })
+  try {
+    // After the coarse straightening, tesseract's own estimate removes what is left of the tilt.
+    const { data } = await worker.recognize(canvas, { rotateAuto: true })
+    return data.text
+  } finally {
+    await worker.terminate()
+  }
+}
+
+/**
+ * Text of a .txt/.csv/.tsv/.xlsx/.docx/.pdf file or a picture; throws FileTextError
+ * (type, imageType, tooBig, noText, noImageText, unreadable). `onProgress(percent)` follows
+ * picture recognition.
+ */
+export async function fileToText(file, { onProgress } = {}) {
   if (!file) throw new FileTextError('type')
-  if (file.size > FILE_MAX_BYTES) throw new FileTextError('tooBig')
   const ext = extension(file.name)
+  const image = IMAGE_TYPES.includes(ext)
+  if (file.size > (image ? IMAGE_MAX_BYTES : FILE_MAX_BYTES)) throw new FileTextError('tooBig')
   let text
   try {
-    if (['txt', 'csv', 'tsv'].includes(ext)) text = await file.text()
+    if (image) text = await imageText(file, onProgress)
+    else if (['txt', 'csv', 'tsv'].includes(ext)) text = await file.text()
     else if (ext === 'xlsx') text = await xlsxText(file)
     else if (ext === 'docx') text = await docxText(file)
     else if (ext === 'pdf') text = await pdfText(file)
@@ -92,8 +231,8 @@ export async function fileToText(file) {
     throw new FileTextError('unreadable')
   }
   text = String(text ?? '').replace(/\r\n?/g, '\n').replace(/ {2,}/g, ' ').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim()
-  // A scanned PDF has pictures, not text.
-  if (!text) throw new FileTextError('noText')
+  // A scanned PDF has pictures, not text; a picture may have no readable text at all.
+  if (!text) throw new FileTextError(image ? 'noImageText' : 'noText')
   return text
 }
 
