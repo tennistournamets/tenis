@@ -35,6 +35,12 @@ const PATHS = {
     '<path d="M7.6 19.6 10 13"/>',
     '<path d="M16.4 19.6 14 13"/>',
   ],
+  // AI features: one large and one small spark.
+  sparkles: [
+    '<path d="M10 3.5c.7 4.4 2.6 6.3 7 7-4.4.7-6.3 2.6-7 7-.7-4.4-2.6-6.3-7-7 4.4-.7 6.3-2.6 7-7z"/>',
+    '<path d="M18 15.5v5"/>',
+    '<path d="M15.5 18h5"/>',
+  ],
   code: [
     '<path d="m8 8-4 4 4 4"/>',
     '<path d="m16 8 4 4-4 4"/>',

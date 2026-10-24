@@ -1,7 +1,7 @@
 ---
 title: Privatumo politika
 description: Kokius asmens duomenis renka Bracketa, kam jie naudojami, kur saugomi ir kaip pasinaudoti savo teisėmis.
-updated: 2026-10-01
+updated: 2026-10-24
 ---
 
 Bracketa (braketa.top) – nemokama paslauga teniso, padelio ir futbolo turnyrams organizuoti. Šioje politikoje paaiškinama, kokius asmens duomenis tvarkome, kodėl ir kokias teises jums suteikia ES Bendrasis duomenų apsaugos reglamentas (BDAR).
@@ -23,6 +23,7 @@ Yra du vaidmenys:
 - **Jūsų sukurti turnyrai:** pavadinimas, vieta ir jos adresas, datos ir tvarkaraštis, taisyklės, registracijos nustatymai, rezultatai. Pasirinktinai – kontaktinis telefonas ir el. paštas; jie skelbiami tik įjungus „rodyti kontaktą“.
 - **Bendraorganizatoriai:** pridėjus asmenį pagal el. paštą, saugome tik nuorodą į jo esamą paskyrą.
 - **Rėmimas:** prašymai įjungti rėmėjus (jūsų žinutė ir sprendimas), rėmėjų pavadinimai, nuorodos, užrašai ir įkelti paveikslėliai.
+- **DI funkcijos** (jei platforma jas įjungė): tekstas ar failas, kurį patys siunčiate DI funkcijai (turnyro aprašymas, dalyvių sąrašas, frazė su rezultatu), perduodamas paslaugai DeepSeek, kad būtų paverstas nustatymais, sąrašu ar rezultatu. Saugome tik užklausos faktą: kuri funkcija, kada ir kiek žetonų, be paties teksto.
 
 ### Dalyviai
 
@@ -54,6 +55,7 @@ Dalyviams paskyros nereikia.
 | Trumpa eilutė „sukurkite savo turnyrą“ šiuose laiškuose | Mūsų teisėtas interesas plėtoti paslaugą, 6 str. 1 d. f p.; galite bet kada nesutikti |
 | Saugumas: slaptažodžio spėliojimo blokavimas, piktnaudžiavimo prevencija, žurnalai | Teisėtas interesas, 6 str. 1 d. f p. |
 | Statistika be slapukų | Teisėtas interesas tobulinti paslaugą, 6 str. 1 d. f p. |
+| DI funkcijos: teksto, kurį organizatorius išsiuntė pats, apdorojimas | Organizatoriaus prašomos paslaugos teikimas, 6 str. 1 d. b p., ir organizatoriaus teisėtas interesas greitai įvesti turnyro duomenis, 6 str. 1 d. f p. |
 
 Asmens duomenų neparduodame, nekuriame pagal juos reklaminių profilių ir nepriimame automatizuotų sprendimų, turinčių teisinių pasekmių.
 
@@ -67,8 +69,11 @@ Asmens duomenų neparduodame, nekuriame pagal juos reklaminių profilių ir nepr
 | Umami | Statistika be slapukų | ES |
 | Google | Prisijungimas per Google; šriftai iš Google serverių (naršyklė perduoda Google savo IP adresą) | JAV / pasauliniu mastu |
 | IndexNow (Bing ir kt.) | Pranešimas paieškos sistemoms apie naujus viešus puslapius; perduodami tik puslapių adresai | JAV / pasauliniu mastu |
+| DeepSeek | Teksto apdorojimas DI funkcijoms, tik organizatoriui jas paleidus | Kinija |
 
 Jei teikėjas yra už Europos ekonominės erdvės ribų, duomenys perduodami remiantis ES ir JAV duomenų privatumo sistema arba Europos Komisijos standartinėmis sutarčių sąlygomis.
+
+Kinijai Europos Komisija nėra priėmusi sprendimo dėl tinkamo duomenų apsaugos lygio. Todėl tekstas siunčiamas DeepSeek tik tada, kai organizatorius pats paleidžia DI funkciją, ir perduodame kuo mažiau: pavyzdžiui, įrašams su rezultatais vietoj vardų siunčiamos sąlyginės žymos.
 
 ## Kiek laiko saugome duomenis
 
@@ -76,6 +81,7 @@ Jei teikėjas yra už Europos ekonominės erdvės ribų, duomenys perduodami rem
 - **Turnyrai ir dalyvių duomenys:** kol organizatorius ištrina turnyrą. Kartu su turnyru ištrinami dalyviai, rungtynės ir laiškų eilė.
 - **Slaptažodžiu apsaugotų turnyrų prieigos raktai:** 12 valandų. Slaptažodžio bandymų skaitikliai: apie parą.
 - **Serverių žurnalai:** pagal pačių teikėjų saugojimo terminus.
+- **DI užklausų žurnalas** (funkcija, laikas, žetonai, be teksto): nuoroda į paskyrą ištrinama kartu su paskyra.
 
 Jei norite, kad duomenys būtų ištrinti anksčiau, parašykite mums arba turnyro organizatoriui.
 

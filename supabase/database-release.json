@@ -1,5 +1,5 @@
 {
-  "release": "2026-10-06-auto-schedule",
+  "release": "2026-10-24-ai-foundation",
   "forwardMigrations": [
     {
       "path": "supabase/migrations/20260908120000_mobile_tournament_details.sql",
@@ -180,6 +180,10 @@
       "sha256": "20975b745d2453711b772b9349420216b9eb7c13641399da288d12a9a436f9ec",
       "tenisAppliedVersion": "20261006202346",
       "tenisNote": "Applied 2026-10-07 with supabase db push --db-url (session pooler) after logical backup (tenis-public-20261007-0115-pre-auto-schedule.dump + migrations journal export); new functions + update_tournament_settings now validates schedule_config via assert_schedule_config."
+    },
+    {
+      "path": "supabase/migrations/20261024174519_ai_foundation.sql",
+      "sha256": "e9fd365869e4f344c7fd8b77be11174c1450b94fe2f386a827ee92a85f9da659"
     }
   ],
   "baseline": {

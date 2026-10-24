@@ -21,6 +21,7 @@ const NAMESPACES = {
   'seeding.': 'seeding.',
   'pointsFormat.': 'pointsFormat.errors.',
   'serverErrors.': 'serverErrors.',
+  'ai.': 'ai.errors.',
 }
 
 export const SERVER_ERRORS = [

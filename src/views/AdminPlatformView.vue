@@ -8,6 +8,8 @@ import AppIcon from '../components/AppIcon.vue'
 import { onTabKeydown } from '../lib/tabNavigation'
 import SponsorshipRequestsPanel from '../components/admin/SponsorshipRequestsPanel.vue'
 import { SPONSORSHIP_FLAG } from '../lib/sponsorshipRequests'
+import { AI_FEATURES, AI_FLAG, aiFlagKey } from '../lib/aiFeatures'
+import { supabase } from '../lib/supabase'
 
 const { t, locale } = useI18n()
 const flags = useFeatureFlagsStore()
@@ -55,10 +57,42 @@ const featureRows = computed(() => FEATURES.map((feature) => {
   return { ...feature, enabled: Boolean(row?.enabled), updatedAt: row?.updated_at ?? null, missing: !row }
 }))
 
+// AI: the master switch and one switch per feature; a feature works only while both are on.
+const flagRow = (key) => {
+  const row = flags.flags[key]
+  return { key, enabled: Boolean(row?.enabled), updatedAt: row?.updated_at ?? null, missing: !row }
+}
+const aiMasterRow = computed(() => flagRow(AI_FLAG))
+const aiFeatureRows = computed(() => AI_FEATURES.map((name) => ({ name, ...flagRow(aiFlagKey(name)) })))
+const aiWorkingCount = computed(() => (aiMasterRow.value.enabled ? aiFeatureRows.value.filter((r) => r.enabled).length : 0))
+const isAiKey = (key) => key === AI_FLAG || key.startsWith(`${AI_FLAG}.`)
+
 // Non-sport flags (anything else the platform may gate later).
 const otherRows = computed(() => Object.values(flags.flags)
-  .filter((row) => !row.key.startsWith('sport.') && !FEATURES.some((f) => f.key === row.key))
+  .filter((row) => !row.key.startsWith('sport.') && !isAiKey(row.key) && !FEATURES.some((f) => f.key === row.key))
   .sort((a, b) => a.key.localeCompare(b.key)))
+
+// AI usage over the last days (ai_usage_summary, platform admin only).
+const USAGE_DAYS = 7
+const aiUsage = ref(null)
+const aiUsageError = ref('')
+const aiUsageTotal = computed(() => (aiUsage.value?.tasks ?? []).reduce((sum, row) => ({
+  calls: sum.calls + row.calls,
+  failed: sum.failed + row.failed,
+  tokens_in: sum.tokens_in + row.tokens_in,
+  tokens_out: sum.tokens_out + row.tokens_out,
+}), { calls: 0, failed: 0, tokens_in: 0, tokens_out: 0 }))
+
+async function loadAiUsage() {
+  aiUsageError.value = ''
+  const { data, error } = await supabase.rpc('ai_usage_summary', { p_days: USAGE_DAYS })
+  if (error) aiUsageError.value = t('ai.platform.usage.loadError')
+  else aiUsage.value = data
+}
+
+function formatNumber(value) {
+  return new Intl.NumberFormat(locale.value).format(value ?? 0)
+}
 
 const enabledSportCount = computed(() => sportRows.value.filter((r) => r.enabled).length)
 
@@ -91,6 +125,7 @@ async function toggle(key, enabled) {
 }
 
 onMounted(async () => {
+  loadAiUsage()
   try {
     await flags.load({ force: true })
   } catch {
@@ -179,6 +214,104 @@ onMounted(async () => {
           </label>
         </li>
       </ul>
+    </section>
+
+    <section class="card stack stack--sm">
+      <div class="platform-section__head">
+        <h2 class="section-title">{{ t('ai.platform.title') }}</h2>
+        <span class="badge badge--neutral">{{ t('admin.platformEnabledCount', { n: aiWorkingCount, total: aiFeatureRows.length }) }}</span>
+      </div>
+      <p class="muted platform-hint">{{ t('ai.platform.hint') }}</p>
+      <ul class="flag-list" :aria-busy="loading">
+        <li class="flag-row">
+          <span class="flag-row__icon" aria-hidden="true"><AppIcon name="sparkles" :size="22" /></span>
+          <div class="flag-row__text">
+            <span class="flag-row__name">{{ t('ai.platform.master.title') }}</span>
+            <span class="flag-row__meta">{{ t('ai.platform.master.hint') }}</span>
+            <span class="flag-row__meta">
+              <code>{{ aiMasterRow.key }}</code>
+              <template v-if="aiMasterRow.updatedAt"> · {{ t('admin.platformUpdated', { date: formatDate(aiMasterRow.updatedAt) }) }}</template>
+              <template v-else-if="aiMasterRow.missing"> · {{ t('admin.platformNoRow') }}</template>
+            </span>
+          </div>
+          <label class="switch" :class="{ 'switch--busy': isPending(aiMasterRow.key) }">
+            <input
+              type="checkbox"
+              :checked="aiMasterRow.enabled"
+              :disabled="loading || isPending(aiMasterRow.key)"
+              :aria-label="t('ai.platform.master.title')"
+              @change="toggle(aiMasterRow.key, $event.target.checked)"
+            />
+            <span class="switch__track"><span class="switch__thumb"></span></span>
+            <span class="switch__label">{{ aiMasterRow.enabled ? t('admin.platformOn') : t('admin.platformOff') }}</span>
+          </label>
+        </li>
+        <li
+          v-for="row in aiFeatureRows"
+          :key="row.key"
+          class="flag-row flag-row--nested"
+          :class="{ 'flag-row--held': row.enabled && !aiMasterRow.enabled }"
+        >
+          <div class="flag-row__text">
+            <span class="flag-row__name">{{ t(`ai.platform.features.${row.name}.title`) }}</span>
+            <span class="flag-row__meta">{{ t(`ai.platform.features.${row.name}.hint`) }}</span>
+            <span class="flag-row__meta">
+              <code>{{ row.key }}</code>
+              <template v-if="row.enabled && !aiMasterRow.enabled"> · {{ t('ai.platform.masterOff') }}</template>
+              <template v-else-if="row.updatedAt"> · {{ t('admin.platformUpdated', { date: formatDate(row.updatedAt) }) }}</template>
+              <template v-else-if="row.missing"> · {{ t('admin.platformNoRow') }}</template>
+            </span>
+          </div>
+          <label class="switch" :class="{ 'switch--busy': isPending(row.key) }">
+            <input
+              type="checkbox"
+              :checked="row.enabled"
+              :disabled="loading || isPending(row.key)"
+              :aria-label="t(`ai.platform.features.${row.name}.title`)"
+              @change="toggle(row.key, $event.target.checked)"
+            />
+            <span class="switch__track"><span class="switch__thumb"></span></span>
+            <span class="switch__label">{{ row.enabled ? t('admin.platformOn') : t('admin.platformOff') }}</span>
+          </label>
+        </li>
+      </ul>
+
+      <div class="ai-usage stack stack--sm">
+        <h3 class="ai-usage__title">{{ t('ai.platform.usage.title', { days: USAGE_DAYS }) }}</h3>
+        <p v-if="aiUsageError" class="alert alert--error" role="alert">{{ aiUsageError }}</p>
+        <p v-else-if="aiUsage && !aiUsage.tasks.length" class="muted platform-hint">{{ t('ai.platform.usage.empty') }}</p>
+        <div v-else-if="aiUsage" class="ai-usage__scroll">
+          <table class="ai-usage__table">
+            <thead>
+              <tr>
+                <th scope="col">{{ t('ai.platform.usage.feature') }}</th>
+                <th scope="col">{{ t('ai.platform.usage.calls') }}</th>
+                <th scope="col">{{ t('ai.platform.usage.failed') }}</th>
+                <th scope="col">{{ t('ai.platform.usage.users') }}</th>
+                <th scope="col">{{ t('ai.platform.usage.tokens') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in aiUsage.tasks" :key="row.task">
+                <th scope="row">{{ t(`ai.platform.features.${row.task}.title`) }}</th>
+                <td>{{ formatNumber(row.calls) }}</td>
+                <td>{{ formatNumber(row.failed) }}</td>
+                <td>{{ formatNumber(row.users) }}</td>
+                <td>{{ formatNumber(row.tokens_in) }} / {{ formatNumber(row.tokens_out) }}</td>
+              </tr>
+            </tbody>
+            <tfoot v-if="aiUsage.tasks.length > 1">
+              <tr>
+                <th scope="row">{{ t('ai.platform.usage.total') }}</th>
+                <td>{{ formatNumber(aiUsageTotal.calls) }}</td>
+                <td>{{ formatNumber(aiUsageTotal.failed) }}</td>
+                <td></td>
+                <td>{{ formatNumber(aiUsageTotal.tokens_in) }} / {{ formatNumber(aiUsageTotal.tokens_out) }}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
     </section>
 
     <section class="card stack stack--sm">
@@ -301,5 +434,51 @@ onMounted(async () => {
 }
 .switch--busy {
   opacity: 0.6;
+}
+/* AI feature switches sit under the master switch, aligned with its text. */
+.flag-row--nested {
+  padding-left: calc(36px + var(--space-3, 12px));
+}
+.flag-row--held .flag-row__name {
+  color: var(--muted);
+}
+.ai-usage {
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.ai-usage__title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+.ai-usage__scroll {
+  overflow-x: auto;
+}
+.ai-usage__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+.ai-usage__table th,
+.ai-usage__table td {
+  padding: 6px 8px;
+  text-align: right;
+  white-space: nowrap;
+  border-top: 1px solid var(--border);
+}
+.ai-usage__table th:first-child {
+  text-align: left;
+  font-weight: 500;
+}
+.ai-usage__table thead th {
+  border-top: none;
+  color: var(--muted);
+  font-weight: 500;
+  font-size: 0.75rem;
+}
+.ai-usage__table tfoot th,
+.ai-usage__table tfoot td {
+  font-weight: 600;
 }
 </style>
