@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { existsSync, readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import { OCR_BASE, OCR_LANGUAGES, ocrAssetFiles } from '../scripts/vite-ocr-assets.js'
-import { FILE_ACCEPT, prepareForOcr } from '../src/lib/aiFileText.js'
+import { FILE_ACCEPT, prepareForOcr, skewAngle } from '../src/lib/aiFileText.js'
 
 test('pictures are accepted next to documents', () => {
   for (const ext of ['.pdf', '.xlsx', '.png', '.jpg', '.jpeg', '.webp', '.heic']) assert.ok(FILE_ACCEPT.split(',').includes(ext), ext)
@@ -31,4 +31,25 @@ test('pictures turn grey, and dark-theme screenshots are inverted to dark text o
   assert.ok(dark[0] > 200, 'background becomes light')
   assert.ok(dark[8] < 30, 'text becomes dark')
   assert.equal(dark[3], 255, 'alpha untouched')
+})
+
+test('the tilt of text lines is found, so a photo of a sheet can be straightened', () => {
+  // Synthetic page: light background, dark "text" lines tilted by a known angle.
+  const page = (degrees, width = 400, height = 300) => {
+    const grey = new Uint8ClampedArray(width * height).fill(230)
+    const slope = Math.tan((degrees * Math.PI) / 180)
+    for (let line = 0; line < 8; line++) {
+      for (let x = 40; x < 360; x++) {
+        if (x % 9 > 6) continue // gaps between letters
+        const y = Math.round(40 + line * 28 - (x - 200) * slope)
+        for (let t = 0; t < 3; t++) if (y + t >= 0 && y + t < height) grey[(y + t) * width + x] = 30
+      }
+    }
+    return [grey, width, height]
+  }
+  // page(d): lines rise to the right by d degrees; the photo in the owner's test rose by ~11–12°.
+  assert.equal(skewAngle(...page(0)), 0)
+  assert.ok(Math.abs(skewAngle(...page(11)) + 11) <= 0.5, 'lines rising to the right')
+  assert.ok(Math.abs(skewAngle(...page(-7)) - 7) <= 0.5, 'lines falling to the right')
+  assert.equal(skewAngle(new Uint8ClampedArray(400 * 300).fill(230), 400, 300), 0, 'blank page')
 })

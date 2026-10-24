@@ -91,6 +91,76 @@ export function prepareForOcr(pixels) {
   return dark
 }
 
+/**
+ * Tilt of the text lines in degrees (photo of a sheet taken at an angle), from grey pixels
+ * with dark text on a light page. Lines are horizontal at the angle where the dark pixels
+ * pile into the fewest, fullest rows. Returns 0 when nothing is tilted or there is no text.
+ */
+export function skewAngle(grey, width, height, { maxDegrees = 20, step = 0.5 } = {}) {
+  let sum = 0
+  for (let i = 0; i < grey.length; i++) sum += grey[i]
+  const threshold = (sum / grey.length) * 0.55
+  const xs = []
+  const ys = []
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (grey[y * width + x] < threshold) {
+        xs.push(x)
+        ys.push(y)
+      }
+    }
+  }
+  if (xs.length < 50) return 0
+  const span = Math.ceil(Math.hypot(width, height)) * 2 + 1
+  const rows = new Float64Array(span)
+  let best = 0
+  let bestScore = -1
+  for (let degrees = -maxDegrees; degrees <= maxDegrees + 1e-9; degrees += step) {
+    const radians = (degrees * Math.PI) / 180
+    const cos = Math.cos(radians)
+    const sin = Math.sin(radians)
+    rows.fill(0)
+    for (let i = 0; i < xs.length; i++) rows[Math.round(ys[i] * cos - xs[i] * sin) + (span >> 1)]++
+    let score = 0
+    for (let r = 0; r < span; r++) score += rows[r] * rows[r]
+    if (score > bestScore + 1e-9 || (Math.abs(score - bestScore) <= 1e-9 && Math.abs(degrees) < Math.abs(best))) {
+      bestScore = score
+      best = degrees
+    }
+  }
+  return Math.round(best * 10) / 10
+}
+
+// The tilt is measured on a small copy: enough for the line structure, fast on phones.
+function measureSkew(canvas) {
+  const scale = Math.min(1, 800 / canvas.width)
+  const small = document.createElement('canvas')
+  small.width = Math.max(1, Math.round(canvas.width * scale))
+  small.height = Math.max(1, Math.round(canvas.height * scale))
+  const context = small.getContext('2d', { willReadFrequently: true })
+  context.drawImage(canvas, 0, 0, small.width, small.height)
+  const { data } = context.getImageData(0, 0, small.width, small.height)
+  const grey = new Uint8ClampedArray(small.width * small.height)
+  for (let i = 0; i < grey.length; i++) grey[i] = data[i * 4]
+  return skewAngle(grey, small.width, small.height)
+}
+
+function rotated(canvas, degrees) {
+  const radians = (degrees * Math.PI) / 180
+  const cos = Math.abs(Math.cos(radians))
+  const sin = Math.abs(Math.sin(radians))
+  const out = document.createElement('canvas')
+  out.width = Math.round(canvas.width * cos + canvas.height * sin)
+  out.height = Math.round(canvas.width * sin + canvas.height * cos)
+  const context = out.getContext('2d')
+  context.fillStyle = '#fff'
+  context.fillRect(0, 0, out.width, out.height)
+  context.translate(out.width / 2, out.height / 2)
+  context.rotate(-radians)
+  context.drawImage(canvas, -canvas.width / 2, -canvas.height / 2)
+  return out
+}
+
 async function imageCanvas(file) {
   let bitmap
   try {
@@ -110,7 +180,9 @@ async function imageCanvas(file) {
   const image = context.getImageData(0, 0, canvas.width, canvas.height)
   prepareForOcr(image.data)
   context.putImageData(image, 0, 0)
-  return canvas
+  // A photo of a sheet is usually tilted; tesseract reads straight lines only.
+  const tilt = measureSkew(canvas)
+  return Math.abs(tilt) >= 0.5 ? rotated(canvas, tilt) : canvas
 }
 
 async function imageText(file, onProgress) {
@@ -127,7 +199,8 @@ async function imageText(file, onProgress) {
     },
   })
   try {
-    const { data } = await worker.recognize(canvas)
+    // After the coarse straightening, tesseract's own estimate removes what is left of the tilt.
+    const { data } = await worker.recognize(canvas, { rotateAuto: true })
     return data.text
   } finally {
     await worker.terminate()
