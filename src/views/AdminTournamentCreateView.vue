@@ -17,18 +17,15 @@ import AppIcon from '../components/AppIcon.vue'
 import FormatPicker from '../components/FormatPicker.vue'
 import TennisRulesSettings from '../components/TennisRulesSettings.vue'
 import RegistrationRulesFields from '../components/admin/RegistrationRulesFields.vue'
-import { hasRegistrationRules, pickRegistrationDraft, registrationDraftFields, registrationPatch, validateRegistrationForm, organizerContactError } from '../lib/registrationRules'
+import { pickRegistrationDraft, validateRegistrationForm, organizerContactError } from '../lib/registrationRules'
 import { CREATE_VISIBILITY_MODES } from '../lib/access'
-import { DEFAULT_TENNIS_RULES, tennisRulesSummary } from '../lib/tennisRules'
+import { tennisRulesSummary } from '../lib/tennisRules'
 import VenueFields from '../components/admin/VenueFields.vue'
 import { restoreDraftFields, deadlineInPast } from '../lib/wizardDraft'
 import { track } from '../lib/analytics'
 import { errorMessage } from '../lib/errorMessages'
 import { confirmDialog } from '../lib/confirmDialog'
-import AiCreatePanel from '../components/admin/AiCreatePanel.vue'
-import ParticipantImportPreview from '../components/admin/ParticipantImportPreview.vue'
-import { useAiFeature } from '../lib/aiFeatures'
-import { entryShape, importRow, importRowProblem, rowsForShape } from '../lib/aiSchemas'
+import { createTournamentFromForm, defaultCreateForm } from '../lib/tournamentCreate'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -52,38 +49,7 @@ const draftKey = ref('')
 const draftReady = ref(false)
 const draftRestored = ref(false)
 
-const form = reactive({
-  name: '',
-  slug: '',
-  description: '',
-  sport: 'tennis',
-  format: 'single_elimination',
-  category: 'singles',
-  set_format: 'best_of_3',
-  tiebreak_to: 7,
-  scoring_config: { tennis: { ...DEFAULT_TENNIS_RULES } },
-  gender: 'men',
-  contact_phone: '',
-  contact_email: '',
-  venue_address: '',
-  venue_lat: null,
-  venue_lng: null,
-  is_public: true,
-  visibility: 'link',
-  generate_qr: false,
-  doubles_pairing_random: false,
-  // Groups + playoff: how many leave each group; checked against the group sizes when groups are drawn.
-  advance_per_group: 2,
-  // Padel points formats: the two scores of a match add up to this total.
-  points_per_match: 24,
-  ...registrationDraftFields({}),
-  // "Describe the tournament" (AI): which fields it filled, the participant list from the text
-  // (added as pending after the tournament is created), emails for them, and its remarks.
-  ai_filled: [],
-  ai_participants: [],
-  ai_notify: false,
-  ai_notes: { notices: [], remarks: [], unparsed: [] },
-})
+const form = reactive(defaultCreateForm())
 // is_public stays derived for the QR gate and the preview badge.
 watch(() => form.visibility, mode => { form.is_public = mode !== 'private' }, { immediate: true })
 
@@ -103,33 +69,6 @@ watch([form, step], () => {
   }
   writeSessionDraft(draftKey.value, { step: step.value, form: cloneForm(form) })
 }, { deep: true })
-
-const aiCreateOn = useAiFeature('create')
-// Wizard step and label of each field the AI may fill (shown as "Filled by AI: …" on that step).
-const AI_FIELD_STEPS = {
-  sport: [2, 'admin.wizardStepSport'], format: [2, 'admin.wizardStepFormat'], advance_per_group: [2, 'groupsFlow.advance'],
-  name: [3, 'admin.name'], description: [3, 'admin.description'], venue_address: [3, 'venue.section'],
-  contact_phone: [3, 'admin.contactPhone'], contact_email: [3, 'admin.contactEmail'],
-  category: [4, 'admin.category'], set_format: [4, 'admin.setFormat'], tiebreak_to: [4, 'admin.tiebreakTo'],
-  points_per_match: [4, 'pointsFormat.targetLabel'], gender: [4, 'admin.divisionLabel'], doubles_pairing_random: [4, 'admin.pickRandomPairs'],
-  registration_capacity: [5, 'registrationRules.capacity'], registration_deadline: [5, 'registrationRules.deadlineField'],
-  entry_fee_mode: [5, 'registrationRules.feeSection'], waitlist_enabled: [5, 'registrationRules.waitlistSetting'],
-}
-const aiStepNote = computed(() => {
-  const labels = form.ai_filled.filter(key => AI_FIELD_STEPS[key]?.[0] === step.value).map(key => t(AI_FIELD_STEPS[key][1]))
-  return labels.length ? t('ai.create.stepFilled', { fields: labels.join(', ') }) : ''
-})
-
-function applyAi(result) {
-  // Sport first: its watcher keeps the format valid, and the AI format was checked for it.
-  if (result.fields.sport) form.sport = result.fields.sport
-  Object.assign(form, result.fields)
-  form.ai_filled = Object.keys(result.fields)
-  form.ai_participants = result.participants.entries.map((entry, index) => ({ ...entry, key: `p${index}`, error: '' }))
-  form.ai_notes = { notices: result.notices, remarks: result.remarks, unparsed: result.participants.unparsed }
-  errorText.value = ''
-  step.value = 2
-}
 
 const cfg = computed(() => getSportConfig(form.sport))
 const effectiveCategory = computed(() => resolveCategory(form.sport, form.category))
@@ -151,10 +90,6 @@ const gender = computed({
   set: value => { form.gender = value },
 })
 const pairingMode = computed(() => (individualFormat.value || form.doubles_pairing_random ? 'pick_random' : 'pre_agreed'))
-// The participant list from the text, in the shape the tournament takes after the organizer's choices.
-const aiShape = computed(() => entryShape({ format: form.format, category: effectiveCategory.value, doubles_pairing_mode: pairingMode.value }))
-const aiTeam = computed(() => getSportConfig(form.sport).scoringFamily === 'goals')
-const AI_PARTICIPANTS_MAX = 128
 
 const previewMeta = computed(() => {
   const parts = [
@@ -302,52 +237,15 @@ async function createTournament() {
     await showCreateError(formError)
     return
   }
-  // Participants from the text: checked here, added after the tournament exists.
-  const aiRows = rowsForShape(form.ai_participants, aiShape.value)
-  if (aiRows.length > AI_PARTICIPANTS_MAX) {
-    step.value = TOTAL_STEPS
-    errorText.value = t('ai.import.tooMany')
-    await showCreateError(formError)
-    return
-  }
-  const aiProblems = aiRows.map(row => importRowProblem(row, { shape: aiShape.value, team: aiTeam.value }))
-  if (aiProblems.some(Boolean)) {
-    form.ai_participants = aiRows.map((row, index) => ({ ...row, error: aiProblems[index] ? t(aiProblems[index]) : '' }))
-    step.value = TOTAL_STEPS
-    errorText.value = t('ai.create.participantsInvalid', { n: aiProblems.filter(Boolean).length })
-    await showCreateError(formError)
-    return
-  }
   saving.value = true
   const slug = resolvedSlug.value
   const category = effectiveCategory.value
 
   try {
-    const { data: newId, error } = await supabase.rpc('create_tournament', {
-      p_name: form.name,
-      p_slug: slug,
-      p_description: form.description || null,
-      p_sport: form.sport,
-      p_format: form.format,
-      p_category: category,
-      p_set_format: cfg.value.supportsSetFormat && !pointsFormat.value ? form.set_format : null,
-      p_is_public: form.is_public,
-      p_doubles_pairing_mode:
-        category === 'doubles' && cfg.value.supportsDoublesPairing ? pairingMode.value : null,
-      p_format_config: form.format === 'groups_playoff' ? { advance_per_group: Number(form.advance_per_group) || 2 } : {},
-      p_scoring_config: pointsFormat.value
-        ? { points_per_match: Number(form.points_per_match), gender: gender.value }
-        : form.sport === 'tennis'
-        ? { ...form.scoring_config, gender: gender.value }
-        : cfg.value.supportsSetFormat ? { tiebreak_to: Number(form.tiebreak_to), gender: gender.value } : { gender: gender.value },
-      p_contact_phone: form.contact_phone.trim() || null,
-      p_contact_email: form.contact_email.trim() || null,
-      p_venue_address: form.venue_address.trim() || null,
-      p_venue_lat: form.venue_lat,
-      p_venue_lng: form.venue_lng,
-    })
-
-    if (error) {
+    let result
+    try {
+      result = await createTournamentFromForm(supabase, { ...form, gender: gender.value }, { slug })
+    } catch (error) {
       if (error.code === '23505') {
         // The slug field lives on step 3; showing the error on the final step left it invisible.
         saving.value = false
@@ -355,42 +253,13 @@ async function createTournament() {
         await nextTick()
         slugError.value = t('mobile.slugTaken')
         await showCreateError(slugInput)
-      } else {
-        errorText.value = errorMessage(error, t, 'mobile.createFailed')
-        await showCreateError(formError)
+        return
       }
-      return
+      throw error
     }
-
-    if (!newId) throw new Error('Missing tournament ID')
+    const newId = result.id
     track('tournament_created', { sport: form.sport, format: form.format, category, visibility: form.visibility })
-    // Conditions are a settings patch on the fresh row (revision 0); a failure
-    // is reported on the tournament page instead of blocking the created tournament.
-    let rulesFailed = false
-    const extraPatch = {
-      ...(hasRegistrationRules(regForm) ? registrationPatch(regForm, { sport: form.sport, category }) : {}),
-      ...(form.visibility === 'public' ? { visibility: 'public' } : {}),
-    }
-    if (Object.keys(extraPatch).length) {
-      const { error: rulesError } = await supabase.rpc('update_tournament_settings', {
-        p_tournament_id: newId,
-        p_patch: extraPatch,
-        p_expected_revision: 0,
-      })
-      rulesFailed = Boolean(rulesError)
-    }
-    // Participants from the text wait for approval, like any registration.
-    let aiFailed = 0
-    if (aiRows.length) {
-      const { data: added, error: addError } = await supabase.rpc('add_manual_entries', {
-        p_tournament_id: newId,
-        p_entries: aiRows.map(importRow),
-        p_status: 'pending',
-        p_notify: form.ai_notify,
-      })
-      aiFailed = addError ? aiRows.length : (Array.isArray(added) ? added.filter(row => !row.ok).length : 0)
-      track('ai_create_participants', { rows: aiRows.length, failed: aiFailed })
-    }
+    const rulesFailed = result.rulesFailed
     clearWizardDraft()
     unregisterDraft()
     const query = {}
@@ -398,7 +267,6 @@ async function createTournament() {
     // Registration is open from the start: offer to send the link right away.
     else if (form.is_public) query.created = '1'
     if (rulesFailed) query.regfail = '1'
-    if (aiFailed) query.aifail = String(aiFailed)
     await router.replace({ name: 'admin-tournament', params: { id: newId }, query: Object.keys(query).length ? query : undefined })
   } catch (error) {
     errorText.value = errorMessage(error, t, 'mobile.createFailed')
@@ -495,12 +363,6 @@ watch(step, (next, prev) => { if (draftReady.value && next === prev + 1) track('
         <h1 ref="stepHeading" class="wizard__heading" tabindex="-1">{{ t('admin.stepSport') }}</h1>
         <p class="muted">{{ t('admin.wizardSportHint') }}</p>
       </div>
-      <AiCreatePanel
-        v-if="aiCreateOn()"
-        :sport="form.sport"
-        :enabled-sports="flags.enabledSports"
-        @apply="applyAi"
-      />
       <SportPicker v-model="form.sport" />
     </div>
 
@@ -509,16 +371,6 @@ watch(step, (next, prev) => { if (draftReady.value && next === prev + 1) track('
       <div class="wizard__lead">
         <h1 ref="stepHeading" class="wizard__heading" tabindex="-1">{{ t('admin.stepFormat') }}</h1>
         <p class="muted">{{ t('admin.wizardFormatHint') }}</p>
-      </div>
-      <div v-if="form.ai_filled.length || form.ai_participants.length" class="alert alert--info wizard__ai" role="status">
-        <p class="wizard__ai-title">{{ t('ai.create.filledTitle') }}</p>
-        <p>{{ t('ai.create.filledHint') }}</p>
-        <p v-if="aiStepNote">{{ aiStepNote }}</p>
-        <p v-if="form.ai_participants.length">{{ t('ai.create.participantsFound', { n: form.ai_participants.length }) }}</p>
-        <ul v-if="form.ai_notes.notices.length || form.ai_notes.remarks.length" class="wizard__ai-list">
-          <li v-for="code in form.ai_notes.notices" :key="code">{{ t(`ai.create.notices.${code}`) }}</li>
-          <li v-for="(line, index) in form.ai_notes.remarks" :key="`r${index}`">{{ line }}</li>
-        </ul>
       </div>
       <FormatPicker v-model="form.format" :sport="form.sport" />
       <div v-if="form.format === 'groups_playoff'" class="form-field form-field--narrow">
@@ -539,7 +391,6 @@ watch(step, (next, prev) => { if (draftReady.value && next === prev + 1) track('
         <div class="wizard__lead">
           <h1 ref="stepHeading" class="wizard__heading" tabindex="-1">{{ t('admin.stepDetails') }}</h1>
         </div>
-        <p v-if="aiStepNote" class="alert alert--info wizard__ai" role="status">{{ aiStepNote }}</p>
         <section class="wizard__group wizard__group--plain">
           <h2 class="wizard__eyebrow">{{ t('admin.wizardBasics') }}</h2>
 
@@ -603,7 +454,6 @@ watch(step, (next, prev) => { if (draftReady.value && next === prev + 1) track('
         <div class="wizard__lead">
           <h1 ref="stepHeading" class="wizard__heading" tabindex="-1">{{ t('admin.wizardRules') }}</h1>
         </div>
-        <p v-if="aiStepNote" class="alert alert--info wizard__ai" role="status">{{ aiStepNote }}</p>
         <section class="wizard__group wizard__group--plain">
           <p class="wizard__eyebrow">{{ t('admin.wizardBasics') }}</p>
           <div class="wizard__grid3">
@@ -677,7 +527,6 @@ watch(step, (next, prev) => { if (draftReady.value && next === prev + 1) track('
           <h1 ref="stepHeading" class="wizard__heading" tabindex="-1">{{ t('registrationRules.wizardSection') }}</h1>
           <p class="muted">{{ t('registrationRules.wizardHint') }}</p>
         </div>
-        <p v-if="aiStepNote" class="alert alert--info wizard__ai" role="status">{{ aiStepNote }}</p>
         <section class="wizard__group wizard__group--plain">
           <RegistrationRulesFields
             :form="form"
@@ -705,22 +554,6 @@ watch(step, (next, prev) => { if (draftReady.value && next === prev + 1) track('
             <span class="wizard__recap-rules wizard__recap-link">{{ recapLink }}</span>
           </div>
         </div>
-        <section v-if="form.ai_participants.length" class="wizard__group wizard__ai-participants" aria-labelledby="create-ai-participants">
-          <div class="wizard__ai-head">
-            <h2 id="create-ai-participants" class="wizard__eyebrow">{{ t('ai.create.participantsTitle', { n: form.ai_participants.length }) }}</h2>
-            <button type="button" class="btn btn--ghost btn--sm" @click="form.ai_participants = []">{{ t('ai.create.removeList') }}</button>
-          </div>
-          <p class="field-hint">{{ t('ai.create.participantsHint') }}</p>
-          <p v-if="aiShape === 'single' && form.ai_participants.some(row => row.members.filter(Boolean).length > 1)" class="alert alert--info">{{ t('ai.import.notices.splitPairs') }}</p>
-          <ParticipantImportPreview v-model="form.ai_participants" :shape="aiShape" :team="aiTeam" :disabled="saving" />
-          <ul v-if="form.ai_notes.unparsed.length" class="wizard__ai-list">
-            <li v-for="(line, index) in form.ai_notes.unparsed" :key="`u${index}`">{{ t('ai.create.unparsed', { line }) }}</li>
-          </ul>
-          <label class="checkbox-row" for="create-ai-notify">
-            <input id="create-ai-notify" v-model="form.ai_notify" type="checkbox" />
-            <span>{{ t('ai.import.notify') }} <span class="field-hint">{{ t('ai.import.notifyHint') }}</span></span>
-          </label>
-        </section>
         <section class="wizard__group wizard__group--plain">
 
           <label v-for="mode in CREATE_VISIBILITY_MODES" :key="mode" class="wizard__toggle">
@@ -775,36 +608,6 @@ watch(step, (next, prev) => { if (draftReady.value && next === prev + 1) track('
 </template>
 
 <style scoped>
-.wizard__ai {
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.wizard__ai p {
-  margin: 0;
-}
-.wizard__ai-title {
-  font-weight: 600;
-}
-.wizard__ai-list {
-  margin: 4px 0 0;
-  padding-left: 18px;
-}
-.wizard__ai-participants {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2, 8px);
-}
-.wizard__ai-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2, 8px);
-}
-.wizard__ai-head .wizard__eyebrow {
-  margin: 0;
-}
 .wizard {
   display: flex;
   flex-direction: column;

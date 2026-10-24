@@ -11,6 +11,7 @@ const PublicTournamentView = () => import('../views/PublicTournamentView.vue')
 const AdminLayout = () => import('../views/AdminLayout.vue')
 const AdminTournamentListView = () => import('../views/AdminTournamentListView.vue')
 const AdminTournamentCreateView = () => import('../views/AdminTournamentCreateView.vue')
+const AdminTournamentAiCreateView = () => import('../views/AdminTournamentAiCreateView.vue')
 const AdminTournamentView = () => import('../views/AdminTournamentView.vue')
 const AdminSettingsView = () => import('../views/AdminSettingsView.vue')
 const AdminPlatformView = () => import('../views/AdminPlatformView.vue')
@@ -71,6 +72,11 @@ const router = createRouter({
           path: 'tournaments/new',
           name: 'admin-tournament-new',
           component: AdminTournamentCreateView,
+        },
+        {
+          path: 'tournaments/new/ai',
+          name: 'admin-tournament-new-ai',
+          component: AdminTournamentAiCreateView,
         },
         {
           path: 'tournaments/:id',

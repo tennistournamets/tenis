@@ -13427,7 +13427,7 @@ immutable
 set search_path = public
 as $$
   select case p_task
-    when 'create' then 10
+    when 'create' then 30
     when 'import' then 20
     when 'score' then 300
     when 'posts' then 30

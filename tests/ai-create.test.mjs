@@ -88,3 +88,37 @@ test('a deadline without a year that the model put in a past year moves to the n
   assert.equal(at('2026-12-01T10:00', '2026-10-24'), '2026-12-01T10:00')
   assert.equal(at('2025-11-13T23:59', null), '2025-11-13T23:59', 'no date known, nothing changed')
 })
+
+test('AI suggestions fill what the text left out and are named; the text always wins', () => {
+  const result = checkCreate({
+    tournament: { sport: 'padel', venue_address: 'Vilnius Padel Club', fee: { mode: 'paid', amount: 15, unit: 'player' }, format: null },
+    suggested: { format: 'americano', points_per_match: 24, capacity: 16, courts: 4, visibility: 'link', venue_address: 'Somewhere else', sport: 'tennis' },
+    questions: [
+      { question: 'Во сколько начало?', options: ['10:00', '12:00', '', 7] },
+      { question: '', options: ['x'] },
+      { question: 'Сколько кортов?', options: ['2', '3'] },
+      { question: 'Q3', options: [] },
+      { question: 'Q4', options: [] },
+    ],
+  }, enabled)
+  assert.equal(result.fields.sport, 'padel', 'text beats suggestion')
+  assert.equal(result.fields.venue_address, 'Vilnius Padel Club')
+  assert.equal(result.fields.format, 'americano')
+  assert.equal(result.fields.courts, 4)
+  assert.equal(result.fields.visibility, 'link')
+  assert.deepEqual(result.suggested.sort(), ['courts', 'format', 'points_per_match', 'registration_capacity', 'visibility'])
+  assert.deepEqual(result.questions, [
+    { question: 'Во сколько начало?', options: ['10:00', '12:00', '7'] },
+    { question: 'Сколько кортов?', options: ['2', '3'] },
+    { question: 'Q3', options: [] },
+  ])
+})
+
+test('answers to questions go back to the model with the text', async () => {
+  const { createPrompt } = await import('../api/_ai-tasks.js')
+  const { user, system } = createPrompt('Padelis šeštadienį', { locale: 'ru', answers: [{ question: 'Во сколько начало?', answer: '10:00' }, { question: '', answer: 'x' }] })
+  assert.match(user, /The organizer's answers to your questions:\n- Во сколько начало\? → 10:00$/m)
+  assert.doesNotMatch(user, /→ x/)
+  assert.match(system, /"suggested"/)
+  assert.match(system, /"questions": at most 3/)
+})

@@ -57,6 +57,7 @@ src/
     seo.js                    # Head tags, OG, sitemap/robots builders (shared by api/, prerender and client; plain ESM)
     localeRoute.js            # DEFAULT_LOCALE (lt), landing language URLs (/ lt, /en, /ru) and the redirect rule for return visits
     analytics.js              # Umami page views + funnel events (off without VITE_UMAMI_WEBSITE_ID; no PII)
+    tournamentCreate.js       # Create form defaults + create_tournament payload + follow-up writes (rules, participants, courts), shared by the wizard and the AI screen
     sportConfig.js            # Registry: sport -> capabilities (scoringFamily, forcedCategory, supports*)
     scoringEngines.js         # Registry: family (sets|goals|points) -> state/format helpers
     pointsFormat.js           # Points formats: rounds/rests from matches, plans mirroring the SQL generators
@@ -78,7 +79,8 @@ src/
     HomeView.vue              # Landing / Google sign-in
     AdminLayout.vue           # Admin wrapper with nav
     AdminTournamentListView.vue
-    AdminTournamentCreateView.vue  # 6-step create wizard (draft kept in sessionStorage); step 1 has AiCreatePanel ("describe the tournament": AI fills fields, its participant list is added as pending after create)
+    AdminTournamentCreateView.vue  # 6-step create wizard, manual (draft kept in sessionStorage)
+    AdminTournamentAiCreateView.vue  # "Quick with AI" (/admin/tournaments/new/ai): describe → AI proposes a tournament (text values + suggestions, ✦ marked) and asks ≤3 questions → one-screen edit → create with participants (pending) and courts; entry via CreateTournamentButton menu while ai.create is on
     AdminTournamentView.vue   # Main admin page (7 tabs: Entries, Bracket/Stage, Courts, Schedule, Scores, Sponsors, Settings) - LARGEST FILE
     AdminSettingsView.vue     # User settings
     AdminPlatformView.vue     # Super-admin only: sponsorship requests + feature flags (sport toggles)

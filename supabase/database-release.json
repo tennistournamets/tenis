@@ -1,5 +1,5 @@
 {
-  "release": "2026-10-24-ai-create-voice",
+  "release": "2026-10-25-ai-create-limit",
   "forwardMigrations": [
     {
       "path": "supabase/migrations/20260908120000_mobile_tournament_details.sql",
@@ -198,6 +198,10 @@
       "sha256": "915fa065e7a92d0287fffaa090672546ae93f95d64bc9dac72170c34d9aa16fc",
       "tenisAppliedVersion": "20261024200621",
       "tenisNote": "Applied 2026-10-24 with supabase db push --db-url (session pooler) after logical backup (tenis-public-20261024-2339-pre-ai-create-voice.dump + migrations journal export); ai.voice switch, voice task in AI functions and ai_usage check."
+    },
+    {
+      "path": "supabase/migrations/20261024210615_ai_create_limit.sql",
+      "sha256": "117cf9776fa668261068ddeef84a5e687e7bd58293f152a9b9415a1725448302"
     }
   ],
   "baseline": {

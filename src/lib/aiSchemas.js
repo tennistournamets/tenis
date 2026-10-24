@@ -151,18 +151,8 @@ const amountText = value => {
   return Number.isInteger(n) ? String(n) : n.toFixed(2)
 }
 
-/**
- * "Tournament from text" answer -> { fields, participants, remarks, notices }. `fields` holds
- * only what the text gave and the wizard accepts (keys of its form); everything else is left to
- * the organizer. `notices` are i18n codes of what was dropped or changed here.
- * context: { enabledSports, sport, today } — the sports the create wizard offers, its current
- * sport and the organizer's date (YYYY-MM-DD).
- */
-export function checkCreate(json, { enabledSports = SPORTS, sport: currentSport = 'tennis', today = null } = {}) {
-  if (!json || typeof json !== 'object' || (json.tournament != null && typeof json.tournament !== 'object')) {
-    throw Object.assign(new Error('ai.badResponse'), { code: 'ai.badResponse' })
-  }
-  const raw = json.tournament ?? {}
+// Wizard fields from one raw "tournament" object (text values, or text + AI suggestions).
+function tournamentFields(raw, rawEntries, { enabledSports, sport: currentSport, today }) {
   const fields = {}
   const notices = new Set()
 
@@ -179,7 +169,6 @@ export function checkCreate(json, { enabledSports = SPORTS, sport: currentSport 
   const individual = isIndividualFormat(format)
 
   // Participants decide doubles when the text names pairs but not the category.
-  const rawEntries = Array.isArray(json.participants) ? json.participants : []
   const pairsListed = rawEntries.filter(e => Array.isArray(e?.members) && e.members.filter(m => cleanName(m)).length > 1).length
   let category = cfg.supportsCategory ? enumOf(raw.category, ['singles', 'doubles']) : null
   if (!category && cfg.supportsCategory && !individual && pairsListed > rawEntries.length / 2) {
@@ -238,17 +227,63 @@ export function checkCreate(json, { enabledSports = SPORTS, sport: currentSport 
     }
   }
   if (raw.waitlist === true && fields.registration_capacity) fields.waitlist_enabled = true
+  if (raw.visibility != null) {
+    const visibility = enumOf(raw.visibility, ['public', 'link', 'private'])
+    if (visibility) fields.visibility = visibility
+  }
+  // Courts are not a wizard field: the quick screen creates them after the tournament.
+  const courts = wholeNumber(raw.courts, 1, 20)
+  if (courts) fields.courts = courts
+
+  return { fields, notices, format, effectiveCategory, pairing: fields.doubles_pairing_random ? 'pick_random' : null }
+}
+
+const QUESTIONS_MAX = 3
+function cleanQuestions(value) {
+  return (Array.isArray(value) ? value : [])
+    .map(item => ({
+      question: shortText(item?.question, 140),
+      options: cleanList(item?.options, 5, 40),
+    }))
+    .filter(item => item.question)
+    .slice(0, QUESTIONS_MAX)
+}
+
+const present = raw => Object.fromEntries(Object.entries(raw && typeof raw === 'object' ? raw : {}).filter(([, value]) => value != null && value !== ''))
+
+/**
+ * "Tournament from text" answer -> { fields, suggested, questions, participants, remarks, notices }.
+ * `fields` holds what the create form accepts (keys of its form, plus `courts`): the text's own
+ * values with the AI's suggestions for what the text left out; `suggested` names the keys that
+ * came from a suggestion, so the screen can mark them. `questions` (≤ 3) ask about what matters
+ * and cannot be guessed. `notices` are i18n codes of what was dropped or changed here.
+ * context: { enabledSports, sport, today } — the sports on offer, the current sport and the
+ * organizer's date (YYYY-MM-DD).
+ */
+export function checkCreate(json, { enabledSports = SPORTS, sport: currentSport = 'tennis', today = null } = {}) {
+  if (!json || typeof json !== 'object' || (json.tournament != null && typeof json.tournament !== 'object')) {
+    throw Object.assign(new Error('ai.badResponse'), { code: 'ai.badResponse' })
+  }
+  const context = { enabledSports, sport: currentSport, today }
+  const rawEntries = Array.isArray(json.participants) ? json.participants : []
+  const fromText = tournamentFields(json.tournament ?? {}, rawEntries, context)
+  const merged = tournamentFields({ ...present(json.suggested), ...present(json.tournament) }, rawEntries, context)
+  const suggested = Object.keys(merged.fields).filter(key => !Object.hasOwn(fromText.fields, key) || fromText.fields[key] !== merged.fields[key])
+  const notices = new Set(fromText.notices)
 
   // The list in the shape this tournament takes (pairs split for Americano and the like).
-  const shape = entryShape({ format: format ?? null, category: effectiveCategory, doubles_pairing_mode: fields.doubles_pairing_random ? 'pick_random' : null })
+  const shape = entryShape({ format: merged.format ?? null, category: merged.effectiveCategory, doubles_pairing_mode: merged.pairing })
   const list = checkImport({ entries: rawEntries, unparsed: json.unparsed, warnings: json.warnings }, { shape })
   for (const code of list.notices) notices.add(code)
   const people = list.entries.reduce((sum, entry) => sum + entry.members.length, 0)
-  if (format === 'king_of_court' && people && people % 4 !== 0) notices.add('kotcPlayers')
+  if (merged.format === 'king_of_court' && people && people % 4 !== 0) notices.add('kotcPlayers')
+  const capacity = Number(merged.fields.registration_capacity)
   if (capacity && list.entries.length > capacity) notices.add('capacityLow')
 
   return {
-    fields,
+    fields: merged.fields,
+    suggested,
+    questions: cleanQuestions(json.questions),
     participants: { entries: list.entries, unparsed: list.unparsed },
     remarks: list.remarks,
     notices: [...notices],
