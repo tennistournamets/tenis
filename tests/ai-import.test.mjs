@@ -14,7 +14,7 @@ test('entry shape follows the category, pairing mode and individual formats', ()
   assert.equal(entryShape({ category: 'singles', sport: 'football' }), 'single')
 })
 
-test('names, contacts and seeds from the model are cleaned, never trusted', () => {
+test('names and contacts from the model are cleaned, never trusted', () => {
   assert.equal(cleanName('  3)  Žygimantas   Šeškus '), 'Žygimantas Šeškus')
   assert.equal(cleanName('• Ona​ Jonaitienė'), 'Ona Jonaitienė')
   assert.equal(cleanName('12. Rūta'), 'Rūta')
@@ -36,10 +36,10 @@ test('names, contacts and seeds from the model are cleaned, never trusted', () =
     warnings: ['  one  ', 'two', 'three', 'four', 'five', 'six'],
   }, { shape: 'pair' })
   assert.deepEqual(result.entries, [
-    { members: ['Jonas', 'Mantas'], contact: null, seed: 2, note: 'paid', incomplete: false },
-    { members: ['Eglė'], contact: null, seed: null, note: null, incomplete: true },
-    { members: ['A', 'B'], contact: null, seed: null, note: null, incomplete: false },
-    { members: ['C'], contact: null, seed: null, note: null, incomplete: true },
+    { members: ['Jonas', 'Mantas'], contact: null, note: 'paid', incomplete: false },
+    { members: ['Eglė'], contact: null, note: null, incomplete: true },
+    { members: ['A', 'B'], contact: null, note: null, incomplete: false },
+    { members: ['C'], contact: null, note: null, incomplete: true },
   ])
   assert.deepEqual(result.unparsed, ['???', '42'])
   assert.deepEqual(result.remarks, ['one', 'two', 'three', 'four', 'five'])
@@ -48,7 +48,10 @@ test('names, contacts and seeds from the model are cleaned, never trusted', () =
 
 test('pairs become single players where every entry is one participant', () => {
   const { entries, notices } = checkImport({ entries: [{ members: ['Jonas', 'Mantas'], contact: 'j@x.lt', seed: 1 }] }, { shape: 'single' })
-  assert.deepEqual(entries.map(e => [e.members, e.contact, e.seed]), [[['Jonas'], 'j@x.lt', 1], [['Mantas'], null, null]])
+  assert.deepEqual(entries, [
+    { members: ['Jonas'], contact: 'j@x.lt', note: null, incomplete: false },
+    { members: ['Mantas'], contact: null, note: null, incomplete: false },
+  ], 'a seed the model adds anyway is dropped')
   assert.deepEqual(notices, ['splitPairs'])
 })
 

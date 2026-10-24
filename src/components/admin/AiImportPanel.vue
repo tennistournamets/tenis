@@ -40,9 +40,6 @@ const error = ref('')
 const success = ref('')
 const notify = ref(false)
 const offerPending = ref(false)
-const seedIds = ref([])
-// Most lists have no ranking: the seed column appears only when the AI found one.
-const listHasSeeds = ref(false)
 
 const shape = computed(() => entryShape(props.tournament))
 const team = computed(() => scoringFamily(props.tournament.sport || 'tennis') === 'goals')
@@ -74,7 +71,6 @@ function resetResult() {
   error.value = ''
   success.value = ''
   offerPending.value = false
-  seedIds.value = []
 }
 
 let rowKey = 0
@@ -92,7 +88,6 @@ async function recognize() {
     unparsed.value = result.unparsed
     remarks.value = result.remarks
     notices.value = result.notices
-    listHasSeeds.value = rows.value.some(row => row.seed != null)
     if (!rows.value.length && !unparsed.value.length) error.value = t('ai.errors.badResponse')
   } catch (err) {
     error.value = errorMessage(err, t, 'ai.errors.unavailable')
@@ -159,20 +154,12 @@ async function save(status = 'approved') {
     const added = results.filter(result => result.ok)
     const failed = new Map(results.filter(result => !result.ok).map(result => [result.index, result.error]))
 
-    // Seeds from the list, for the approved rows just added and only on an unseeded field.
-    const seeded = added
-      .filter(result => result.status === 'approved' && rows.value[result.index]?.seed)
-      .sort((a, b) => rows.value[a.index].seed - rows.value[b.index].seed)
-      .map(result => result.id)
-    const fieldSeeded = props.entries.some(entry => entry.status === 'approved' && entry.seed_order != null)
-
     rows.value = rows.value
       .map((row, index) => (failed.has(index) ? { ...row, error: registrationError(failed.get(index), t, 'errors.generic') } : null))
       .filter(Boolean)
     if (added.length) success.value = t('ai.import.added', { n: added.length })
     if (failed.size) error.value = t('ai.import.failed', { n: failed.size })
     offerPending.value = status === 'approved' && [...failed.values()].some(message => message === 'registration.full')
-    seedIds.value = seeded.length > 1 && !fieldSeeded ? seeded : []
     if (!rows.value.length) {
       unparsed.value = []
       remarks.value = []
@@ -182,22 +169,6 @@ async function save(status = 'approved') {
     if (added.length) emit('saved')
   } catch (err) {
     error.value = registrationError(err?.message, t, 'errors.generic')
-  } finally {
-    setBusy(false)
-  }
-}
-
-async function applySeeds() {
-  if (disabled.value || !seedIds.value.length) return
-  setBusy(true)
-  try {
-    const { error: rpcError } = await supabase.rpc('set_entry_seed_order', { p_tournament_id: props.tournament.id, p_entry_ids: seedIds.value })
-    if (rpcError) throw rpcError
-    seedIds.value = []
-    success.value = t('ai.import.seedApplied')
-    emit('saved')
-  } catch (err) {
-    error.value = errorMessage(err, t)
   } finally {
     setBusy(false)
   }
@@ -264,7 +235,6 @@ async function applySeeds() {
           v-model="rows"
           :shape="shape"
           :team="team"
-          :show-seed="listHasSeeds"
           :entries="entries"
           :disabled="disabled"
         />
@@ -301,10 +271,6 @@ async function applySeeds() {
 
       <p v-if="error" class="alert alert--error" role="alert">{{ error }}</p>
       <p v-if="success" class="alert alert--success" role="status">{{ success }}</p>
-      <div v-if="seedIds.length" class="alert alert--info ai-import__seed" role="status">
-        <span>{{ t('ai.import.seedOffer') }}</span>
-        <button type="button" class="btn btn--outline btn--sm" :disabled="disabled" @click="applySeeds">{{ t('ai.import.seedApply') }}</button>
-      </div>
     </div>
   </div>
 </template>
@@ -362,12 +328,5 @@ async function applySeeds() {
   display: block;
   font-size: 0.8125rem;
   color: var(--muted);
-}
-.ai-import__seed {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2, 8px);
 }
 </style>

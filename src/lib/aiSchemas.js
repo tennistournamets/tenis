@@ -39,18 +39,13 @@ export function cleanContact(value) {
   return PHONE.test(contact) ? contact : null
 }
 
-const cleanSeed = value => {
-  const seed = Number(value)
-  return Number.isInteger(seed) && seed >= 1 && seed <= 999 ? seed : null
-}
-
 const cleanList = (value, max, length) => (Array.isArray(value) ? value : [])
   .map(item => text(item).replace(/\s+/g, ' ').trim().slice(0, length))
   .filter(Boolean)
   .slice(0, max)
 
 /**
- * Import answer -> { entries: [{ members, contact, seed, note, incomplete }], unparsed, remarks, notices }.
+ * Import answer -> { entries: [{ members, contact, note, incomplete }], unparsed, remarks, notices }.
  * `notices` are i18n codes of changes made here (split pairs, cut list).
  */
 export function checkImport(json, { shape = 'single' } = {}) {
@@ -69,7 +64,6 @@ export function checkImport(json, { shape = 'single' } = {}) {
       entries.push({
         members: group,
         contact: start === 0 ? cleanContact(raw.contact) : null,
-        seed: start === 0 ? cleanSeed(raw.seed) : null,
         note: start === 0 ? note : null,
         incomplete: shape === 'pair' && group.length < 2,
       })

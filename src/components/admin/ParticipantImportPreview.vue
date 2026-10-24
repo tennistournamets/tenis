@@ -1,6 +1,6 @@
 <script setup>
-// Editable preview of an imported participant list: names, partner, contact and seed per entry,
-// duplicates marked, pairs joined or split. Rows: { key, members, contact, seed, note, error }.
+// Editable preview of an imported participant list: names, partner and contact per entry,
+// duplicates marked, pairs joined or split. Rows: { key, members, contact, note, error }.
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppIcon from '../AppIcon.vue'
@@ -12,8 +12,6 @@ const props = defineProps({
   // 'single' | 'pair' | 'pairOptional' (see entryShape in lib/aiSchemas.js)
   shape: { type: String, default: 'single' },
   team: Boolean,
-  // The list ranked its participants (rating, place): show and keep the seed column.
-  showSeed: Boolean,
   // The tournament's entries, to mark people who are already entered.
   entries: { type: Array, default: () => [] },
   disabled: Boolean,
@@ -82,7 +80,7 @@ function joinWithNext(index) {
 
 function split(index) {
   const row = rows.value[index]
-  const second = { key: `${row.key}-2`, members: [row.members[1]], contact: null, seed: null, note: null, error: '' }
+  const second = { key: `${row.key}-2`, members: [row.members[1]], contact: null, note: null, error: '' }
   update([...rows.value.slice(0, index), { ...row, members: [row.members[0]], error: '' }, second, ...rows.value.slice(index + 1)])
 }
 </script>
@@ -92,7 +90,7 @@ function split(index) {
     <li v-for="(row, index) in rows" :key="row.key" class="import-row" :class="{ 'import-row--error': row.error }">
       <span class="import-row__number" aria-hidden="true">{{ index + 1 }}</span>
       <div class="import-row__body">
-        <div class="import-row__fields" :class="{ 'import-row__fields--seed': showSeed }">
+        <div class="import-row__fields">
           <div class="form-field import-row__name">
             <label :for="`imp-${row.key}-m1`" class="import-row__label">
               {{ team ? t('ai.import.team') : pairs ? t('ai.import.memberOne') : t('ai.import.member') }}
@@ -130,20 +128,6 @@ function split(index) {
               :value="row.contact ?? ''"
               :disabled="disabled"
               @input="setField(index, 'contact', $event.target.value || null)"
-            />
-          </div>
-          <div v-if="showSeed" class="form-field import-row__seed">
-            <label :for="`imp-${row.key}-seed`" class="import-row__label">{{ t('ai.import.seed') }}</label>
-            <input
-              :id="`imp-${row.key}-seed`"
-              class="input"
-              type="number"
-              min="1"
-              max="999"
-              inputmode="numeric"
-              :value="row.seed ?? ''"
-              :disabled="disabled"
-              @input="setField(index, 'seed', Number.parseInt($event.target.value, 10) || null)"
             />
           </div>
         </div>
@@ -217,10 +201,6 @@ function split(index) {
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: var(--space-2, 8px);
 }
-/* Names and contact share the width; the seed keeps a narrow last column. */
-.import-row__fields--seed {
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)) 5.5rem;
-}
 .import-row__fields .form-field {
   margin: 0;
 }
@@ -253,19 +233,13 @@ function split(index) {
   .import-row__number {
     display: none;
   }
-  /* Phone: full-width names, contact and seed on one line; no scroll inside the page scroll. */
+  /* Phone: one column, no scroll inside the page scroll. */
   .import-list {
     max-height: none;
     overflow: visible;
   }
   .import-row__fields {
     grid-template-columns: minmax(0, 1fr);
-  }
-  .import-row__fields--seed {
-    grid-template-columns: minmax(0, 1fr) 4.5rem;
-  }
-  .import-row__name {
-    grid-column: 1 / -1;
   }
 }
 </style>
