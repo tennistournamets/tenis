@@ -47,6 +47,7 @@ src/
     ShareTournamentModal.vue  # WhatsApp/Telegram/Viber/email share, opened after create (?created=1) and after start
     sponsor/                  # Public sponsor units: SponsorMark (logo, dark variant), SponsorLockup ("Presented by"), SponsorBanner(+Slot), SponsorPartners
     admin/SponsorsTab.vue     # "Sponsors" tab: access request card, then ad places (cards with PlacementDiagram) as the entry point → PlacementEditorModal (who/caption, banners, partners); sponsor list is secondary (+ SponsorEditorModal, BannerEditorModal, SponsorImageField, SponsorshipAccessCard)
+    admin/AiImportPanel.vue    # AI participant import in the Entries tab (AiTextSource: text or TXT/CSV/XLSX/DOCX/PDF via lib/aiFileText.js; ParticipantImportPreview: editable rows) → add_manual_entries
     admin/SponsorshipRequestsPanel.vue  # Super-admin table of sponsorship requests (in AdminPlatformView)
   i18n/
     index.js                  # Vue I18n config; loads only the active locale (setAppLocale / loadLocaleMessages)
@@ -59,6 +60,7 @@ src/
     sportConfig.js            # Registry: sport -> capabilities (scoringFamily, forcedCategory, supports*)
     scoringEngines.js         # Registry: family (sets|goals|points) -> state/format helpers
     pointsFormat.js           # Points formats: rounds/rests from matches, plans mirroring the SQL generators
+    aiSchemas.js              # AI answer checks shared by api/_ai-tasks.js and the browser (import: entryShape, checkImport, nameKey)
     sponsorship.js            # Sponsorship model (sponsors, places, partners): cached per tournament from `tournament_sponsorship`, saved via save_sponsorship (revision CAS, queued, optimistic); public view gated by approval + feature flag
     sponsorAssets.js          # Sponsor images: browser downscale to WebP (SVG rasterized), upload to Storage bucket `sponsor-assets` as `<tournament id>/<uuid>.webp`, public CDN URLs, draft cleanup
     sponsorshipRequests.js    # Paid-feature gate: request/list/decide RPCs, cached is_sponsorship_approved
@@ -143,6 +145,7 @@ supabase/
 
 ### Key PL/pgSQL Functions
 
+- `add_manual_entries(tournament, entries jsonb, status, notify)` - bulk manual entries (≤128) through `add_manual_entry()` row by row; returns per-row `{index, ok, id, status, error}`; `notify=false` sets `bracketa.quiet_entries` so `entries_queue_notification()` queues no emails
 - `create_tournament()` - inserts tournament (forces padel→doubles, football→singles, nulls set_format for goals) + owner row; `register_entry(..., p_access_token)` returns `{id, status}` (pending or waitlisted) and enforces deadline, capacity and waitlist
 - `tournament_registration_state()`, `approve_pending_entries()` - registration rules; `update_tournament_settings(p_patch, p_expected_revision)` - whitelisted settings write with CAS
 - Schedule: `save_courts()`, `check_match_schedule()`, `set_match_schedule()`, `clear_match_schedule()`, `schedule_draft_conflicts()`, `publish_schedule()`, `revert_schedule_draft()`
