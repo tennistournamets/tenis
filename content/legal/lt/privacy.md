@@ -23,7 +23,7 @@ Yra du vaidmenys:
 - **Jūsų sukurti turnyrai:** pavadinimas, vieta ir jos adresas, datos ir tvarkaraštis, taisyklės, registracijos nustatymai, rezultatai. Pasirinktinai – kontaktinis telefonas ir el. paštas; jie skelbiami tik įjungus „rodyti kontaktą“.
 - **Bendraorganizatoriai:** pridėjus asmenį pagal el. paštą, saugome tik nuorodą į jo esamą paskyrą.
 - **Rėmimas:** prašymai įjungti rėmėjus (jūsų žinutė ir sprendimas), rėmėjų pavadinimai, nuorodos, užrašai ir įkelti paveikslėliai.
-- **DI funkcijos** (jei platforma jas įjungė): tekstas ar failas, kurį patys siunčiate DI funkcijai (turnyro aprašymas, dalyvių sąrašas, frazė su rezultatu), perduodamas paslaugai DeepSeek, kad būtų paverstas nustatymais, sąrašu ar rezultatu. Saugome tik užklausos faktą: kuri funkcija, kada ir kiek žetonų, be paties teksto.
+- **DI funkcijos** (jei platforma jas įjungė): tekstas ar failas, kurį patys siunčiate DI funkcijai (turnyro aprašymas, dalyvių sąrašas, frazė su rezultatu), perduodamas paslaugai DeepSeek, kad būtų paverstas nustatymais, sąrašu ar rezultatu. Saugome tik užklausos faktą: kuri funkcija, kada ir kiek žetonų, be paties teksto. Balso įrašas (mygtukas „Padiktuoti“) perduodamas paslaugai Groq, kad būtų paverstas tekstu; jo nesaugome, žurnale lieka tik trukmė sekundėmis. Paveikslėliai ir failai skaitomi naršyklėje, siunčiamas tik jų tekstas.
 
 ### Dalyviai
 
@@ -70,6 +70,7 @@ Asmens duomenų neparduodame, nekuriame pagal juos reklaminių profilių ir nepr
 | Google | Prisijungimas per Google; šriftai iš Google serverių (naršyklė perduoda Google savo IP adresą) | JAV / pasauliniu mastu |
 | IndexNow (Bing ir kt.) | Pranešimas paieškos sistemoms apie naujus viešus puslapius; perduodami tik puslapių adresai | JAV / pasauliniu mastu |
 | DeepSeek | Teksto apdorojimas DI funkcijoms, tik organizatoriui jas paleidus | Kinija |
+| Groq | Kalbos pavertimas tekstu mygtukui „Padiktuoti“, tik organizatoriui įrašinėjant; įrašo nesaugome | JAV |
 
 Jei teikėjas yra už Europos ekonominės erdvės ribų, duomenys perduodami remiantis ES ir JAV duomenų privatumo sistema arba Europos Komisijos standartinėmis sutarčių sąlygomis.
 

@@ -29,15 +29,20 @@ function siteOriginHtml(origin) {
   }
 }
 
-// `npm run dev` has no Vercel runtime: serve the AI function locally. Its server-only keys
-// (DEEPSEEK_API_KEY) are read from .env here and never reach the bundle, which only sees VITE_*.
+// `npm run dev` has no Vercel runtime: serve the AI functions locally. Their server-only keys
+// (DEEPSEEK_API_KEY, GROQ_API_KEY) are read from .env here and never reach the bundle, which
+// only sees VITE_*.
+const DEV_FUNCTIONS = { '/api/ai': ['/api/ai.js', 'handleAi'], '/api/transcribe': ['/api/transcribe.js', 'handleTranscribe'] }
+
 function devAi(mode) {
   return {
     name: 'bracketa-dev-ai',
     apply: 'serve',
     configureServer(server) {
       const env = { ...process.env, ...loadEnv(mode, process.cwd(), '') }
-      server.middlewares.use('/api/ai', async (req, res) => {
+      server.middlewares.use(async (req, res, next) => {
+        const path = (req.url ?? '').split('?')[0]
+        if (!Object.hasOwn(DEV_FUNCTIONS, path)) return next()
         if (req.method !== 'POST') {
           res.statusCode = 405
           res.end()
@@ -45,10 +50,11 @@ function devAi(mode) {
         }
         const chunks = []
         for await (const chunk of req) chunks.push(chunk)
-        const headers = { 'Content-Type': 'application/json' }
+        const headers = { 'Content-Type': req.headers['content-type'] || 'application/json' }
         if (req.headers.authorization) headers.Authorization = req.headers.authorization
-        const { handleAi } = await server.ssrLoadModule('/api/ai.js')
-        const response = await handleAi(new Request('http://localhost/api/ai', { method: 'POST', headers, body: Buffer.concat(chunks) }), { env })
+        const [file, handler] = DEV_FUNCTIONS[path]
+        const module = await server.ssrLoadModule(file)
+        const response = await module[handler](new Request(`http://localhost${req.url}`, { method: 'POST', headers, body: Buffer.concat(chunks) }), { env })
         res.statusCode = response.status
         response.headers.forEach((value, key) => res.setHeader(key, value))
         res.end(Buffer.from(await response.arrayBuffer()))

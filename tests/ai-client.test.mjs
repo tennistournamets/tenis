@@ -15,7 +15,7 @@ test('AI texts have the same keys in every locale', () => {
 })
 
 test('every error code the AI function or the database can return is translated', async () => {
-  const sources = await Promise.all(['api/ai.js', 'api/_ai-deepseek.js', 'api/_ai-supabase.js', 'api/_ai-errors.js', 'src/lib/ai.js',
+  const sources = await Promise.all(['api/ai.js', 'api/_ai-deepseek.js', 'api/_ai-supabase.js', 'api/_ai-errors.js', 'api/transcribe.js', 'api/_ai-groq.js', 'src/lib/ai.js', 'src/lib/voice.js',
     'supabase/migrations/20261024174519_ai_foundation.sql'].map(path => readFile(new URL(`../${path}`, import.meta.url), 'utf8')))
   const codes = new Set(sources.join('\n').match(/'ai\.[a-zA-Z]+'/g).map(code => code.slice(1, -1)))
   assert.ok(codes.has('ai.limit') && codes.has('ai.notConfigured'))

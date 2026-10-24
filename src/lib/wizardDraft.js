@@ -14,6 +14,8 @@ export function restoreDraftFields(initial, stored) {
     if (value === undefined) continue
     if (fallback === null) {
       if (value === null || typeof value === 'string' || (typeof value === 'number' && Number.isFinite(value))) restored[key] = value
+    } else if (Array.isArray(fallback)) {
+      if (Array.isArray(value)) restored[key] = JSON.parse(JSON.stringify(value))
     } else if (typeof fallback === 'object') {
       if (value && typeof value === 'object' && !Array.isArray(value)) restored[key] = JSON.parse(JSON.stringify(value))
     } else if (typeof value === typeof fallback) {

@@ -4,6 +4,7 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppIcon from '../AppIcon.vue'
+import VoiceInputButton from './VoiceInputButton.vue'
 import { FILE_ACCEPT, TEXT_MAX, fileToText } from '../../lib/aiFileText'
 
 const props = defineProps({
@@ -13,6 +14,9 @@ const props = defineProps({
   placeholder: { type: String, default: '' },
   disabled: Boolean,
   rows: { type: Number, default: 8 },
+  // Show "Dictate" (the `ai.voice` switch is on); the recording counts for this tournament.
+  voice: Boolean,
+  tournamentId: { type: String, default: null },
 })
 const emit = defineEmits(['update:modelValue'])
 const { t } = useI18n()
@@ -24,6 +28,12 @@ const progress = ref(null)
 const fileNote = ref('')
 const fileError = ref('')
 const clipped = computed(() => props.modelValue.length > TEXT_MAX)
+const dictating = ref(false)
+
+function addText(text) {
+  const current = props.modelValue.trim()
+  emit('update:modelValue', current ? `${current}\n${text}` : text)
+}
 
 function pickFile() {
   fileInput.value?.click()
@@ -61,16 +71,23 @@ async function onFile(event) {
         :rows="rows"
         :value="modelValue"
         :placeholder="placeholder"
-        :disabled="disabled || reading"
+        :disabled="disabled || reading || dictating"
         spellcheck="false"
         @input="emit('update:modelValue', $event.target.value)"
       ></textarea>
     </div>
     <div class="ai-source__bar">
-      <button type="button" class="btn btn--outline btn--sm" :disabled="disabled || reading" @click="pickFile">
+      <button type="button" class="btn btn--outline btn--sm" :disabled="disabled || reading || dictating" @click="pickFile">
         <AppIcon name="attach" :size="16" />
         {{ !reading ? t('ai.source.attach') : progress == null ? t('ai.source.reading') : t('ai.source.readingImage', { percent: progress }) }}
       </button>
+      <VoiceInputButton
+        v-if="voice"
+        :disabled="disabled || reading"
+        :tournament-id="tournamentId"
+        @busy="dictating = $event"
+        @text="addText"
+      />
       <span class="ai-source__formats">{{ t('ai.source.formats') }}</span>
       <input ref="fileInput" type="file" hidden :accept="FILE_ACCEPT" @change="onFile" />
     </div>

@@ -77,11 +77,12 @@ const USAGE_DAYS = 7
 const aiUsage = ref(null)
 const aiUsageError = ref('')
 const aiUsageLoading = ref(false)
+// Voice rows count seconds of audio (tokens_in), not tokens: they stay out of the token total.
 const aiUsageTotal = computed(() => (aiUsage.value?.tasks ?? []).reduce((sum, row) => ({
   calls: sum.calls + row.calls,
   failed: sum.failed + row.failed,
-  tokens_in: sum.tokens_in + row.tokens_in,
-  tokens_out: sum.tokens_out + row.tokens_out,
+  tokens_in: sum.tokens_in + (row.task === 'voice' ? 0 : row.tokens_in),
+  tokens_out: sum.tokens_out + (row.task === 'voice' ? 0 : row.tokens_out),
 }), { calls: 0, failed: 0, tokens_in: 0, tokens_out: 0 }))
 
 async function loadAiUsage() {
@@ -267,7 +268,8 @@ onMounted(async () => {
                 <td>{{ formatNumber(row.calls) }}</td>
                 <td>{{ formatNumber(row.failed) }}</td>
                 <td>{{ formatNumber(row.users) }}</td>
-                <td>{{ formatNumber(row.tokens_in) }} / {{ formatNumber(row.tokens_out) }}</td>
+                <td v-if="row.task === 'voice'">{{ t('ai.platform.usage.seconds', { n: formatNumber(row.tokens_in) }) }}</td>
+                <td v-else>{{ formatNumber(row.tokens_in) }} / {{ formatNumber(row.tokens_out) }}</td>
               </tr>
             </tbody>
             <tfoot v-if="aiUsage.tasks.length > 1">

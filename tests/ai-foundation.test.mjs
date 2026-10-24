@@ -14,7 +14,7 @@ const begin = (ctx, actor, task, tournamentId = null) =>
 test('AI switches start off; a feature needs both the master and its own switch', async t => {
   const ctx = await createDatabase(); t.after(() => ctx.db.close())
   const rows = (await ctx.db.query("select key, enabled from feature_flags where key = 'ai' or key like 'ai.%' order by key")).rows
-  assert.deepEqual(rows.map(r => r.key), ['ai', 'ai.create', 'ai.import', 'ai.posts', 'ai.score'])
+  assert.deepEqual(rows.map(r => r.key), ['ai', 'ai.create', 'ai.import', 'ai.posts', 'ai.score', 'ai.voice'])
   assert.ok(rows.every(r => r.enabled === false))
 
   const enabled = async feature => (await asActor(ctx, 'anon', 'select is_ai_feature_enabled($1) enabled', [feature])).rows[0].enabled

@@ -78,7 +78,7 @@ src/
     HomeView.vue              # Landing / Google sign-in
     AdminLayout.vue           # Admin wrapper with nav
     AdminTournamentListView.vue
-    AdminTournamentCreateView.vue  # 6-step create wizard (draft kept in sessionStorage)
+    AdminTournamentCreateView.vue  # 6-step create wizard (draft kept in sessionStorage); step 1 has AiCreatePanel ("describe the tournament": AI fills fields, its participant list is added as pending after create)
     AdminTournamentView.vue   # Main admin page (7 tabs: Entries, Bracket/Stage, Courts, Schedule, Scores, Sponsors, Settings) - LARGEST FILE
     AdminSettingsView.vue     # User settings
     AdminPlatformView.vue     # Super-admin only: sponsorship requests + feature flags (sport toggles)
@@ -86,7 +86,7 @@ src/
   App.vue                     # Root component
   main.js                     # App entry point
   styles.css                  # Global styles
-api/                          # Vercel functions: preview.js (OG tags for messenger bots), og.js (per-tournament PNG via @vercel/og; _og-card.js layout, _fonts/), robots.js, sitemap.js, notifications.js (email sender; _notifier.js, _email.js), ai.js (DeepSeek AI tasks; _ai-*.js helpers, tasks in _ai-tasks.js; served locally by the dev plugin in vite.config.js)
+api/                          # Vercel functions: preview.js (OG tags for messenger bots), og.js (per-tournament PNG via @vercel/og; _og-card.js layout, _fonts/), robots.js, sitemap.js, notifications.js (email sender; _notifier.js, _email.js), ai.js (DeepSeek AI tasks: import, create; _ai-*.js helpers, tasks in _ai-tasks.js), transcribe.js (voice → text, Groq Whisper; _ai-groq.js); both served locally by the dev plugin in vite.config.js
 content/blog/<lang>/*.md      # Blog articles (front matter: title, description, key, date); every key in all 3 languages
 content/legal/<lang>/{privacy,terms}.md  # Privacy policy + terms of use (scripts/legal.mjs -> /privacy, /terms, /ru/…, /en/…; linked from footers, registration form, emails)
 public/embed.js               # Club-site loader: iframe + auto height (postMessage, origin-checked)
@@ -172,7 +172,7 @@ supabase/
 - `is_tournament_admin()`, `can_live_score()`, `is_platform_admin()` - access checks
 - `is_feature_enabled(key)` / `set_feature_flag(key, enabled, description)` - feature flags; `create_tournament()` rejects a sport whose `sport.<x>` flag is off
 - Sponsorship: `request_sponsorship(tournament, message)` (owner only; approved stays approved, rejected → pending again), `decide_sponsorship_request(id, status)` and `list_sponsorship_requests()` (platform admin; owner name/email + tournament), `is_sponsorship_approved(tournament)` (anon ok; public sponsor slots render only when true); `can_manage_sponsorship(tournament)` (admin + approved + flag on), `save_sponsorship(tournament, config, expected_revision)` (validates http(s) links, own-folder/demo image refs, size; raises `Sponsorship changed` on a stale revision)
-- AI: `is_ai_feature_enabled(feature)` (`ai` master switch AND `ai.<feature>`; features import/create/score/posts, seeded off), `ai_begin_call(task, tournament)` (switches, rights, 24 h limit per user and task; raises `ai.disabled`/`ai.forbidden`/`ai.limit`), `ai_finish_call()`, `ai_usage_summary(days)` (platform admin)
+- AI: `is_ai_feature_enabled(feature)` (`ai` master switch AND `ai.<feature>`; features import/create/score/posts/voice, seeded off; voice rows keep audio seconds in tokens_in), `ai_begin_call(task, tournament)` (switches, rights, 24 h limit per user and task; raises `ai.disabled`/`ai.forbidden`/`ai.limit`), `ai_finish_call()`, `ai_usage_summary(days)` (platform admin)
 - `claim_notifications(limit)`, `complete_notification(id, ok, error)`, `notifications_due()` - email sender (service_role only; `api/notifications.js`, triggered by pg_cron — setup in docs/GROWTH.md)
 
 ### Security

@@ -1,7 +1,7 @@
 // Checks for AI answers, shared by the server (api/_ai-tasks.js) and the browser. The model is
 // never trusted: every field is cleaned, cut to the database limits or dropped.
-import { MEMBER_NAME_MAX } from './registrationRules.js'
-import { isIndividualFormat } from './sportConfig.js'
+import { FEE_CURRENCIES, MEMBER_NAME_MAX, entryNamesError, feeUnitsFor } from './registrationRules.js'
+import { SPORTS, getSportConfig, isIndividualFormat, isPointsFormat, pointsTargetOptions, resolveCategory } from './sportConfig.js'
 
 export const IMPORT_MAX_ENTRIES = 256
 const NOTE_MAX = 120
@@ -83,6 +83,28 @@ export function nameKey(value) {
   return text(value).normalize('NFD').replace(/\p{M}/gu, '').replace(/ё/g, 'е').replace(/\s+/g, ' ').trim().toLowerCase()
 }
 
+/**
+ * i18n key of what stops a preview row from being saved, or null. Mirrors add_manual_entry();
+ * the server still decides. `team`: one team name per entry (football).
+ */
+export function importRowProblem(row, { shape = 'single', team = false } = {}) {
+  const members = (row.members ?? []).map(name => text(name).trim()).filter(Boolean)
+  if (shape === 'pair' && !team && members.length < 2) return 'ai.import.incomplete'
+  const key = entryNamesError(shape === 'single' ? 'singles' : 'doubles', members[0], members[1] ?? '')
+  if (key) return key
+  return row.contact && !cleanContact(row.contact) ? 'registrationForm.invalidContact' : null
+}
+
+/** Rows in the shape of the tournament: pairs split into players where every entry is one. */
+export function rowsForShape(rows, shape) {
+  if (shape !== 'single') return rows
+  return rows.flatMap(row => {
+    const members = (row.members ?? []).map(name => text(name).trim()).filter(Boolean)
+    if (members.length < 2) return [row]
+    return members.map((name, index) => ({ ...row, key: `${row.key}-${index}`, members: [name], contact: index === 0 ? row.contact : null, note: index === 0 ? row.note : null }))
+  })
+}
+
 /** Entry row for add_manual_entries(). Pairs get the usual "A / B" name from the server. */
 export function importRow(entry) {
   const [one, two] = entry.members
@@ -91,5 +113,144 @@ export function importRow(entry) {
     member_two: two ?? null,
     display_name: null,
     contact: entry.contact ?? null,
+  }
+}
+
+// --- Tournament from text -------------------------------------------------------------
+
+const NAME_MAX = 100
+const DESCRIPTION_MAX = 1000
+const VENUE_MAX = 200
+const FEE_MAX = 100000
+const enumOf = (value, values) => (values.includes(value) ? value : null)
+const shortText = (value, max) => text(value).replace(/[ \t]+/g, ' ').trim().slice(0, max) || null
+const wholeNumber = (value, min, max) => {
+  const n = Number(value)
+  return Number.isInteger(n) && n >= min && n <= max ? n : null
+}
+// The wizard's datetime-local value: a local date and time, no zone.
+const localDateTime = value => {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(text(value).trim())
+  if (!match) return null
+  const [, y, m, d, hh, mm] = match.map(Number)
+  const date = new Date(y, m - 1, d, hh, mm)
+  return date.getFullYear() === y && date.getMonth() === m - 1 && date.getDate() === d && hh < 24 && mm < 60 ? match[0] : null
+}
+// A date written without a year means the next one: the model sometimes picks a past year.
+function upcomingYear(value, today) {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(String(today ?? ''))) return value
+  const year = Number(today.slice(0, 4))
+  if (Number(value.slice(0, 4)) >= year || value.slice(0, 10) >= today) return value
+  const thisYear = `${year}${value.slice(4)}`
+  return localDateTime(thisYear.slice(0, 10) >= today ? thisYear : `${year + 1}${value.slice(4)}`)
+}
+
+const amountText = value => {
+  const n = Number(String(value ?? '').replace(',', '.'))
+  if (!Number.isFinite(n) || n <= 0 || n > FEE_MAX) return null
+  return Number.isInteger(n) ? String(n) : n.toFixed(2)
+}
+
+/**
+ * "Tournament from text" answer -> { fields, participants, remarks, notices }. `fields` holds
+ * only what the text gave and the wizard accepts (keys of its form); everything else is left to
+ * the organizer. `notices` are i18n codes of what was dropped or changed here.
+ * context: { enabledSports, sport, today } — the sports the create wizard offers, its current
+ * sport and the organizer's date (YYYY-MM-DD).
+ */
+export function checkCreate(json, { enabledSports = SPORTS, sport: currentSport = 'tennis', today = null } = {}) {
+  if (!json || typeof json !== 'object' || (json.tournament != null && typeof json.tournament !== 'object')) {
+    throw Object.assign(new Error('ai.badResponse'), { code: 'ai.badResponse' })
+  }
+  const raw = json.tournament ?? {}
+  const fields = {}
+  const notices = new Set()
+
+  // Sport: a switched-off sport is not offered; a points format means padel.
+  let sport = enumOf(raw.sport, SPORTS)
+  if (sport && !enabledSports.includes(sport)) { notices.add('sportOff'); sport = null }
+  let format = enumOf(raw.format, getSportConfig('padel').allowedFormats)
+  if (!sport && format && isPointsFormat(format) && enabledSports.includes('padel')) sport = 'padel'
+  if (sport) fields.sport = sport
+  const cfg = getSportConfig(sport ?? currentSport)
+  if (format && !cfg.allowedFormats.includes(format)) { notices.add('formatOff'); format = null }
+  if (format) fields.format = format
+  const points = isPointsFormat(format)
+  const individual = isIndividualFormat(format)
+
+  // Participants decide doubles when the text names pairs but not the category.
+  const rawEntries = Array.isArray(json.participants) ? json.participants : []
+  const pairsListed = rawEntries.filter(e => Array.isArray(e?.members) && e.members.filter(m => cleanName(m)).length > 1).length
+  let category = cfg.supportsCategory ? enumOf(raw.category, ['singles', 'doubles']) : null
+  if (!category && cfg.supportsCategory && !individual && pairsListed > rawEntries.length / 2) {
+    category = 'doubles'
+    notices.add('doublesFromList')
+  }
+  if (category) fields.category = category
+  const effectiveCategory = resolveCategory(sport ?? currentSport, category ?? 'singles')
+  const doubles = effectiveCategory === 'doubles'
+  if (doubles && !individual && cfg.supportsDoublesPairing && raw.pairing === 'pick_random') fields.doubles_pairing_random = true
+
+  const name = shortText(raw.name, NAME_MAX)
+  if (name) fields.name = name
+  const description = shortText(raw.description, DESCRIPTION_MAX)
+  if (description) fields.description = description
+  const venue = shortText(raw.venue_address, VENUE_MAX)
+  if (venue) fields.venue_address = venue
+  const phone = text(raw.contact_phone).trim()
+  if (/^\+?[\d\s\-()]{7,20}$/.test(phone)) fields.contact_phone = phone
+  const email = text(raw.contact_email).trim().toLowerCase()
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) fields.contact_email = email
+
+  if (cfg.supportsSetFormat && !points) {
+    const setFormat = enumOf(raw.set_format, ['best_of_3', 'best_of_5'])
+    if (setFormat) fields.set_format = setFormat
+    if ((sport ?? currentSport) === 'padel') {
+      const tiebreak = enumOf(Number(raw.tiebreak_to), [7, 10])
+      if (tiebreak) fields.tiebreak_to = tiebreak
+    }
+  }
+  if (points && raw.points_per_match != null) {
+    const target = Number(raw.points_per_match)
+    if (pointsTargetOptions(format).includes(target)) fields.points_per_match = target
+    else notices.add('pointsOption')
+  }
+  const gender = enumOf(raw.gender, ['men', 'women', 'mixed'])
+  if (gender && (gender !== 'mixed' || (doubles && !individual))) fields.gender = gender
+  if (format === 'groups_playoff') {
+    const advance = wholeNumber(raw.advance_per_group, 1, 4)
+    if (advance) fields.advance_per_group = advance
+  }
+
+  const capacity = wholeNumber(raw.capacity, 2, 512)
+  if (capacity) fields.registration_capacity = String(capacity)
+  const deadline = upcomingYear(localDateTime(raw.deadline), today)
+  if (deadline) fields.registration_deadline = deadline
+  if (raw.fee && typeof raw.fee === 'object') {
+    if (raw.fee.mode === 'free') fields.entry_fee_mode = 'free'
+    const amount = amountText(raw.fee.amount)
+    if (raw.fee.mode === 'paid' && amount) {
+      fields.entry_fee_mode = 'paid'
+      fields.entry_fee_amount = amount
+      fields.entry_fee_currency = enumOf(raw.fee.currency, FEE_CURRENCIES) ?? 'EUR'
+      const unit = enumOf(raw.fee.unit, feeUnitsFor({ sport: sport ?? currentSport, category: effectiveCategory }))
+      if (unit) fields.entry_fee_unit = unit
+    }
+  }
+  if (raw.waitlist === true && fields.registration_capacity) fields.waitlist_enabled = true
+
+  // The list in the shape this tournament takes (pairs split for Americano and the like).
+  const shape = entryShape({ format: format ?? null, category: effectiveCategory, doubles_pairing_mode: fields.doubles_pairing_random ? 'pick_random' : null })
+  const list = checkImport({ entries: rawEntries, unparsed: json.unparsed, warnings: json.warnings }, { shape })
+  for (const code of list.notices) notices.add(code)
+  const people = list.entries.reduce((sum, entry) => sum + entry.members.length, 0)
+  if (format === 'king_of_court' && people && people % 4 !== 0) notices.add('kotcPlayers')
+  if (capacity && list.entries.length > capacity) notices.add('capacityLow')
+
+  return {
+    fields,
+    participants: { entries: list.entries, unparsed: list.unparsed },
+    remarks: list.remarks,
+    notices: [...notices],
   }
 }
