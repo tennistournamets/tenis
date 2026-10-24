@@ -1,7 +1,7 @@
 <script setup>
 // AI participant import: text or file -> AI reads it -> the organizer checks the preview ->
-// add_manual_entries() adds the list in one call. Hidden unless the `ai` and `ai.import`
-// switches are on.
+// add_manual_entries() adds the list in one call as pending entries, approved afterwards like
+// any registration. Hidden unless the `ai` and `ai.import` switches are on.
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppIcon from '../AppIcon.vue'
@@ -21,8 +21,6 @@ const props = defineProps({
   entries: { type: Array, default: () => [] },
   busy: Boolean,
   canManage: Boolean,
-  // A bracket, groups or fixtures already exist: approved additions make them stale.
-  hasStructure: Boolean,
 })
 const emit = defineEmits(['update:busy', 'saved'])
 const { t, locale } = useI18n()
@@ -39,7 +37,6 @@ const working = ref(false)
 const error = ref('')
 const success = ref('')
 const notify = ref(false)
-const offerPending = ref(false)
 
 const shape = computed(() => entryShape(props.tournament))
 const team = computed(() => scoringFamily(props.tournament.sport || 'tennis') === 'goals')
@@ -70,7 +67,6 @@ function setBusy(value) {
 function resetResult() {
   error.value = ''
   success.value = ''
-  offerPending.value = false
 }
 
 let rowKey = 0
@@ -122,7 +118,7 @@ function checkRows() {
   return problems
 }
 
-async function save(status = 'approved') {
+async function save() {
   if (disabled.value || !rows.value.length) return
   resetResult()
   if (rows.value.length > SAVE_LIMIT) { error.value = t('ai.import.tooMany'); return }
@@ -139,14 +135,14 @@ async function save(status = 'approved') {
     .flatMap(entry => (entry.entry_members || []).map(member => nameKey(member.member_name))))
   const twin = rows.value.flatMap(row => row.members).find(name => existing.has(nameKey(name)))
   if (twin && !(await confirmDialog(t('admin.addEntrySameName', { name: twin })))) return
-  if (props.hasStructure && status === 'approved' && !(await confirmDialog(t('groupsFlow.rosterChangeConfirm')))) return
 
   setBusy(true)
   try {
     const { data, error: rpcError } = await supabase.rpc('add_manual_entries', {
       p_tournament_id: props.tournament.id,
       p_entries: rows.value.map(importRow),
-      p_status: status,
+      // Imported people wait for approval: AI may misread a name or a contact.
+      p_status: 'pending',
       p_notify: notify.value,
     })
     if (rpcError) throw rpcError
@@ -159,7 +155,6 @@ async function save(status = 'approved') {
       .filter(Boolean)
     if (added.length) success.value = t('ai.import.added', { n: added.length })
     if (failed.size) error.value = t('ai.import.failed', { n: failed.size })
-    offerPending.value = status === 'approved' && [...failed.values()].some(message => message === 'registration.full')
     if (!rows.value.length) {
       unparsed.value = []
       remarks.value = []
@@ -226,8 +221,9 @@ async function save(status = 'approved') {
           <span class="badge badge--neutral">{{ t('ai.import.count', { n: rows.length }) }}</span>
         </div>
         <p v-for="code in notices" :key="code" class="alert alert--info" role="status">{{ t(`ai.import.notices.${code}`) }}</p>
-        <p v-if="freePlaces != null" class="alert" :class="listPlaces > freePlaces ? 'alert--warning' : 'alert--info'" role="status">
-          {{ listPlaces > freePlaces ? t('ai.import.capacityOver', { free: freePlaces, n: listPlaces }) : t('ai.import.capacity', { free: freePlaces, n: listPlaces }) }}
+        <p class="alert alert--info" role="status">
+          {{ t('ai.import.pendingHint') }}
+          <template v-if="freePlaces != null"> {{ listPlaces > freePlaces ? t('ai.import.capacityOver', { free: freePlaces, n: listPlaces }) : t('ai.import.capacity', { free: freePlaces, n: listPlaces }) }}</template>
         </p>
 
         <ParticipantImportPreview
@@ -259,11 +255,8 @@ async function save(status = 'approved') {
         </label>
 
         <div class="ai-import__actions">
-          <button type="button" class="btn btn--primary" :disabled="disabled || !rows.length" @click="save('approved')">
+          <button type="button" class="btn btn--primary" :disabled="disabled || !rows.length" @click="save">
             {{ working ? t('ai.import.saving') : t('ai.import.save', { n: rows.length }) }}
-          </button>
-          <button v-if="offerPending && rows.length" type="button" class="btn btn--outline" :disabled="disabled" @click="save('pending')">
-            {{ t('ai.import.addRestPending') }}
           </button>
           <button type="button" class="btn btn--ghost" :disabled="disabled" @click="editText">{{ t('ai.import.editText') }}</button>
         </div>
