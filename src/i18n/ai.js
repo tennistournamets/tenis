@@ -1,6 +1,6 @@
 export const aiMessages = {
   ru: {
-    notice: 'Текст обрабатывается AI-сервисом DeepSeek.',
+    notice: 'Текст обрабатывается AI-сервисом.',
     create: {
       title: 'Быстро с AI',
       badge: 'AI',
@@ -235,7 +235,7 @@ export const aiMessages = {
     },
   },
   en: {
-    notice: 'The text is processed by the AI service DeepSeek.',
+    notice: 'The text is processed by an AI service.',
     create: {
       title: 'Quick with AI',
       badge: 'AI',
@@ -470,7 +470,7 @@ export const aiMessages = {
     },
   },
   lt: {
-    notice: 'Tekstą apdoroja DI paslauga DeepSeek.',
+    notice: 'Tekstą apdoroja DI paslauga.',
     create: {
       title: 'Greitai su DI',
       badge: 'DI',
