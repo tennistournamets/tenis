@@ -239,8 +239,16 @@ function tournamentFields(raw, rawEntries, { enabledSports, sport: currentSport,
 }
 
 const QUESTIONS_MAX = 3
-function cleanQuestions(value) {
+// A question names the "tournament" key it settles ("date" for the day and start time, which
+// has no field). A key the text or the answers already give is never asked; after the
+// organizer's answers, neither is one the AI has already chosen (it kept re-asking the courts).
+function cleanQuestions(value, { given, chosen, answered }) {
   return (Array.isArray(value) ? value : [])
+    .filter(item => {
+      const field = typeof item?.field === 'string' ? item.field : null
+      if (!field) return true
+      return !Object.hasOwn(given, field) && !(answered && Object.hasOwn(chosen, field))
+    })
     .map(item => ({
       question: shortText(item?.question, 140),
       options: cleanList(item?.options, 5, 40),
@@ -257,10 +265,10 @@ const present = raw => Object.fromEntries(Object.entries(raw && typeof raw === '
  * values with the AI's suggestions for what the text left out; `suggested` names the keys that
  * came from a suggestion, so the screen can mark them. `questions` (≤ 3) ask about what matters
  * and cannot be guessed. `notices` are i18n codes of what was dropped or changed here.
- * context: { enabledSports, sport, today } — the sports on offer, the current sport and the
- * organizer's date (YYYY-MM-DD).
+ * context: { enabledSports, sport, today, answered } — the sports on offer, the current sport, the
+ * organizer's date (YYYY-MM-DD) and whether the organizer has answered earlier questions.
  */
-export function checkCreate(json, { enabledSports = SPORTS, sport: currentSport = 'tennis', today = null } = {}) {
+export function checkCreate(json, { enabledSports = SPORTS, sport: currentSport = 'tennis', today = null, answered = false } = {}) {
   if (!json || typeof json !== 'object' || (json.tournament != null && typeof json.tournament !== 'object')) {
     throw Object.assign(new Error('ai.badResponse'), { code: 'ai.badResponse' })
   }
@@ -283,7 +291,7 @@ export function checkCreate(json, { enabledSports = SPORTS, sport: currentSport 
   return {
     fields: merged.fields,
     suggested,
-    questions: cleanQuestions(json.questions),
+    questions: cleanQuestions(json.questions, { given: present(json.tournament), chosen: present(json.suggested), answered }),
     participants: { entries: list.entries, unparsed: list.unparsed },
     remarks: list.remarks,
     notices: [...notices],
