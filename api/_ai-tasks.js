@@ -6,7 +6,7 @@
 //     check(json, { input, context }) -> result }   // throws AiError('ai.badResponse') when unusable
 // Keys match the feature switches (`ai.<task>`) and the task check in ai_begin_call().
 // Each feature adds its task here.
-import { checkCreate, checkImport, checkScore } from '../src/lib/aiSchemas.js'
+import { checkCreate, checkImport, checkPosts, checkScore } from '../src/lib/aiSchemas.js'
 import { SPORTS } from '../src/lib/sportConfig.js'
 import { AiError } from './_ai-errors.js'
 
@@ -153,6 +153,39 @@ export function scorePrompt(input, context) {
   }
 }
 
+const POST_LANGUAGES = { ru: 'Russian', en: 'English', lt: 'Lithuanian' }
+const FACTS_MAX = 12000
+
+// The facts as the browser worked them out; too big a payload is cut to the essentials.
+function postFacts(context) {
+  const facts = context.facts && typeof context.facts === 'object' && !Array.isArray(context.facts) ? context.facts : {}
+  const json = JSON.stringify(facts)
+  return json.length <= FACTS_MAX ? json : JSON.stringify({ ...facts, results: (facts.results ?? []).slice(0, 4), next: [] }).slice(0, FACTS_MAX)
+}
+const postTokens = context => [...new Set(postFacts(context).match(/\bP\d{1,3}\b/g) ?? [])]
+
+export function postsPrompt(input, context) {
+  const lang = POST_LANGUAGES[context.postLanguage] ?? POST_LANGUAGES[context.locale] ?? 'Lithuanian'
+  const system = [
+    'You write short social media posts for an amateur sports club about its tournament: friendly, lively, never pompous.',
+    'Reply with json only: {"instagram":"…","facebook":"…","whatsapp":"…"}.',
+    'Rules:',
+    '- Use only the facts given (and the organizer\'s note, if any). Never invent scores, players, dates, prizes, sponsors or places.',
+    '- Participants appear only as tokens P1, P2, … ("P1 / P2" is a pair). Write the tokens exactly as given; the app puts the names in later. Place each token where a name keeps its basic form: after a colon or a dash, in a list, or as the subject of a sentence ("P1 laimėjo finalą", "Чемпион — P1"), never as an object or after a preposition, because Lithuanian and Russian decline names.',
+    '- A result is "winner", "loser" and the score from the winner\'s side ("P3 — P1 6:4 6:2"); "draw" lists both sides. Opponents are joined with " — " or "vs", never with "/" (that means a pair).',
+    '- Keep scores exactly as in the facts. "moment": "results" — the champion first, then the final and the highlights; "round" — that round\'s results, then what comes next ("next").',
+    '- "instagram": 4–8 short lines, 2–4 fitting emoji, 3–6 hashtags on the last line (sport, city if the venue tells it, a short tag of the tournament). No link.',
+    '- "facebook": 2–3 short paragraphs, thank the players, end with "{link}" on its own line.',
+    '- "whatsapp": for the club chat, at most 6 lines, the first line in *bold* (WhatsApp asterisks), end with "{link}" on its own line.',
+    `- Write all three in ${lang}. Keep the tournament name as written.`,
+  ].join('\n')
+  const note = String(input ?? '').trim()
+  return {
+    system,
+    user: `Facts:\n${postFacts(context)}${note ? `\n\nOrganizer's note:\n<<<\n${note}\n>>>` : ''}\nWrite the posts in ${lang}.`,
+  }
+}
+
 export const TASKS = {
   create: {
     tournament: false,
@@ -175,6 +208,14 @@ export const TASKS = {
       refs: Object.fromEntries(scoreMatches(context).map(item => [item.ref, true])),
       family: familyOf(context),
     })),
+  },
+  posts: {
+    tournament: true,
+    allowEmptyInput: true,
+    maxTokens: 3000,
+    temperature: 0.7,
+    prompt: ({ input, context }) => postsPrompt(input, context),
+    check: (json, { context }) => checked(() => checkPosts(json, { tokens: postTokens(context) })),
   },
   import: {
     tournament: true,

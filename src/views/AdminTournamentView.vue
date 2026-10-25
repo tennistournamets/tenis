@@ -25,6 +25,9 @@ import ScoreEditor from '../components/ScoreEditor.vue'
 import ManualEntryForm from '../components/admin/ManualEntryForm.vue'
 import AiImportPanel from '../components/admin/AiImportPanel.vue'
 import AiScorePanel from '../components/admin/AiScorePanel.vue'
+import AiPostModal from '../components/admin/AiPostModal.vue'
+import { postMoments } from '../lib/aiPostFacts'
+import { useAiFeature } from '../lib/aiFeatures'
 import EntryContact from '../components/admin/EntryContact.vue'
 import { loadEntryContacts } from '../lib/entryContacts'
 import TournamentSettingsForm from '../components/admin/TournamentSettingsForm.vue'
@@ -139,6 +142,10 @@ const actionLoading = ref(false)
 const errorText = ref('')
 const qrModalOpen = ref(false)
 const embedModalOpen = ref(false)
+// "Post with AI" once there is something to tell: the results or a finished round.
+const aiPostsOn = useAiFeature('posts')
+const postModalOpen = ref(false)
+const canWritePost = computed(() => aiPostsOn() && postMoments({ tournament: tournament.value, matches: matches.value }, t).length > 0)
 // 'created' | 'started': the moments when organizers send the link out.
 const shareMoment = ref(null)
 const sharesPublicly = computed(() => ['public', 'link', 'password'].includes(visibilityOf(tournament.value)))
@@ -1715,6 +1722,16 @@ onBeforeUnmount(() => {
               </button>
             </span>
 
+            <button
+              v-if="canWritePost"
+              class="btn btn--outline btn--sm"
+              type="button"
+              @click="postModalOpen = true"
+            >
+              <AppIcon name="sparkles" :size="16" />
+              {{ t('ai.posts.button') }}
+            </button>
+
             <!-- The tournament's main action is a labelled button, set apart from the share icons. -->
             <span v-if="showStartButton || isTournamentActive" class="admin-tournament-overview__divider" aria-hidden="true" />
             <button
@@ -3026,6 +3043,16 @@ onBeforeUnmount(() => {
         @qr="shareToQr"
         @poster="openPoster"
         @close="shareMoment = null"
+      />
+      <AiPostModal
+        v-if="postModalOpen"
+        :tournament="tournament"
+        :matches="matches"
+        :entries-map="entriesMap"
+        :sets="matchSets"
+        :standings="standings"
+        :points-standings="pointsStandings"
+        @close="postModalOpen = false"
       />
       <EmbedCodeModal
         v-if="embedModalOpen && tournament.slug"
