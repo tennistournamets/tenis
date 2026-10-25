@@ -14,7 +14,7 @@ const begin = (ctx, actor, task, tournamentId = null) =>
 test('AI switches start off; a feature needs both the master and its own switch', async t => {
   const ctx = await createDatabase(); t.after(() => ctx.db.close())
   const rows = (await ctx.db.query("select key, enabled from feature_flags where key = 'ai' or key like 'ai.%' order by key")).rows
-  assert.deepEqual(rows.map(r => r.key), ['ai', 'ai.create', 'ai.import', 'ai.posts', 'ai.score'])
+  assert.deepEqual(rows.map(r => r.key), ['ai', 'ai.create', 'ai.import', 'ai.posts', 'ai.score', 'ai.voice'])
   assert.ok(rows.every(r => r.enabled === false))
 
   const enabled = async feature => (await asActor(ctx, 'anon', 'select is_ai_feature_enabled($1) enabled', [feature])).rows[0].enabled
@@ -59,13 +59,13 @@ test('begin checks the switches, the task and the caller\'s rights on the tourna
 test('the daily limit counts the caller\'s calls per feature; platform admins have none', async t => {
   const ctx = await createDatabase(); t.after(() => ctx.db.close())
   await setFlags(ctx, { ai: true, 'ai.create': true })
-  for (let i = 0; i < 10; i++) await begin(ctx, 'owner', 'create')
+  for (let i = 0; i < 30; i++) await begin(ctx, 'owner', 'create')
   await assert.rejects(begin(ctx, 'owner', 'create'), /ai\.limit/)
   assert.ok((await begin(ctx, 'editor', 'create')).id, 'another user has their own limit')
 
   // Calls older than 24 hours no longer count.
   await ctx.db.query("update ai_usage set created_at = now() - interval '25 hours' where user_id = $1", [ctx.actors.owner])
-  assert.equal((await begin(ctx, 'owner', 'create')).remaining, 9)
+  assert.equal((await begin(ctx, 'owner', 'create')).remaining, 29)
 
   for (let i = 0; i < 12; i++) await begin(ctx, 'platform_admin', 'create')
   assert.equal((await begin(ctx, 'platform_admin', 'create')).remaining, null)

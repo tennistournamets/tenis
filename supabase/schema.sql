@@ -13374,7 +13374,8 @@ insert into feature_flags (key, enabled, description) values
   ('ai.import', false, 'AI: participant list import'),
   ('ai.create', false, 'AI: tournament from text'),
   ('ai.score', false, 'AI: score entry by voice or text'),
-  ('ai.posts', false, 'AI: social media posts')
+  ('ai.posts', false, 'AI: social media posts'),
+  ('ai.voice', false, 'AI: voice input (speech to text)')
 on conflict (key) do nothing;
 
 create or replace function is_ai_feature_enabled(p_feature text)
@@ -13384,7 +13385,7 @@ stable
 security definer
 set search_path = public
 as $$
-  select coalesce(p_feature in ('import', 'create', 'score', 'posts'), false)
+  select coalesce(p_feature in ('import', 'create', 'score', 'posts', 'voice'), false)
     and is_feature_enabled('ai')
     and is_feature_enabled('ai.' || p_feature);
 $$;
@@ -13395,7 +13396,7 @@ grant execute on function is_ai_feature_enabled(text) to anon, authenticated;
 create table if not exists ai_usage (
   id uuid primary key default gen_random_uuid(),
   user_id uuid references auth.users (id) on delete set null,
-  task text not null check (task in ('import', 'create', 'score', 'posts')),
+  task text not null check (task in ('import', 'create', 'score', 'posts', 'voice')),
   tournament_id uuid references tournaments (id) on delete set null,
   created_at timestamptz not null default now(),
   finished_at timestamptz,
@@ -13426,10 +13427,11 @@ immutable
 set search_path = public
 as $$
   select case p_task
-    when 'create' then 10
+    when 'create' then 30
     when 'import' then 20
     when 'score' then 300
     when 'posts' then 30
+    when 'voice' then 60
   end;
 $$;
 
@@ -13460,6 +13462,10 @@ begin
   if p_task = 'create' then
     if p_tournament_id is not null then
       raise exception using errcode = '22023', message = 'ai.badTask';
+    end if;
+  elsif p_task = 'voice' then
+    if p_tournament_id is not null and not can_live_score(p_tournament_id) then
+      raise exception using errcode = '42501', message = 'ai.forbidden';
     end if;
   elsif p_tournament_id is null
     or (p_task = 'score' and not can_live_score(p_tournament_id))

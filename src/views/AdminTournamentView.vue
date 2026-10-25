@@ -1625,11 +1625,12 @@ onMounted(async () => {
   syncTabFromHash()
 
   // Wizard redirect flags are consumed once; strip them so refresh doesn't repeat them.
-  const { qr, regfail, created, ...rest } = route.query
+  const { qr, regfail, created, aifail, ...rest } = route.query
   if (qr === '1' && tournament.value?.slug) qrModalOpen.value = true
   else if (created === '1' && tournament.value?.slug) shareMoment.value = 'created'
   if (regfail === '1') errorText.value = t('registrationRules.wizardSaveFailed')
-  if (qr !== undefined || regfail !== undefined || created !== undefined) router.replace(adminRouteLocation(rest))
+  else if (Number(aifail) > 0) errorText.value = t('ai.create.participantsFailed', { n: Number(aifail) })
+  if (qr !== undefined || regfail !== undefined || created !== undefined || aifail !== undefined) router.replace(adminRouteLocation(rest))
 })
 
 onBeforeUnmount(() => {

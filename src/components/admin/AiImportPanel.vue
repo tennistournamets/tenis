@@ -9,9 +9,9 @@ import AiTextSource from './AiTextSource.vue'
 import ParticipantImportPreview from './ParticipantImportPreview.vue'
 import { callAi } from '../../lib/ai'
 import { useAiFeature } from '../../lib/aiFeatures'
-import { cleanContact, entryShape, importRow, nameKey } from '../../lib/aiSchemas'
+import { entryShape, importRow, importRowProblem, nameKey } from '../../lib/aiSchemas'
 import { errorMessage } from '../../lib/errorMessages'
-import { entryNamesError, registrationError } from '../../lib/registrationRules'
+import { registrationError } from '../../lib/registrationRules'
 import { scoringFamily } from '../../lib/sportConfig'
 import { confirmDialog } from '../../lib/confirmDialog'
 import { supabase } from '../../lib/supabase'
@@ -25,6 +25,7 @@ const props = defineProps({
 const emit = defineEmits(['update:busy', 'saved'])
 const { t, locale } = useI18n()
 const aiImportOn = useAiFeature('import')
+const aiVoiceOn = useAiFeature('voice')
 
 const SAVE_LIMIT = 128
 const open = ref(false)
@@ -100,20 +101,12 @@ function editText() {
   resetResult()
 }
 
-// Client checks mirror add_manual_entry(); the server still decides.
 function checkRows() {
   let problems = 0
   rows.value = rows.value.map(row => {
-    const members = row.members.map(name => String(name ?? '').trim()).filter(Boolean)
-    let rowError = ''
-    if (shape.value === 'pair' && !team.value && members.length < 2) rowError = t('ai.import.incomplete')
-    else {
-      const key = entryNamesError(shape.value === 'single' ? 'singles' : 'doubles', members[0], members[1] ?? '')
-      if (key) rowError = t(key)
-      else if (row.contact && !cleanContact(row.contact)) rowError = t('registrationForm.invalidContact')
-    }
-    if (rowError) problems++
-    return { ...row, members, error: rowError }
+    const problem = importRowProblem(row, { shape: shape.value, team: team.value })
+    if (problem) problems++
+    return { ...row, members: row.members.map(name => String(name ?? '').trim()).filter(Boolean), error: problem ? t(problem) : '' }
   })
   return problems
 }
@@ -207,6 +200,8 @@ async function save() {
           :label="t('ai.import.label')"
           :placeholder="t('ai.import.placeholder')"
           :disabled="disabled"
+          :voice="aiVoiceOn()"
+          :tournament-id="tournament.id"
         />
         <div class="ai-import__actions">
           <button type="button" class="btn btn--primary" :disabled="disabled || !text.trim()" @click="recognize">

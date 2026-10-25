@@ -23,7 +23,7 @@ There are two roles:
 - **Tournaments you create:** name, venue and its address, dates and schedule, rules, registration settings, results. Optionally a contact phone and email, which are published only if you turn on "show contact".
 - **Co-organizers:** when you add someone by email, we store only a link to their existing account.
 - **Sponsorship:** requests to enable sponsors (your message and the decision), sponsor names, links, captions and images you upload.
-- **AI features** (when the platform has switched them on): text or a file you send to an AI feature yourself (a tournament description, a participant list, a phrase with a score) goes to the DeepSeek service to be turned into settings, a list or a score. We keep only the fact of the request: which feature, when and how many tokens, without the text itself.
+- **AI features** (when the platform has switched them on): text or a file you send to an AI feature yourself (a tournament description, a participant list, a phrase with a score) goes to the DeepSeek service to be turned into settings, a list or a score. We keep only the fact of the request: which feature, when and how many tokens, without the text itself. A voice recording (the “Dictate” button) goes to the Groq service to become text; we do not keep it, the log holds only its length in seconds. Pictures and files are read in the browser, only their text is sent.
 
 ### Participants
 
@@ -70,6 +70,7 @@ We do not sell personal data, do not use it for advertising profiles and do not 
 | Google | Sign-in with Google; fonts loaded from Google servers (your browser sends its IP address to Google) | USA / global |
 | IndexNow (Bing and others) | Notifying search engines about new public pages; only page addresses are sent | USA / global |
 | DeepSeek | Reading text for AI features, only when the organizer starts one | China |
+| Groq | Turning speech into text for the “Dictate” button, only while the organizer records; we do not keep the recording | USA |
 
 Where a provider is outside the European Economic Area, the transfer relies on the EU–US Data Privacy Framework or the European Commission's standard contractual clauses.
 

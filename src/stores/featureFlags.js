@@ -3,6 +3,8 @@ import { supabase } from '../lib/supabase'
 import { SPORTS, sportFlagKey } from '../lib/sportConfig'
 
 let realtimeChannel = null
+// The load in flight: a second caller waits for it instead of returning before the flags exist.
+let pendingLoad = null
 
 // Platform-wide feature flags (table `feature_flags`, super-admin managed).
 // Unknown keys are treated as disabled, so every new sport must be switched on explicitly.
@@ -37,7 +39,12 @@ export const useFeatureFlagsStore = defineStore('featureFlags', {
 
     async load({ force = false } = {}) {
       if (this.loaded && !force) return
-      if (this.loading) return
+      if (pendingLoad) return pendingLoad
+      pendingLoad = this.fetchFlags().finally(() => { pendingLoad = null })
+      return pendingLoad
+    },
+
+    async fetchFlags() {
       this.loading = true
       this.error = null
       try {

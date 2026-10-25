@@ -17,14 +17,15 @@ import AppIcon from '../components/AppIcon.vue'
 import FormatPicker from '../components/FormatPicker.vue'
 import TennisRulesSettings from '../components/TennisRulesSettings.vue'
 import RegistrationRulesFields from '../components/admin/RegistrationRulesFields.vue'
-import { hasRegistrationRules, pickRegistrationDraft, registrationDraftFields, registrationPatch, validateRegistrationForm, organizerContactError } from '../lib/registrationRules'
+import { pickRegistrationDraft, validateRegistrationForm, organizerContactError } from '../lib/registrationRules'
 import { CREATE_VISIBILITY_MODES } from '../lib/access'
-import { DEFAULT_TENNIS_RULES, tennisRulesSummary } from '../lib/tennisRules'
+import { tennisRulesSummary } from '../lib/tennisRules'
 import VenueFields from '../components/admin/VenueFields.vue'
 import { restoreDraftFields, deadlineInPast } from '../lib/wizardDraft'
 import { track } from '../lib/analytics'
 import { errorMessage } from '../lib/errorMessages'
 import { confirmDialog } from '../lib/confirmDialog'
+import { createTournamentFromForm, defaultCreateForm } from '../lib/tournamentCreate'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -48,32 +49,7 @@ const draftKey = ref('')
 const draftReady = ref(false)
 const draftRestored = ref(false)
 
-const form = reactive({
-  name: '',
-  slug: '',
-  description: '',
-  sport: 'tennis',
-  format: 'single_elimination',
-  category: 'singles',
-  set_format: 'best_of_3',
-  tiebreak_to: 7,
-  scoring_config: { tennis: { ...DEFAULT_TENNIS_RULES } },
-  gender: 'men',
-  contact_phone: '',
-  contact_email: '',
-  venue_address: '',
-  venue_lat: null,
-  venue_lng: null,
-  is_public: true,
-  visibility: 'link',
-  generate_qr: false,
-  doubles_pairing_random: false,
-  // Groups + playoff: how many leave each group; checked against the group sizes when groups are drawn.
-  advance_per_group: 2,
-  // Padel points formats: the two scores of a match add up to this total.
-  points_per_match: 24,
-  ...registrationDraftFields({}),
-})
+const form = reactive(defaultCreateForm())
 // is_public stays derived for the QR gate and the preview badge.
 watch(() => form.visibility, mode => { form.is_public = mode !== 'private' }, { immediate: true })
 
@@ -266,31 +242,10 @@ async function createTournament() {
   const category = effectiveCategory.value
 
   try {
-    const { data: newId, error } = await supabase.rpc('create_tournament', {
-      p_name: form.name,
-      p_slug: slug,
-      p_description: form.description || null,
-      p_sport: form.sport,
-      p_format: form.format,
-      p_category: category,
-      p_set_format: cfg.value.supportsSetFormat && !pointsFormat.value ? form.set_format : null,
-      p_is_public: form.is_public,
-      p_doubles_pairing_mode:
-        category === 'doubles' && cfg.value.supportsDoublesPairing ? pairingMode.value : null,
-      p_format_config: form.format === 'groups_playoff' ? { advance_per_group: Number(form.advance_per_group) || 2 } : {},
-      p_scoring_config: pointsFormat.value
-        ? { points_per_match: Number(form.points_per_match), gender: gender.value }
-        : form.sport === 'tennis'
-        ? { ...form.scoring_config, gender: gender.value }
-        : cfg.value.supportsSetFormat ? { tiebreak_to: Number(form.tiebreak_to), gender: gender.value } : { gender: gender.value },
-      p_contact_phone: form.contact_phone.trim() || null,
-      p_contact_email: form.contact_email.trim() || null,
-      p_venue_address: form.venue_address.trim() || null,
-      p_venue_lat: form.venue_lat,
-      p_venue_lng: form.venue_lng,
-    })
-
-    if (error) {
+    let result
+    try {
+      result = await createTournamentFromForm(supabase, { ...form, gender: gender.value }, { slug })
+    } catch (error) {
       if (error.code === '23505') {
         // The slug field lives on step 3; showing the error on the final step left it invisible.
         saving.value = false
@@ -298,30 +253,13 @@ async function createTournament() {
         await nextTick()
         slugError.value = t('mobile.slugTaken')
         await showCreateError(slugInput)
-      } else {
-        errorText.value = errorMessage(error, t, 'mobile.createFailed')
-        await showCreateError(formError)
+        return
       }
-      return
+      throw error
     }
-
-    if (!newId) throw new Error('Missing tournament ID')
+    const newId = result.id
     track('tournament_created', { sport: form.sport, format: form.format, category, visibility: form.visibility })
-    // Conditions are a settings patch on the fresh row (revision 0); a failure
-    // is reported on the tournament page instead of blocking the created tournament.
-    let rulesFailed = false
-    const extraPatch = {
-      ...(hasRegistrationRules(regForm) ? registrationPatch(regForm, { sport: form.sport, category }) : {}),
-      ...(form.visibility === 'public' ? { visibility: 'public' } : {}),
-    }
-    if (Object.keys(extraPatch).length) {
-      const { error: rulesError } = await supabase.rpc('update_tournament_settings', {
-        p_tournament_id: newId,
-        p_patch: extraPatch,
-        p_expected_revision: 0,
-      })
-      rulesFailed = Boolean(rulesError)
-    }
+    const rulesFailed = result.rulesFailed
     clearWizardDraft()
     unregisterDraft()
     const query = {}

@@ -4,7 +4,7 @@
 import { useFeatureFlagsStore } from '../stores/featureFlags'
 
 export const AI_FLAG = 'ai'
-export const AI_FEATURES = ['import', 'create', 'score', 'posts']
+export const AI_FEATURES = ['import', 'create', 'score', 'posts', 'voice']
 
 export const aiFlagKey = (feature) => `${AI_FLAG}.${feature}`
 

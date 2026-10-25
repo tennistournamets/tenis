@@ -6,7 +6,8 @@
 //     check(json, { input, context }) -> result }   // throws AiError('ai.badResponse') when unusable
 // Keys match the feature switches (`ai.<task>`) and the task check in ai_begin_call().
 // Each feature adds its task here.
-import { checkImport } from '../src/lib/aiSchemas.js'
+import { checkCreate, checkImport } from '../src/lib/aiSchemas.js'
+import { SPORTS } from '../src/lib/sportConfig.js'
 import { AiError } from './_ai-errors.js'
 
 // Named in English and in the language itself: with the English name alone the model kept
@@ -55,7 +56,58 @@ export function importPrompt(input, context) {
   return { system, user: `Participant list:\n<<<\n${input}\n>>>\nWrite "warnings" in ${language(context)}, not in the language of the list.` }
 }
 
+const DATE = /^\d{4}-\d{2}-\d{2}$/
+
+export function createPrompt(input, context) {
+  const sports = (Array.isArray(context.enabledSports) ? context.enabledSports : []).filter(sport => SPORTS.includes(sport))
+  const today = DATE.test(String(context.today ?? '')) ? context.today : new Date().toISOString().slice(0, 10)
+  const system = [
+    'An organizer describes a sports tournament in free text (a chat message, an announcement, notes, a dictated message), sometimes with the list of participants. Propose a complete tournament for a tournament app: what the text says, plus sensible choices for what it leaves out, plus short questions about what matters and cannot be guessed.',
+    'Reply with json only, in this shape ("name" is filled whenever the text describes a tournament; other fields are null when the text does not give them):',
+    '{"language":"lt","tournament":{"name":"Rudens lyga","sport":null,"format":null,"category":null,"pairing":null,"description":null,"venue_address":null,"contact_phone":null,"contact_email":null,"set_format":null,"tiebreak_to":null,"points_per_match":null,"gender":null,"advance_per_group":null,"capacity":null,"deadline":null,"fee":null,"waitlist":null,"courts":null},"suggested":{},"questions":[],"participants":[],"unparsed":[],"warnings":[]}',
+    'Fields:',
+    `- "sport": one of ${JSON.stringify(sports.length ? sports : SPORTS)} (tenisas/теннис = tennis, padelis/падел = padel, futbolas/футбол = football).`,
+    '- "format": "single_elimination" (knockout, olimpinė, на выбывание, плей-офф), "round_robin" (league, kiekvienas su kiekvienu, круговая), "groups_playoff" (groups then knockout), "double_elimination", or padel only: "americano", "mexicano", "team_americano" (Americano with fixed pairs), "king_of_court".',
+    '- "category": "singles" or "doubles" (pairs, poros, пары) — tennis only. "pairing": "pick_random" when partners are drawn for people who sign up alone, "pre_agreed" when pairs register together.',
+    '- "language": the language the organizer wrote in ("lt", "ru", "en", …). "name" and "description" are written in this language, not in the language of the warnings. Mixed languages are normal (Lithuanian club names and addresses in a Russian or English text): never mention languages in "warnings".',
+    '- "name": the tournament name if written; otherwise you must compose a short one from the sport, format and date (e.g. "Padelio Americano 11.15", "Парный турнир по теннису 16.11", "Autumn Tennis League") and say so in "warnings". Never a participant\'s name. Null only when the text is just a list of participants.',
+    '- "description": only what has no field of its own, for the public page in the organizer\'s language: when it is played (date, time), level, prizes, what is included, other remarks to players. Never repeat what the other fields hold (sport, format, name, club or address, points, set format, gender, places, deadline, fee, waitlist, contacts) and no participant list. A short line is fine; null when nothing is left. Example: "Парный турнир по теннису 15 ноября в 10:00, клуб SEB арена, призы победителям" → "15 ноября, 10:00. Призы победителям." (pairs, sport and club have their own fields).',
+    '- "venue_address": club and address as written. "contact_phone"/"contact_email": the organizer\'s contacts for questions or registration.',
+    '- "set_format": "best_of_3" or "best_of_5". "tiebreak_to": 7 or 10 (padel). "points_per_match": total points of one match in Americano/Mexicano/King of the Court (e.g. "to 21" → 21, "24 points" → 24).',
+    '- "gender": "men", "women" or "mixed". "advance_per_group": players advancing from each group (1–4).',
+    '- "capacity": maximum number of entries (players, pairs or teams). "waitlist": true if a waiting list is mentioned. "courts": number of courts available.',
+    `- "deadline": registration deadline as local "YYYY-MM-DDTHH:MM". Today is ${today} (${context.weekday || 'unknown weekday'}), time zone Europe/Vilnius; resolve "until Friday 20:00" from today; a date without a year is the next such date (this year if it is still ahead, else next year). A date without a time means 23:59 of that day. Not the date of the tournament itself — that goes into the description.`,
+    '- "fee": {"mode":"free"} when free; {"mode":"paid","amount":20,"currency":"EUR","unit":"player"|"pair"|"team"} when paid.',
+    '- "participants": only if the text lists participants, else []. Each: {"members":["name"] or ["name","partner"],"contact":null,"note":null}. Copy names exactly with diacritics; a pair written "A / B", "A ir B", "A и B" is one entry with two members. Team sports: the team name only.',
+    '- "unparsed": lines that look like participants but cannot be read.',
+    '- The text may be dictated or recognized from a photo: ignore stray symbols and repair only obvious recognition slips, in names and contacts too ("inbox.1t" → "inbox.lt", "gmail com" → "gmail.com"), naming each in "warnings".',
+    '- "tournament" holds only what the text (or the organizer\'s answers) says; never invent facts there.',
+    '- "suggested": the same keys as "tournament" (plus "visibility": "public"|"link"|"private"), only for what "tournament" left null and a typical amateur club tournament needs. Choose like an experienced organizer: padel, players signing up alone → "americano" (up to ~24 players) with points_per_match 24 (21 or 16 when there are many rounds or little time); padel pairs → "single_elimination" up to 8 pairs, "groups_playoff" above; tennis singles → "round_robin" up to 6 players, "single_elimination" above; football teams → "round_robin" up to 6, "groups_playoff" above; set_format "best_of_3"; courts = players ÷ 4 rounded down (at least 1) for Americano/Mexicano when the number of players is known; capacity = the listed participants rounded up to fill the courts or the bracket (a multiple of 4 for Americano, a power of two for knockout), else 16; visibility "link". Do not suggest a deadline, fee, gender, contacts or venue.',
+    '- "questions": at most 3, only about what matters for the tournament, is missing and cannot be chosen sensibly — usually the date and start time, the number of courts for Americano-style formats when the number of players is unknown, the number of places. Ask only about what applies to the chosen format: never a set format or tiebreak for Americano, Mexicano, Team Americano or King of the Court. Do not ask about anything already answered, in the text or in "suggested"; after the organizer\'s answers, ask again only if something essential is still missing. Each: {"question":"…","options":["…","…"]} with 2–4 short options (e.g. "10:00", "3", "16"). Write them in the language of the warnings. [] when nothing important is missing.',
+    `- "warnings": up to 5 short sentences about doubtful places, or []. Write them in ${language(context)}, whatever the language of the text. Do not repeat what "questions" ask and do not comment on the language of the text or the name.`,
+    '- Americano and Mexicano work with any number of players from 4: whoever has no court rests that round, so a count that is not a multiple of 4 is fine and needs no warning. Only King of the Court needs a multiple of 4 (at least 8).',
+  ].join('\n')
+  // Answers to earlier questions come back with the same text; they count as the organizer's words.
+  const answers = (Array.isArray(context.answers) ? context.answers : [])
+    .map(item => [String(item?.question ?? '').slice(0, 140).trim(), String(item?.answer ?? '').slice(0, 200).trim()])
+    .filter(([question, answer]) => question && answer)
+    .slice(0, 6)
+  const answered = answers.length ? `\nThe organizer's answers to your questions:\n${answers.map(([q, a]) => `- ${q} → ${a}`).join('\n')}` : ''
+  return { system, user: `Tournament description:\n<<<\n${input}\n>>>${answered}\nWrite "warnings" and "questions" in ${language(context)}, not in the language of the text, and say nothing about languages.` }
+}
+
 export const TASKS = {
+  create: {
+    tournament: false,
+    maxTokens: 8000,
+    temperature: 0,
+    prompt: ({ input, context }) => createPrompt(input, context),
+    check: (json, { context }) => checked(() => checkCreate(json, {
+      enabledSports: (Array.isArray(context.enabledSports) ? context.enabledSports : SPORTS).filter(sport => SPORTS.includes(sport)),
+      sport: SPORTS.includes(context.sport) ? context.sport : 'tennis',
+      today: DATE.test(String(context.today ?? '')) ? context.today : null,
+    })),
+  },
   import: {
     tournament: true,
     maxTokens: 8000,
