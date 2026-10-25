@@ -170,8 +170,8 @@ export function postsPrompt(input, context) {
     'You write short social media posts for an amateur sports club about its tournament: friendly, lively, never pompous.',
     'Reply with json only: {"instagram":"…","facebook":"…","whatsapp":"…"}.',
     'Rules:',
-    '- Use only the facts given (and the organizer\'s note, if any). Never invent scores, players, dates, prizes, sponsors or places.',
-    '- Participants appear only as tokens P1, P2, … ("P1 / P2" is a pair). Write the tokens exactly as given; the app puts the names in later. Place each token where a name keeps its basic form: after a colon or a dash, in a list, or as the subject of a sentence ("P1 laimėjo finalą", "Чемпион — P1"), never as an object or after a preposition, because Lithuanian and Russian decline names.',
+    '- Use only the facts given (and the organizer\'s note, if any). Never invent scores, players, dates, prizes, sponsors or places, and do not promise future events ("see you next year") unless the note says so.',
+    '- Participants appear only as tokens P1, P2, … ("P1 / P2" is a pair). Write the tokens exactly as given; the app puts the names in later. Place each token where a name keeps its basic form: after a colon or a dash, in a list, or as the subject of a sentence ("P1 laimėjo finalą", "Чемпион — P1"), never as an object or after a preposition, because Lithuanian and Russian decline names. Wrong: "įveikęs P2", "prieš P2", "su P2", "P1 nugalėjo P2", "у P1", "против P2", "обыграл P2", "поздравляем P1". Right: "P1 — P2 6:3 6:4", "Finalas: P1 — P2", "Čempionas — P1", "Победитель — P1". When a sentence needs the other player, write the result as a dash pair or a colon list instead.',
     '- A result is "winner", "loser" and the score from the winner\'s side ("P3 — P1 6:4 6:2"); "draw" lists both sides. Opponents are joined with " — " or "vs", never with "/" (that means a pair).',
     '- Keep scores exactly as in the facts. "moment": "results" — the champion first, then the final and the highlights; "round" — that round\'s results, then what comes next ("next").',
     '- "instagram": 4–8 short lines, 2–4 fitting emoji, 3–6 hashtags on the last line (sport, city if the venue tells it, a short tag of the tournament). No link.',
@@ -182,7 +182,7 @@ export function postsPrompt(input, context) {
   const note = String(input ?? '').trim()
   return {
     system,
-    user: `Facts:\n${postFacts(context)}${note ? `\n\nOrganizer's note:\n<<<\n${note}\n>>>` : ''}\nWrite the posts in ${lang}.`,
+    user: `Facts:\n${postFacts(context)}${note ? `\n\nOrganizer's note:\n<<<\n${note}\n>>>` : ''}\nWrite the posts in ${lang}. Tokens only in their basic form: "P1 — P2 6:3", never "įveikęs P2", "prieš P2" or "обыграл P2".`,
   }
 }
 
@@ -213,7 +213,7 @@ export const TASKS = {
     tournament: true,
     allowEmptyInput: true,
     maxTokens: 3000,
-    temperature: 0.7,
+    temperature: 0.3,
     prompt: ({ input, context }) => postsPrompt(input, context),
     check: (json, { context }) => checked(() => checkPosts(json, { tokens: postTokens(context) })),
   },

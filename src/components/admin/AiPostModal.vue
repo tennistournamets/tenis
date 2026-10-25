@@ -32,6 +32,7 @@ const language = ref(LANGUAGES.includes(locale.value) ? locale.value : 'lt')
 const note = ref('')
 const posts = ref(null)
 const unknownNames = ref(false)
+const checkNames = ref(false)
 const working = ref(false)
 const error = ref('')
 const copied = ref('')
@@ -60,6 +61,7 @@ async function generate() {
     })
     posts.value = Object.fromEntries(POST_CHANNELS.map(channel => [channel, restorePost(result.posts[channel], { names, link: linkFor(channel) })]))
     unknownNames.value = result.unknownNames
+    checkNames.value = result.checkNames
     track('ai_post_generated', { moment: moment.value.startsWith('round') ? 'round' : 'results' })
   } catch (err) {
     error.value = errorMessage(err, t, 'ai.errors.unavailable')
@@ -130,6 +132,7 @@ const whatsappHref = computed(() => (posts.value?.whatsapp ? `https://wa.me/?tex
 
         <p v-if="error" class="alert alert--error" role="alert">{{ error }}</p>
         <p v-if="unknownNames" class="alert alert--warning" role="status">{{ t('ai.posts.unknownNames') }}</p>
+        <p v-if="checkNames" class="alert alert--warning" role="status">{{ t('ai.posts.checkNames') }}</p>
 
         <div v-if="posts" class="ai-post__list">
           <section v-for="channel in POST_CHANNELS" :key="channel" class="ai-post__card">
