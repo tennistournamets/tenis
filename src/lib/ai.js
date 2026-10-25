@@ -1,6 +1,7 @@
 // Calls the server AI function (api/ai.js) as the signed-in organizer. Errors carry a code
 // (`ai.limit`, `ai.disabled`, ...) that errorMessage() translates through src/i18n/ai.js.
 import { supabase } from './supabase'
+import { TEXT_MAX } from './aiFileText'
 
 export class AiCallError extends Error {
   constructor(code) {
@@ -20,7 +21,8 @@ export async function callAi(task, { input = '', context = {}, signal } = {}) {
     response = await fetch('/api/ai', {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ task, input, context }),
+      // Longer text is cut here, as the field warns (the server refuses it whole).
+      body: JSON.stringify({ task, input: String(input).slice(0, TEXT_MAX), context }),
       signal,
     })
   } catch (error) {
