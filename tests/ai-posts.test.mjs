@@ -84,6 +84,11 @@ test('the answer keeps three trimmed texts and flags unknown participants', () =
   assert.equal(checkPosts({ instagram: 'P2 wins' }, { tokens: ['P1'] }).unknownNames, true)
   assert.equal(checkPosts({ instagram: 'x'.repeat(3000) }).posts.instagram.length, 2200)
   assert.throws(() => checkPosts({ instagram: ' ' }), /ai.badResponse/)
+  assert.equal(result.checkNames, false)
+  assert.equal(checkPosts({ facebook: 'Finale įveikęs P2 rezultatu 6:2' }, { tokens: ['P2'] }).checkNames, true)
+  assert.equal(checkPosts({ facebook: 'Финал выиграл P1, обыграв P2' }, { tokens: ['P1', 'P2'] }).checkNames, true)
+  assert.equal(checkPosts({ facebook: 'Pusfinalis prieš\nP3' }, { tokens: ['P3'] }).checkNames, true)
+  assert.equal(checkPosts({ facebook: 'Čempionas — P1\nFinalas: P1 — P2 6:2 6:4\nP1 laimėjo finalą' }, { tokens: ['P1', 'P2'] }).checkNames, false)
 })
 
 test('the posts prompt carries the facts, the language and the token rule', () => {
@@ -93,6 +98,9 @@ test('the posts prompt carries the facts, the language and the token rule', () =
   assert.match(user, /Write the posts in Russian/)
   assert.doesNotMatch(user, /Organizer's note/)
   assert.match(system, /never as an object or after a preposition/)
+  assert.match(system, /Wrong: "įveikęs P2"/)
+  assert.match(system, /do not promise future events/)
+  assert.equal(TASKS.posts.temperature, 0.3)
   assert.match(system, /\{link\}/)
   assert.match(postsPrompt('Ačiū klubui', { facts }).user, /Organizer's note:\n<<<\nAčiū klubui\n>>>/)
 })

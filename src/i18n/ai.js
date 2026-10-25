@@ -101,6 +101,7 @@ export const aiMessages = {
       openWhatsapp: 'Открыть WhatsApp',
       copy: 'Копировать',
       copied: 'Скопировано',
+      checkNames: 'Проверьте окончания имён: в тексте имя стоит там, где его нужно склонять.',
       copyFailed: 'Не удалось скопировать: текст выделен, скопируйте его вручную.',
     },
     score: {
@@ -336,6 +337,7 @@ export const aiMessages = {
       openWhatsapp: 'Open WhatsApp',
       copy: 'Copy',
       copied: 'Copied',
+      checkNames: 'Check the name endings: a name sits where Lithuanian or Russian would decline it.',
       copyFailed: 'Could not copy: the text is selected, copy it by hand.',
     },
     score: {
@@ -571,6 +573,7 @@ export const aiMessages = {
       openWhatsapp: 'Atidaryti WhatsApp',
       copy: 'Kopijuoti',
       copied: 'Nukopijuota',
+      checkNames: 'Patikrinkite vardų galūnes: tekste vardas pavartotas ten, kur jį reikia linksniuoti.',
       copyFailed: 'Nepavyko nukopijuoti: tekstas pažymėtas, nukopijuokite jį ranka.',
     },
     score: {

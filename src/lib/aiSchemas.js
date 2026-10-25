@@ -356,22 +356,28 @@ export function checkScore(json, { refs = {}, family = 'sets' } = {}) {
 
 export const POST_CHANNELS = ['instagram', 'facebook', 'whatsapp']
 const POST_MAX = 2200
+// A token right after a word that declines the name ("prieš P2", "обыграл P2"): the name goes in
+// as written, in the wrong case, so the screen asks to check its ending.
+const DECLINED = /(?:^|[\s(«"])(?:prieš|su|be|apie|įveik\p{L}*|nugalėj\p{L}*|sveikin\p{L}*|у|с|против|над|для|обыгра\p{L}*|победил\p{L}*|поздравля\p{L}*)\s+P\d/iu
 
 /**
- * "Social posts" answer -> { posts: { instagram, facebook, whatsapp }, unknownNames }. Texts are
- * trimmed and cut to Instagram's caption limit; `unknownNames` is true when a text names a
- * participant token the facts did not have (`tokens`), which the screen then points out.
+ * "Social posts" answer -> { posts: { instagram, facebook, whatsapp }, unknownNames, checkNames }.
+ * Texts are trimmed and cut to Instagram's caption limit; `unknownNames` is true when a text
+ * names a participant token the facts did not have (`tokens`), `checkNames` when a name sits
+ * where Lithuanian or Russian would decline it; the screen points both out.
  */
 export function checkPosts(json, { tokens = [] } = {}) {
   if (!json || typeof json !== 'object') throw Object.assign(new Error('ai.badResponse'), { code: 'ai.badResponse' })
   const known = new Set(tokens)
   const posts = {}
   let unknownNames = false
+  let checkNames = false
   for (const channel of POST_CHANNELS) {
     const value = text(json[channel]).replace(/\r\n?/g, '\n').replace(/\n{3,}/g, '\n\n').trim().slice(0, POST_MAX)
     posts[channel] = value
     for (const [token] of value.matchAll(/\bP\d{1,3}\b/g)) if (!known.has(token)) unknownNames = true
+    if (DECLINED.test(value)) checkNames = true
   }
   if (!POST_CHANNELS.some(channel => posts[channel])) throw Object.assign(new Error('ai.badResponse'), { code: 'ai.badResponse' })
-  return { posts, unknownNames }
+  return { posts, unknownNames, checkNames }
 }
