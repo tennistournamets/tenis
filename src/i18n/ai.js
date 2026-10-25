@@ -140,7 +140,7 @@ export const aiMessages = {
       },
       features: {
         import: { title: 'Импорт участников', hint: 'Список из текста или файла во вкладке участников.' },
-        create: { title: 'Турнир из текста', hint: 'Мастер создания заполняется по описанию, вместе со списком участников.' },
+        create: { title: 'Турнир из текста', hint: 'Экран «Быстро с AI»: турнир по описанию словами, голосом или файлом, вместе со списком участников.' },
         score: { title: 'Ввод счёта голосом или текстом', hint: 'Для организаторов и судей у корта.' },
         posts: { title: 'Посты для соцсетей', hint: 'Тексты с итогами раунда и турнира.' },
         voice: { title: 'Голосовой ввод', hint: 'Кнопка «Надиктовать» у AI-полей: речь в текст через Groq Whisper.' },
@@ -304,7 +304,7 @@ export const aiMessages = {
       },
       features: {
         import: { title: 'Participant import', hint: 'A list from text or a file in the participants tab.' },
-        create: { title: 'Tournament from text', hint: 'Fills the create wizard from a description, together with the participant list.' },
+        create: { title: 'Tournament from text', hint: 'The "Quick with AI" screen: a tournament from a description in words, by voice or from a file, with the participant list.' },
         score: { title: 'Score entry by voice or text', hint: 'For organizers and score keepers at the court.' },
         posts: { title: 'Social media posts', hint: 'Texts with round and tournament results.' },
         voice: { title: 'Voice input', hint: '“Dictate” next to AI fields: speech to text with Groq Whisper.' },
@@ -468,7 +468,7 @@ export const aiMessages = {
       },
       features: {
         import: { title: 'Dalyvių importas', hint: 'Sąrašas iš teksto ar failo dalyvių skiltyje.' },
-        create: { title: 'Turnyras iš teksto', hint: 'Kūrimo vedlys užpildomas pagal aprašymą kartu su dalyvių sąrašu.' },
+        create: { title: 'Turnyras iš teksto', hint: 'Ekranas „Greitai su DI“: turnyras pagal aprašymą žodžiais, balsu ar failu kartu su dalyvių sąrašu.' },
         score: { title: 'Rezultato įvedimas balsu ar tekstu', hint: 'Organizatoriams ir rezultatų teisėjams prie korto.' },
         posts: { title: 'Įrašai socialiniams tinklams', hint: 'Tekstai su rato ir turnyro rezultatais.' },
         voice: { title: 'Balso įvestis', hint: 'Mygtukas „Padiktuoti“ prie DI laukelių: kalba į tekstą per Groq Whisper.' },

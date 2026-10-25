@@ -122,3 +122,25 @@ test('answers to questions go back to the model with the text', async () => {
   assert.match(system, /"suggested"/)
   assert.match(system, /"questions": at most 3/)
 })
+
+test('questions about what the text gives are dropped; after answers, so are those about chosen values', () => {
+  const json = {
+    tournament: { sport: 'padel', format: 'americano', points_per_match: 21 },
+    suggested: { courts: 2, capacity: 8 },
+    questions: [
+      { field: 'points_per_match', question: 'Kiek taškų?', options: ['16', '21'] },
+      { field: 'courts', question: 'Kiek kortų?', options: ['1', '2'] },
+      { field: 'date', question: 'Kada pradžia?', options: ['10:00'] },
+      { question: 'Be lauko?', options: [] },
+    ],
+  }
+  assert.deepEqual(checkCreate(json, enabled).questions.map(item => item.question), ['Kiek kortų?', 'Kada pradžia?', 'Be lauko?'])
+  assert.deepEqual(checkCreate(json, { ...enabled, answered: true }).questions.map(item => item.question), ['Kada pradžia?', 'Be lauko?'])
+})
+
+test('the create task tells the check whether the organizer has answered', async () => {
+  const { TASKS } = await import('../api/_ai-tasks.js')
+  const json = { tournament: { sport: 'padel' }, suggested: { courts: 2 }, questions: [{ field: 'courts', question: 'Q', options: [] }] }
+  assert.equal(TASKS.create.check(json, { context: { enabledSports: ['padel'] } }).questions.length, 1)
+  assert.equal(TASKS.create.check(json, { context: { enabledSports: ['padel'], answers: [{ question: 'Q0', answer: 'A' }] } }).questions.length, 0)
+})
