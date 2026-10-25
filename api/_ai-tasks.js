@@ -6,7 +6,7 @@
 //     check(json, { input, context }) -> result }   // throws AiError('ai.badResponse') when unusable
 // Keys match the feature switches (`ai.<task>`) and the task check in ai_begin_call().
 // Each feature adds its task here.
-import { checkCreate, checkImport } from '../src/lib/aiSchemas.js'
+import { checkCreate, checkImport, checkScore } from '../src/lib/aiSchemas.js'
 import { SPORTS } from '../src/lib/sportConfig.js'
 import { AiError } from './_ai-errors.js'
 
@@ -14,6 +14,8 @@ import { AiError } from './_ai-errors.js'
 // answering in the list's language.
 const LANGUAGES = { ru: 'Russian (на русском языке)', en: 'English', lt: 'Lithuanian (lietuvių kalba)' }
 const SHAPES = ['single', 'pair', 'pairOptional']
+const FAMILIES = ['sets', 'goals', 'points']
+const SCORE_MATCHES_MAX = 150
 
 const language = context => LANGUAGES[context.locale] ?? LANGUAGES.lt
 const shapeOf = context => (SHAPES.includes(context.shape) ? context.shape : 'single')
@@ -97,6 +99,60 @@ export function createPrompt(input, context) {
   return { system, user: `Tournament description:\n<<<\n${input}\n>>>${answered}\nWrite "warnings" and "questions" in ${language(context)}, not in the language of the text, and say nothing about languages.` }
 }
 
+// The open matches as the browser listed them: short references, headings, side names.
+function scoreMatches(context) {
+  return (Array.isArray(context.matches) ? context.matches : [])
+    .slice(0, SCORE_MATCHES_MAX)
+    .map(item => ({
+      ref: String(item?.ref ?? '').slice(0, 8),
+      heading: String(item?.heading ?? '').replace(/\s+/g, ' ').slice(0, 80),
+      a: String(item?.a ?? '').replace(/\s+/g, ' ').slice(0, 120),
+      b: String(item?.b ?? '').replace(/\s+/g, ' ').slice(0, 120),
+    }))
+    .filter(item => /^m\d+$/.test(item.ref))
+}
+
+const familyOf = context => (FAMILIES.includes(context.family) ? context.family : 'sets')
+
+const SCORE_SHAPE = {
+  sets: '"sets":[{"a":6,"b":4},{"a":7,"b":6,"tb":{"a":7,"b":5}}]',
+  points: '"score":{"a":21,"b":15}',
+  goals: '"score":{"a":2,"b":2},"pens":{"a":4,"b":3}',
+}
+
+export function scorePrompt(input, context) {
+  const family = familyOf(context)
+  const target = Number.isInteger(Number(context.target)) ? Number(context.target) : null
+  const setFormat = context.setFormat === 'best_of_5' ? 'best of 5 sets' : 'best of 3 sets'
+  const finalSet = typeof context.finalSet === 'string' && /^match_tiebreak_\d+$/.test(context.finalSet)
+    ? ` The deciding set is a match tie-break to ${context.finalSet.split('_').at(-1)} points: give its points as the set, e.g. {"a":10,"b":8}.`
+    : ''
+  const rules = {
+    sets: `- Tennis/padel, ${setFormat}.${finalSet} Each set is games {"a":6,"b":4}; add "tb" only when tie-break points are said ("7:6 (7:5)", "septyni šeši, tie-breakas septyni penki").`,
+    points: `- Points format: the two scores of a match add up to ${target ?? 'the target'}. If only the winner\'s points or one side\'s points are said, the other side has the rest.`,
+    goals: '- Football: goals per side; "pens" only for a draw decided by a penalty shootout, else null.',
+  }
+  const system = [
+    'An organizer or a referee at the court says or types results of tournament matches, often by voice (the text can be a speech transcript with garbled names). Find the listed match each result belongs to and read its score.',
+    'Reply with json only, in this shape:',
+    `{"results":[{"match":"m3","candidates":[],"heard":"Petraitis Kazlauskas šeši keturi šeši trys","winner":"a",${SCORE_SHAPE[family]}}],"unmatched":[],"warnings":[]}`,
+    'Rules:',
+    '- "match": the reference ("m1", "m2", …) of the listed match the result belongs to. Players are named by surname, first name or nickname, in any grammatical case (Lithuanian "Petraičio", "Petraičiui" = Petraitis; Russian "Иванова", "Иванову" = Иванов), with recognition slips; match them by sound and spelling. A court or round, when said, narrows the choice. Rounds are played in order: when only a court is said, it is the earliest listed round with that court.',
+    '- If a result fits two or more matches equally, "match": null and "candidates": their references. If it fits none, put that piece of text into "unmatched" instead of a result.',
+    '- Numbers are given as seen from side "a" of that match as listed: the first number belongs to "a". When the text names side "b" first ("Kazlauskas beat Petraitis 6:4", with Petraitis listed as "a"), swap so each side keeps its own numbers. "winner": the side the text says won ("a" or "b"), else null.',
+    '- Numbers may be words in any language ("šeši keturi", "шесть четыре", "six four") or digits with ":", "-", "/" or spaces.',
+    rules[family],
+    '- "heard": the piece of the text this result came from, as written.',
+    '- One text may hold several results; return one item per match, in the order said. Never invent a score that is not said.',
+    `- "warnings": only real doubts the person must check (a name that might be another player, a number that might be misheard), up to 3 short sentences, else []. Never explain routine steps: a missing winner, swapped sides, a computed other score, an ignored phrase. Name matches by players as listed (same spelling and alphabet), never by reference (m1, m2). Write them in ${language(context)}.`,
+  ].join('\n')
+  const list = scoreMatches(context).map(item => `${item.ref} | ${item.heading} | a: ${item.a} | b: ${item.b}`).join('\n')
+  return {
+    system,
+    user: `Matches waiting for a result:\n${list || '(none)'}\n\nWhat was said:\n<<<\n${input}\n>>>\nWrite "warnings" in ${language(context)}.`,
+  }
+}
+
 export const TASKS = {
   create: {
     tournament: false,
@@ -108,6 +164,16 @@ export const TASKS = {
       sport: SPORTS.includes(context.sport) ? context.sport : 'tennis',
       today: DATE.test(String(context.today ?? '')) ? context.today : null,
       answered: Array.isArray(context.answers) && context.answers.length > 0,
+    })),
+  },
+  score: {
+    tournament: true,
+    maxTokens: 4000,
+    temperature: 0,
+    prompt: ({ input, context }) => scorePrompt(input, context),
+    check: (json, { context }) => checked(() => checkScore(json, {
+      refs: Object.fromEntries(scoreMatches(context).map(item => [item.ref, true])),
+      family: familyOf(context),
     })),
   },
   import: {

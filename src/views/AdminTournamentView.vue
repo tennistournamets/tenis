@@ -24,6 +24,7 @@ import ShareTournamentModal from '../components/ShareTournamentModal.vue'
 import ScoreEditor from '../components/ScoreEditor.vue'
 import ManualEntryForm from '../components/admin/ManualEntryForm.vue'
 import AiImportPanel from '../components/admin/AiImportPanel.vue'
+import AiScorePanel from '../components/admin/AiScorePanel.vue'
 import EntryContact from '../components/admin/EntryContact.vue'
 import { loadEntryContacts } from '../lib/entryContacts'
 import TournamentSettingsForm from '../components/admin/TournamentSettingsForm.vue'
@@ -2743,6 +2744,18 @@ onBeforeUnmount(() => {
         class="tab-panel"
         :class="{ 'tab-panel--active': activeTab === 'scores' }"
       >
+        <AiScorePanel
+          v-if="!isTournamentFinished && canEditScores"
+          :tournament="tournament"
+          :matches="matches"
+          :entries-map="entriesMap"
+          :live-scores-by-match="liveScoresByMatch"
+          :groups="groups"
+          :can-edit="canEditFinalScores"
+          :busy="actionLoading"
+          @update:busy="actionLoading = $event"
+          @saved="refreshScoreData"
+        />
         <section v-if="isTournamentFinished" class="card empty-state">
           <AppIcon name="trophy" :size="28" class="empty-state__icon" />
           <h2 class="empty-state__title">{{ t('lifecycle.completedTitle') }}</h2>

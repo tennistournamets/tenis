@@ -17,6 +17,8 @@ const props = defineProps({
   // Show "Dictate" (the `ai.voice` switch is on); the recording counts for this tournament.
   voice: Boolean,
   tournamentId: { type: String, default: null },
+  // "Attach file" (lists, announcements); off where only short spoken text makes sense.
+  files: { type: Boolean, default: true },
 })
 const emit = defineEmits(['update:modelValue'])
 const { t } = useI18n()
@@ -89,7 +91,7 @@ async function onFile(event) {
         />
       </div>
     </div>
-    <div class="ai-source__bar">
+    <div v-if="files" class="ai-source__bar">
       <button type="button" class="btn btn--outline btn--sm" :disabled="disabled || reading || dictating" @click="pickFile">
         <AppIcon name="attach" :size="16" />
         {{ !reading ? t('ai.source.attach') : progress == null ? t('ai.source.reading') : t('ai.source.readingImage', { percent: progress }) }}

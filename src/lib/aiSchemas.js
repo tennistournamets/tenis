@@ -297,3 +297,57 @@ export function checkCreate(json, { enabledSports = SPORTS, sport: currentSport 
     notices: [...notices],
   }
 }
+
+const SCORE_RESULTS_MAX = 24
+const SCORE_SETS_MAX = 5
+const score = value => (value == null || value === '' ? null : wholeNumber(value, 0, 999))
+
+// One side's numbers of a set or a match: integers 0–999, else null.
+function scorePair(raw) {
+  if (Array.isArray(raw)) raw = { a: raw[0], b: raw[1] }
+  if (!raw || typeof raw !== 'object') return null
+  const a = score(raw.a)
+  const b = score(raw.b)
+  if (a == null || b == null) return null
+  return { a, b }
+}
+
+/**
+ * "Score from speech or text" answer -> { results, unmatched, remarks }. Each result names a
+ * match by its reference from the list sent to the model (`refs`: ref -> anything); a result
+ * whose match is unknown is dropped, one naming several candidates keeps them for the screen.
+ * Scores are as seen from the listed side A: `sets` [{a, b, tb?: {a, b}}] for the sets family,
+ * `score` {a, b} (+ `pens` {a, b} for football) otherwise. `winner` is the side the text says
+ * won ('a' | 'b' | null), so the screen can catch a score read the wrong way round.
+ */
+export function checkScore(json, { refs = {}, family = 'sets' } = {}) {
+  if (!json || !Array.isArray(json.results)) throw Object.assign(new Error('ai.badResponse'), { code: 'ai.badResponse' })
+  const known = ref => (typeof ref === 'string' && Object.hasOwn(refs, ref) ? ref : null)
+  const results = []
+  const unmatched = cleanList(json.unmatched, UNPARSED_MAX, REMARK_MAX)
+  for (const raw of json.results.slice(0, SCORE_RESULTS_MAX)) {
+    if (!raw || typeof raw !== 'object') continue
+    const heard = shortText(raw.heard, REMARK_MAX)
+    const match = known(raw.match)
+    const candidates = [...new Set((Array.isArray(raw.candidates) ? raw.candidates : []).map(known).filter(Boolean))].slice(0, 5)
+    if (!match && candidates.length < 2) {
+      if (heard) unmatched.push(heard)
+      continue
+    }
+    const result = { match, candidates: match ? [] : candidates, heard, winner: enumOf(raw.winner, ['a', 'b']) }
+    if (family === 'sets') {
+      result.sets = (Array.isArray(raw.sets) ? raw.sets : []).slice(0, SCORE_SETS_MAX).map(set => {
+        const games = scorePair(set)
+        if (!games) return null
+        const tb = scorePair(set?.tb)
+        return tb ? { ...games, tb } : games
+      }).filter(Boolean)
+      if (!result.sets.length) result.sets = null
+    } else {
+      result.score = scorePair(raw.score)
+      if (family === 'goals') result.pens = scorePair(raw.pens)
+    }
+    results.push(result)
+  }
+  return { results, unmatched: unmatched.slice(0, UNPARSED_MAX), remarks: cleanList(json.warnings, 5, REMARK_MAX) }
+}
