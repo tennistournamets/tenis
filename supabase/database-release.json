@@ -201,7 +201,9 @@
     },
     {
       "path": "supabase/migrations/20261024210615_ai_create_limit.sql",
-      "sha256": "117cf9776fa668261068ddeef84a5e687e7bd58293f152a9b9415a1725448302"
+      "sha256": "117cf9776fa668261068ddeef84a5e687e7bd58293f152a9b9415a1725448302",
+      "tenisAppliedVersion": "20261024210615",
+      "tenisNote": "Applied 2026-10-25 with supabase db push --db-url (session pooler) after logical backup (tenis-public-20261025-1231-pre-ai-create-limit.dump + migrations journal export); daily create limit 10 -> 30."
     }
   ],
   "baseline": {
