@@ -351,3 +351,27 @@ export function checkScore(json, { refs = {}, family = 'sets' } = {}) {
   }
   return { results, unmatched: unmatched.slice(0, UNPARSED_MAX), remarks: cleanList(json.warnings, 5, REMARK_MAX) }
 }
+
+// --- Social posts -----------------------------------------------------------------------
+
+export const POST_CHANNELS = ['instagram', 'facebook', 'whatsapp']
+const POST_MAX = 2200
+
+/**
+ * "Social posts" answer -> { posts: { instagram, facebook, whatsapp }, unknownNames }. Texts are
+ * trimmed and cut to Instagram's caption limit; `unknownNames` is true when a text names a
+ * participant token the facts did not have (`tokens`), which the screen then points out.
+ */
+export function checkPosts(json, { tokens = [] } = {}) {
+  if (!json || typeof json !== 'object') throw Object.assign(new Error('ai.badResponse'), { code: 'ai.badResponse' })
+  const known = new Set(tokens)
+  const posts = {}
+  let unknownNames = false
+  for (const channel of POST_CHANNELS) {
+    const value = text(json[channel]).replace(/\r\n?/g, '\n').replace(/\n{3,}/g, '\n\n').trim().slice(0, POST_MAX)
+    posts[channel] = value
+    for (const [token] of value.matchAll(/\bP\d{1,3}\b/g)) if (!known.has(token)) unknownNames = true
+  }
+  if (!POST_CHANNELS.some(channel => posts[channel])) throw Object.assign(new Error('ai.badResponse'), { code: 'ai.badResponse' })
+  return { posts, unknownNames }
+}
