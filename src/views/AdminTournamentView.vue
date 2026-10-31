@@ -32,6 +32,8 @@ import EntryContact from '../components/admin/EntryContact.vue'
 import { loadEntryContacts } from '../lib/entryContacts'
 import EntryRatings from '../components/admin/EntryRatings.vue'
 import EntryRatingsModal from '../components/admin/EntryRatingsModal.vue'
+import SeedOrderEditor from '../components/admin/SeedOrderEditor.vue'
+import { registrationOrder } from '../lib/seedOrder'
 import { defaultSeedKind, loadEntryRatings, ratingKindCounts, ratingSeedOrder, ratingTypesFor } from '../lib/playerRatings'
 import TournamentSettingsForm from '../components/admin/TournamentSettingsForm.vue'
 import ScheduleBoard from '../components/admin/ScheduleBoard.vue'
@@ -286,6 +288,39 @@ const seedKind = computed({
     : defaultSeedKind(tournament.value?.sport, approvedEntries.value, entryRatings.value)),
   set: value => { seedKindChoice.value = value },
 })
+
+// Seed editor (drag, "№", reset, order by rating) over the approved field.
+const seedEditing = ref(false)
+const seedSaving = ref(false)
+const seedEditorItems = computed(() => sortedApproved.value.map(e => ({ id: e.id, label: entryLabel(e), entry: e })))
+const seedEditorRegistration = computed(() => registrationOrder(approvedEntries.value))
+// Knockout draws mark the seeds of the tennis draw; groups and points formats use the whole order.
+const seedEditorSeedCount = computed(() => (['single_elimination', 'double_elimination'].includes(tournamentFormat.value)
+  ? drawSummary('seeded', approvedEntries.value.length).seeds : 0))
+const seedEditorRatingKinds = computed(() => seedKindOptions.value.map(type => ({ value: type, label: t(`playerRating.kinds.${type}`) })))
+function rankIdsByRating(ids, kind) {
+  const byId = Object.fromEntries(approvedEntries.value.map(e => [e.id, e]))
+  return ratingSeedOrder(ids.map(id => byId[id]).filter(Boolean), entryRatings.value, kind).order
+}
+function openSeedEditor() {
+  setTab('entries')
+  if (canSeed.value && approvedEntries.value.length > 1) seedEditing.value = true
+}
+async function saveSeedOrder(order) {
+  if (seedSaving.value) return
+  seedSaving.value = true
+  errorText.value = ''
+  noticeText.value = ''
+  try {
+    const { error } = await supabase.rpc('set_entry_seed_order', { p_tournament_id: props.id, p_entry_ids: order })
+    if (error) throw error
+    await loadAll(true)
+    seedEditing.value = false
+    noticeText.value = t('seedEditor.saved')
+  } catch (error) {
+    errorText.value = error?.code === 'PGRST202' ? t('seeding.unavailable') : errorMessage(error, t)
+  } finally { seedSaving.value = false }
+}
 
 async function seedByRating() {
   if (actionLoading.value || !seedKind.value) return
@@ -764,6 +799,8 @@ async function revertSchedule() {
 }
 
 const hasBracket = computed(() => matches.value.length > 0)
+// A draw made in another tab locks the seeding: the seed editor closes with it.
+watch(canSeed, can => { if (!can) seedEditing.value = false })
 const tournamentFormat = computed(() => tournament.value?.format || 'single_elimination')
 const isRoundRobin = computed(() => tournamentFormat.value === 'round_robin')
 const isGroupsPlayoff = computed(() => tournamentFormat.value === 'groups_playoff')
@@ -2140,6 +2177,15 @@ onBeforeUnmount(() => {
                 <span v-if="approvedEntries.length" class="badge badge--success">{{ approvedEntries.length }}</span>
               </h3>
               <button
+                v-if="canSeed && approvedEntries.length > 1 && !seedEditing"
+                class="btn btn--ghost btn--sm"
+                type="button"
+                :disabled="actionLoading || manualPairingOpen"
+                @click="openSeedEditor"
+              >
+                {{ t('seedEditor.open') }}
+              </button>
+              <button
                 v-if="hasPairedEntries"
                 class="btn btn--ghost btn--sm"
                 type="button"
@@ -2150,7 +2196,22 @@ onBeforeUnmount(() => {
                 {{ t('admin.editPairs') }}
               </button>
             </div>
-            <template v-if="approvedEntries.length">
+            <SeedOrderEditor
+              v-if="seedEditing && canSeed"
+              :items="seedEditorItems"
+              :registration="seedEditorRegistration"
+              :seed-count="seedEditorSeedCount"
+              :rating-kinds="seedEditorRatingKinds"
+              :rank-by-rating="rankIdsByRating"
+              :saving="seedSaving"
+              @save="saveSeedOrder"
+              @cancel="seedEditing = false"
+            >
+              <template #detail="{ item }">
+                <EntryRatings :ratings="entryRatings[item.id]" :members="item.entry.entry_members" />
+              </template>
+            </SeedOrderEditor>
+            <template v-else-if="approvedEntries.length">
               <p v-if="canSeed" class="field-hint mb-3">{{ t('admin.seedHint') }}</p>
               <div v-if="canSeed && seedKindOptions.length && approvedEntries.length > 1" class="rating-seed mb-3">
                 <div class="form-field rating-seed__field">
@@ -2726,7 +2787,7 @@ onBeforeUnmount(() => {
                   : t('drawSeeding.byesRandom', { byes: drawSeedingInfo.byes }) }}
             </p>
             <p v-if="drawMode === 'seeded'" class="draw-seeding__line">{{ t('drawSeeding.unseeded', { count: drawSeedingInfo.unseeded }) }}</p>
-            <button v-if="drawMode !== 'auto-random'" class="btn btn--ghost btn--sm draw-seeding__edit" type="button" @click="setTab('entries')">
+            <button v-if="drawMode !== 'auto-random'" class="btn btn--ghost btn--sm draw-seeding__edit" type="button" @click="openSeedEditor">
               {{ t('drawSeeding.editSeeding') }}
             </button>
           </div>

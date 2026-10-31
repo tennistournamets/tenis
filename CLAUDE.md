@@ -49,6 +49,7 @@ src/
     admin/SponsorsTab.vue     # "Sponsors" tab: access request card, then ad places (cards with PlacementDiagram) as the entry point → PlacementEditorModal (who/caption, banners, partners); sponsor list is secondary (+ SponsorEditorModal, BannerEditorModal, SponsorImageField, SponsorshipAccessCard)
     admin/AiImportPanel.vue    # AI participant import in the Entries tab (AiTextSource: text or TXT/CSV/XLSX/DOCX/PDF or a picture via lib/aiFileText.js — pictures are read in the browser by tesseract.js, engine and lt/ru/en data served from /ocr/<version>/ by scripts/vite-ocr-assets.js; ParticipantImportPreview: editable rows) → add_manual_entries
     admin/SponsorshipRequestsPanel.vue  # Super-admin table of sponsorship requests (in AdminPlatformView)
+    admin/SeedOrderEditor.vue # Entries tab seed editor: drag rows (pointer: mouse + touch), "№" place field, arrow keys, reset to registration order, order by rating; seeds marked and a "drawn by lot" line for knockout formats; saves with set_entry_seed_order (logic in lib/seedOrder.js)
   i18n/
     index.js                  # Vue I18n config; loads only the active locale (setAppLocale / loadLocaleMessages)
     messages.js               # All translation strings (ru/en/lt) — source of truth; the build splits it per locale
@@ -225,7 +226,6 @@ Planned/known gaps, roughly by priority. Not implemented yet.
 - **New sports** — basketball, volleyball, table tennis, badminton: add to `sport` enum + `sportConfig`/`scoringEngines` (+ a scoring engine per family). Consider a "sets to N points" generic engine.
 
 ### Tournament management
-- **Seeding UI** — drag-and-drop reordering (today: move up/down in the entry row menu via `set_entry_seed_order`).
 - **Withdrawals / byes / re-open** after generation without full regen.
 - **Undo/rebuild** across all formats — `bracket_versions` is single-elim oriented; extend snapshots to RR/groups/double-elim.
 
