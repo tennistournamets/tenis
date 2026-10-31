@@ -273,6 +273,10 @@ const sortedApproved = computed(() => [...approvedEntries.value].sort((a, b) =>
 const seedPosition = entry => sortedApproved.value.findIndex(e => e.id === entry.id) + 1
 const approvedQuery = ref('')
 const filteredApproved = computed(() => {
+  if (checkInOpen.value && checkInOnlyAbsent.value) return searchedApproved.value.filter(e => !e.checked_in_at && !e.withdrawn_at)
+  return searchedApproved.value
+})
+const searchedApproved = computed(() => {
   const q = approvedQuery.value.trim().toLowerCase()
   return q ? sortedApproved.value.filter(e => entryLabel(e).toLowerCase().includes(q)) : sortedApproved.value
 })
@@ -359,6 +363,49 @@ async function setWithdrawn(entry, on) {
     if (error) throw error
     await refreshScoreData()
     if (on) noticeText.value = t('walkover.withdrawDone', { count: data ?? 0 })
+  } catch (error) {
+    errorText.value = errorMessage(error, t)
+  } finally { actionLoading.value = false }
+}
+
+// Check-in on the tournament day: who came; the absent are rejected before
+// the start or withdrawn while the tournament runs (remove_absent_entries).
+const checkInOpen = ref(false)
+const checkInOnlyAbsent = ref(false)
+const checkInBusy = ref(new Set())
+const canCheckIn = computed(() => canManageTournament.value && !isTournamentFinished.value && approvedEntries.value.length > 0)
+const checkedInCount = computed(() => approvedEntries.value.filter(e => e.checked_in_at).length)
+const absentEntries = computed(() => approvedEntries.value.filter(e => !e.checked_in_at && !e.withdrawn_at))
+// Americano, Team Americano and King of the Court cannot withdraw a player once running.
+const canRemoveAbsent = computed(() => checkedInCount.value > 0 && absentEntries.value.length > 0
+  && (!isTournamentActive.value || canWithdrawEntries.value))
+async function toggleCheckIn(entry) {
+  if (checkInBusy.value.has(entry.id)) return
+  const next = new Set(checkInBusy.value); next.add(entry.id); checkInBusy.value = next
+  errorText.value = ''
+  try {
+    const { error } = await supabase.rpc('set_entry_checked_in', { p_entry_id: entry.id, p_checked_in: !entry.checked_in_at })
+    if (error) throw error
+    await refreshScoreData()
+  } catch (error) {
+    errorText.value = errorMessage(error, t)
+  } finally {
+    const rest = new Set(checkInBusy.value); rest.delete(entry.id); checkInBusy.value = rest
+  }
+}
+async function removeAbsent() {
+  if (actionLoading.value || !canRemoveAbsent.value) return
+  const count = absentEntries.value.length
+  const during = isTournamentActive.value
+  if (!(await confirmDialog(t(during ? 'checkIn.removeDuringConfirm' : 'checkIn.removeBeforeConfirm', { count }), { danger: true }))) return
+  actionLoading.value = true
+  errorText.value = ''
+  noticeText.value = ''
+  try {
+    const { data, error } = await supabase.rpc('remove_absent_entries', { p_tournament_id: props.id })
+    if (error) throw error
+    await refreshScoreData()
+    noticeText.value = t(during ? 'checkIn.removedDuring' : 'checkIn.removedBefore', { count: data ?? 0 })
   } catch (error) {
     errorText.value = errorMessage(error, t)
   } finally { actionLoading.value = false }
@@ -2225,6 +2272,16 @@ onBeforeUnmount(() => {
                 <span v-if="approvedEntries.length" class="badge badge--success">{{ approvedEntries.length }}</span>
               </h3>
               <button
+                v-if="canCheckIn && !seedEditing"
+                class="btn btn--ghost btn--sm"
+                type="button"
+                :aria-expanded="checkInOpen"
+                aria-controls="check-in-bar"
+                @click="checkInOpen = !checkInOpen"
+              >
+                {{ checkInOpen ? t('checkIn.close') : t('checkIn.open') }}
+              </button>
+              <button
                 v-if="canSeed && approvedEntries.length > 1 && !seedEditing"
                 class="btn btn--ghost btn--sm"
                 type="button"
@@ -2242,6 +2299,23 @@ onBeforeUnmount(() => {
               >
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
                 {{ t('admin.editPairs') }}
+              </button>
+            </div>
+            <div v-if="checkInOpen && canCheckIn && !seedEditing" id="check-in-bar" class="check-in-bar mb-3">
+              <p class="check-in-bar__count" role="status">{{ t('checkIn.count', { checked: checkedInCount, total: approvedEntries.length }) }}</p>
+              <p class="field-hint check-in-bar__hint">{{ t('checkIn.hint') }}</p>
+              <label class="checkbox-row" for="check-in-only-absent">
+                <input id="check-in-only-absent" v-model="checkInOnlyAbsent" type="checkbox" />
+                {{ t('checkIn.onlyAbsent') }}
+              </label>
+              <button
+                v-if="canRemoveAbsent"
+                class="btn btn--danger btn--sm"
+                type="button"
+                :disabled="actionLoading"
+                @click="removeAbsent"
+              >
+                {{ t(isTournamentActive ? 'checkIn.removeDuring' : 'checkIn.removeBefore', { count: absentEntries.length }) }}
               </button>
             </div>
             <SeedOrderEditor
@@ -2282,7 +2356,20 @@ onBeforeUnmount(() => {
                 :aria-label="t('admin.searchEntries')"
               />
               <div v-if="filteredApproved.length" class="entry-list">
-                <div v-for="entry in filteredApproved" :key="entry.id" class="participant-item">
+                <div v-for="entry in filteredApproved" :key="entry.id" class="participant-item" :class="{ 'participant-item--absent': checkInOpen && !entry.checked_in_at && !entry.withdrawn_at }">
+                  <button
+                    v-if="checkInOpen && canCheckIn && !entry.withdrawn_at"
+                    class="check-in-btn"
+                    :class="{ 'check-in-btn--on': entry.checked_in_at }"
+                    type="button"
+                    role="switch"
+                    :aria-checked="Boolean(entry.checked_in_at)"
+                    :aria-label="t('checkIn.mark', { name: entryLabel(entry) })"
+                    :disabled="checkInBusy.has(entry.id)"
+                    @click="toggleCheckIn(entry)"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+                  </button>
                   <span class="entry-seed" :title="t('admin.seedLabel')">{{ seedPosition(entry) }}</span>
                   <span class="entry-avatars" :class="{ 'entry-avatars--pair': memberInitials(entry).length > 1 }" aria-hidden="true">
                     <span v-for="(initials, i) in memberInitials(entry)" :key="i" class="entry-avatar entry-avatar--ok">{{ initials }}</span>
@@ -3467,6 +3554,27 @@ onBeforeUnmount(() => {
 
 .entry-icon-btn--edit:hover { color: var(--text); background: var(--surface-row); }
 .entry-withdrawn { margin-left: 8px; vertical-align: middle; }
+.check-in-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-row); }
+.check-in-bar__count { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; }
+.check-in-bar__hint { flex-basis: 100%; margin: 0; order: 3; }
+.check-in-btn {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  background: transparent;
+  color: transparent;
+  cursor: pointer;
+}
+.check-in-btn:hover { border-color: var(--primary); }
+.check-in-btn--on { border-color: var(--primary); background: var(--primary); color: var(--primary-contrast, #fff); }
+.check-in-btn:disabled { opacity: 0.6; cursor: progress; }
+.check-in-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.participant-item--absent .entry-name { opacity: 0.7; }
 .add-admin-modal { max-width: 440px; display: grid; gap: var(--space-4); }
 .add-admin-modal__foot { display: flex; justify-content: flex-end; gap: var(--space-2); padding-top: var(--space-2); }
 .admin-add-btn { margin-left: auto; }

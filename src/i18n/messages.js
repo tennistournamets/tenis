@@ -18,6 +18,7 @@ import { drawSeedingMessages } from './drawSeeding'
 import { seedEditorMessages } from './seedEditor'
 import { entryEditMessages } from './entryEdit'
 import { walkoverMessages } from './walkover'
+import { checkInMessages } from './checkIn'
 
 export const messages = {
   ru: {
@@ -366,6 +367,7 @@ export const messages = {
     seedEditor: seedEditorMessages.ru,
     entryEdit: entryEditMessages.ru,
     walkover: walkoverMessages.ru,
+    checkIn: checkInMessages.ru,
     app: {
       title: 'Bracketa',
       subtitle: 'Организация турниров, жеребьёвка и live-сетка',
@@ -1641,6 +1643,7 @@ export const messages = {
     seedEditor: seedEditorMessages.en,
     entryEdit: entryEditMessages.en,
     walkover: walkoverMessages.en,
+    checkIn: checkInMessages.en,
     app: {
       title: 'Bracketa',
       subtitle: 'Run tournaments, draws, and live brackets',
@@ -2916,6 +2919,7 @@ export const messages = {
     seedEditor: seedEditorMessages.lt,
     entryEdit: entryEditMessages.lt,
     walkover: walkoverMessages.lt,
+    checkIn: checkInMessages.lt,
     app: {
       title: 'Bracketa',
       subtitle: 'Turnyrai, burtai ir tinkleliai tiesiogiai',
