@@ -242,6 +242,10 @@
     {
       "path": "supabase/migrations/20261031195728_walkovers.sql",
       "sha256": "aa38921b7b8cbf73e9dff5343e3e1d653f1a37c38163eb92a6b10d292d8679fd"
+    },
+    {
+      "path": "supabase/migrations/20261031200931_check_in.sql",
+      "sha256": "a97c48072ced858a9b34ffd14d0a8b930cd225f1426532c33cee7e00b3c4d861"
     }
   ],
   "baseline": {
