@@ -30,6 +30,9 @@ import { postMoments } from '../lib/aiPostFacts'
 import { useAiFeature } from '../lib/aiFeatures'
 import EntryContact from '../components/admin/EntryContact.vue'
 import { loadEntryContacts } from '../lib/entryContacts'
+import EntryRatings from '../components/admin/EntryRatings.vue'
+import EntryRatingsModal from '../components/admin/EntryRatingsModal.vue'
+import { defaultSeedKind, loadEntryRatings, ratingKindCounts, ratingSeedOrder, ratingTypesFor } from '../lib/playerRatings'
 import TournamentSettingsForm from '../components/admin/TournamentSettingsForm.vue'
 import ScheduleBoard from '../components/admin/ScheduleBoard.vue'
 import CourtsEditor from '../components/admin/CourtsEditor.vue'
@@ -272,6 +275,35 @@ const filteredApproved = computed(() => {
 // Seeding matters until the draw exists; a random bracket draw ignores it.
 const canSeed = computed(() => canManageTournament.value && !hasBracket.value && !isTournamentActive.value && !isTournamentFinished.value)
 
+// "Seed by rating": one kind at a time, since the scales differ (an LTS place
+// is better when smaller). Offered once someone in the field is rated.
+const seedKindCounts = computed(() => ratingKindCounts(tournament.value?.sport, approvedEntries.value, entryRatings.value))
+const seedKindOptions = computed(() => ratingKinds.value.filter(type => seedKindCounts.value[type] > 0))
+const seedKindChoice = ref('')
+const seedKind = computed({
+  get: () => (seedKindOptions.value.includes(seedKindChoice.value) ? seedKindChoice.value
+    : defaultSeedKind(tournament.value?.sport, approvedEntries.value, entryRatings.value)),
+  set: value => { seedKindChoice.value = value },
+})
+
+async function seedByRating() {
+  if (actionLoading.value || !seedKind.value) return
+  const kind = t(`playerRating.kinds.${seedKind.value}`)
+  if (!(await confirmDialog(t('playerRating.seedConfirm', { kind })))) return
+  const { order, rated, unrated } = ratingSeedOrder(sortedApproved.value, entryRatings.value, seedKind.value)
+  actionLoading.value = true
+  errorText.value = ''
+  noticeText.value = ''
+  try {
+    const { error } = await supabase.rpc('set_entry_seed_order', { p_tournament_id: props.id, p_entry_ids: order })
+    if (error) throw error
+    await loadAll(true)
+    noticeText.value = t('playerRating.seedDone', { rated, unrated })
+  } catch (error) {
+    errorText.value = error?.code === 'PGRST202' ? t('seeding.unavailable') : errorMessage(error, t)
+  } finally { actionLoading.value = false }
+}
+
 async function moveSeed(entry, delta) {
   if (actionLoading.value) return
   const order = sortedApproved.value.map(e => e.id)
@@ -364,6 +396,25 @@ watch(() => (canManageTournament.value ? entries.value.map(e => e.id).join(',') 
     if (read === entryContactsRead) entryContacts.value = contacts
   } catch { /* Contacts are an aid; the lists work without them. */ }
 })
+// Players' ratings from registration: private like the contacts. Pair forming
+// moves members between entries, so the key includes them.
+const entryRatings = ref({})
+const ratingKinds = computed(() => (canManageTournament.value ? ratingTypesFor(tournament.value?.sport) : []))
+let entryRatingsRead = 0
+async function reloadEntryRatings(key = entryRatingsKey.value) {
+  const read = ++entryRatingsRead
+  if (!key) { entryRatings.value = {}; return }
+  try {
+    const ratings = await loadEntryRatings(supabase, props.id)
+    if (read === entryRatingsRead) entryRatings.value = ratings
+  } catch { /* Ratings are an aid; the lists work without them. */ }
+}
+const entryRatingsKey = computed(() => (ratingKinds.value.length
+  ? entries.value.map(e => `${e.id}:${(e.entry_members || []).map(m => m.id).join('+')}`).join(',') : ''))
+watch(entryRatingsKey, key => reloadEntryRatings(key))
+// The organizer's own value for a player (EntryRatingsModal).
+const ratingsEntryId = ref(null)
+const ratingsEntry = computed(() => entries.value.find(e => e.id === ratingsEntryId.value) || null)
 const scheduleIndex = computed(() => indexSchedule(schedule.value))
 const scheduleDraftCount = computed(() => draftDiff(schedule.value).count)
 // Organizers see their draft everywhere in the admin page; changed rows are marked.
@@ -1957,7 +2008,7 @@ onBeforeUnmount(() => {
             <div v-if="pendingEntries.length" class="entry-list">
               <div v-for="entry in pendingEntries" :key="entry.id" class="participant-item">
                 <span class="entry-avatar">{{ entryInitials(entry) }}</span>
-                <strong class="entry-name">{{ entryLabel(entry) }}<span v-if="customDisplayName(entry)" class="entry-alias">{{ t('admin.shownAs', { name: customDisplayName(entry) }) }}</span><EntryContact :contact="entryContacts[entry.id]" /></strong>
+                <strong class="entry-name">{{ entryLabel(entry) }}<span v-if="customDisplayName(entry)" class="entry-alias">{{ t('admin.shownAs', { name: customDisplayName(entry) }) }}</span><EntryContact :contact="entryContacts[entry.id]" /><EntryRatings :ratings="entryRatings[entry.id]" :members="entry.entry_members" /></strong>
                 <div class="entry-actions">
                   <button
                     class="entry-icon-btn entry-icon-btn--approve"
@@ -1995,7 +2046,7 @@ onBeforeUnmount(() => {
               <div class="entry-list">
                 <div v-for="(entry, index) in waitlistedEntries" :key="entry.id" class="participant-item">
                   <span class="entry-avatar" :aria-label="String(index + 1)">{{ index + 1 }}</span>
-                  <strong class="entry-name">{{ entryLabel(entry) }}<span v-if="customDisplayName(entry)" class="entry-alias">{{ t('admin.shownAs', { name: customDisplayName(entry) }) }}</span><EntryContact :contact="entryContacts[entry.id]" /></strong>
+                  <strong class="entry-name">{{ entryLabel(entry) }}<span v-if="customDisplayName(entry)" class="entry-alias">{{ t('admin.shownAs', { name: customDisplayName(entry) }) }}</span><EntryContact :contact="entryContacts[entry.id]" /><EntryRatings :ratings="entryRatings[entry.id]" :members="entry.entry_members" /></strong>
                   <div class="entry-actions">
                     <button
                       class="entry-icon-btn entry-icon-btn--approve"
@@ -2030,7 +2081,7 @@ onBeforeUnmount(() => {
               <div class="entry-list rejected-entries__list">
                 <div v-for="entry in rejectedEntries" :key="entry.id" class="participant-item">
                   <span class="entry-avatar">{{ entryInitials(entry) }}</span>
-                  <strong class="entry-name">{{ entryLabel(entry) }}<span v-if="customDisplayName(entry)" class="entry-alias">{{ t('admin.shownAs', { name: customDisplayName(entry) }) }}</span><EntryContact :contact="entryContacts[entry.id]" /></strong>
+                  <strong class="entry-name">{{ entryLabel(entry) }}<span v-if="customDisplayName(entry)" class="entry-alias">{{ t('admin.shownAs', { name: customDisplayName(entry) }) }}</span><EntryContact :contact="entryContacts[entry.id]" /><EntryRatings :ratings="entryRatings[entry.id]" :members="entry.entry_members" /></strong>
                   <button class="btn btn--ghost btn--sm" type="button" :disabled="actionLoading" @click="updateEntryStatus(entry.id, 'pending')">
                     {{ t('mobile.restoreEntry') }}
                   </button>
@@ -2060,6 +2111,18 @@ onBeforeUnmount(() => {
             </div>
             <template v-if="approvedEntries.length">
               <p v-if="canSeed" class="field-hint mb-3">{{ t('admin.seedHint') }}</p>
+              <div v-if="canSeed && seedKindOptions.length && approvedEntries.length > 1" class="rating-seed mb-3">
+                <div class="form-field rating-seed__field">
+                  <label for="rating-seed-kind">{{ t('playerRating.seedKind') }}</label>
+                  <select id="rating-seed-kind" v-model="seedKind" class="input" :disabled="actionLoading" aria-describedby="rating-seed-hint">
+                    <option v-for="type in seedKindOptions" :key="type" :value="type">
+                      {{ t('playerRating.seedKindCount', { kind: t(`playerRating.kinds.${type}`), count: seedKindCounts[type] }) }}
+                    </option>
+                  </select>
+                </div>
+                <button class="btn btn--sm" type="button" :disabled="actionLoading" @click="seedByRating">{{ t('playerRating.seedTitle') }}</button>
+                <p id="rating-seed-hint" class="field-hint rating-seed__hint">{{ t('playerRating.seedHint') }}</p>
+              </div>
               <input
                 v-if="approvedEntries.length > 8"
                 v-model="approvedQuery"
@@ -2074,7 +2137,7 @@ onBeforeUnmount(() => {
                   <span class="entry-avatars" :class="{ 'entry-avatars--pair': memberInitials(entry).length > 1 }" aria-hidden="true">
                     <span v-for="(initials, i) in memberInitials(entry)" :key="i" class="entry-avatar entry-avatar--ok">{{ initials }}</span>
                   </span>
-                  <strong class="entry-name">{{ entryLabel(entry) }}<span v-if="customDisplayName(entry)" class="entry-alias">{{ t('admin.shownAs', { name: customDisplayName(entry) }) }}</span><EntryContact :contact="entryContacts[entry.id]" /></strong>
+                  <strong class="entry-name">{{ entryLabel(entry) }}<span v-if="customDisplayName(entry)" class="entry-alias">{{ t('admin.shownAs', { name: customDisplayName(entry) }) }}</span><EntryContact :contact="entryContacts[entry.id]" /><EntryRatings :ratings="entryRatings[entry.id]" :members="entry.entry_members" /></strong>
                   <KebabMenu
                     v-if="!isTournamentActive && !isTournamentFinished"
                     :aria-label="t('admin.rowActions', { name: entryLabel(entry) })"
@@ -2083,6 +2146,7 @@ onBeforeUnmount(() => {
                       <button type="button" role="menuitem" :disabled="actionLoading || seedPosition(entry) === 1" @click="moveSeed(entry, -1)">{{ t('admin.seedUp') }}</button>
                       <button type="button" role="menuitem" :disabled="actionLoading || seedPosition(entry) === sortedApproved.length" @click="moveSeed(entry, 1)">{{ t('admin.seedDown') }}</button>
                     </template>
+                    <button v-if="ratingKinds.length" type="button" role="menuitem" :disabled="actionLoading" @click="ratingsEntryId = entry.id">{{ t('playerRating.editMenu') }}</button>
                     <button type="button" role="menuitem" :disabled="actionLoading" @click="updateEntryStatus(entry.id, 'pending')">{{ t('admin.reopen') }}</button>
                     <button type="button" role="menuitem" class="kebab__danger" :disabled="actionLoading" @click="updateEntryStatus(entry.id, 'rejected')">{{ t('admin.reject') }}</button>
                   </KebabMenu>
@@ -3081,6 +3145,16 @@ onBeforeUnmount(() => {
         @start-live="startLiveFromRrModal"
         @edit-stream="openMatchStream"
       />
+      <EntryRatingsModal
+        v-if="ratingsEntry && ratingKinds.length"
+        :key="ratingsEntry.id"
+        :entry="ratingsEntry"
+        :sport="tournament.sport"
+        :ratings="entryRatings[ratingsEntry.id]"
+        :title="entryLabel(ratingsEntry)"
+        @close="ratingsEntryId = null"
+        @saved="reloadEntryRatings()"
+      />
       <MatchStreamModal
         v-if="streamMatch && canLiveScoreRole"
         :key="streamMatch.id"
@@ -3113,6 +3187,9 @@ onBeforeUnmount(() => {
 .entry-avatars--pair .entry-avatar + .entry-avatar { margin-left: -8px; }
 
 .entry-search { max-width: 320px; margin-bottom: var(--space-3); }
+.rating-seed { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-2) var(--space-3); }
+.rating-seed__field { flex: 1 1 220px; max-width: 320px; margin: 0; }
+.rating-seed__hint { flex-basis: 100%; margin: 0; }
 
 .entry-avatar {
   flex-shrink: 0;

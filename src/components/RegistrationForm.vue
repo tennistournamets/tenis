@@ -9,6 +9,8 @@ import { isIndividualFormat, scoringFamily } from '../lib/sportConfig'
 import { registrationDisplayState, registrationError, closedReasonKey, entryNamesError } from '../lib/registrationRules'
 import { track } from '../lib/analytics'
 import { legalPath } from '../lib/localeRoute'
+import { asksPlayerRating, newRatingRow, ratingPayload, ratingRowsError } from '../lib/playerRatings'
+import PlayerRatingFields from './PlayerRatingFields.vue'
 
 const props = defineProps({
   tournament: {
@@ -41,13 +43,25 @@ const pairingMode = computed(() => props.tournament.doubles_pairing_mode || 'pre
 const showMemberTwo = computed(() => entryType.value === 'doubles' && pairingMode.value === 'pre_agreed')
 const showMemberTwoOptional = computed(() => entryType.value === 'doubles' && pairingMode.value === 'pick_random' && !isIndividual.value)
 
+const sport = computed(() => props.tournament.sport || 'tennis')
+const freshRatings = () => [newRatingRow(sport.value)]
 const form = reactive({
   displayName: '',
   phone: '',
   email: '',
   memberOne: '',
   memberTwo: '',
+  ratingsOne: freshRatings(),
+  ratingsTwo: freshRatings(),
 })
+
+// The organizer may ask each player for a rating (TNL, LTS, padel level…).
+const asksRating = computed(() => asksPlayerRating(props.tournament))
+const ratingRequired = computed(() => props.tournament.player_rating === 'required')
+const pairRatings = computed(() => showMemberTwo.value || showMemberTwoOptional.value)
+const ratingLabel = order => (pairRatings.value
+  ? t('playerRating.labelFor', { name: (order === 1 ? form.memberOne : form.memberTwo).trim() || t('playerRating.player', { n: order }) })
+  : t('playerRating.label'))
 
 const loading = ref(false)
 const errorText = ref('')
@@ -59,7 +73,7 @@ const successCard = ref(null)
 
 const initialForm = cloneForm(form)
 const dirty = computed(() => !sameForm(form, initialForm))
-const conditions = () => ({ category: props.tournament.category, sport: props.tournament.sport, pairing: props.tournament.doubles_pairing_mode, fee: props.registration?.fee ?? null })
+const conditions = () => ({ category: props.tournament.category, sport: props.tournament.sport, pairing: props.tournament.doubles_pairing_mode, fee: props.registration?.fee ?? null, rating: props.tournament.player_rating ?? 'off' })
 const reviewedConditions = ref(conditions())
 const conditionsChanged = computed(() => dirty.value && !sameForm(conditions(), reviewedConditions.value))
 const regState = computed(() => registrationDisplayState(props.registration, props.now || Date.now(), props.tournament))
@@ -124,6 +138,18 @@ async function submit() {
     ? form.memberTwo
     : null
 
+  let ratings = null
+  if (asksRating.value) {
+    const players = memberTwo ? [form.ratingsOne, form.ratingsTwo] : [form.ratingsOne]
+    const ratingError = players.map(rows => ratingRowsError(sport.value, rows, ratingRequired.value)).find(Boolean)
+    if (ratingError) {
+      errorText.value = t(ratingError)
+      loading.value = false
+      return
+    }
+    ratings = players.map(ratingPayload)
+  }
+
   try {
     // The UI language travels as a header, so the participant's emails come in the same one.
     const { data, error } = await supabase.rpc('register_entry', {
@@ -135,6 +161,7 @@ async function submit() {
       p_member_two: memberTwo,
       p_display_name: form.displayName || null,
       p_access_token: props.accessToken || null,
+      p_ratings: ratings,
     }).setHeader('x-bracketa-locale', locale.value)
 
     if (error) {
@@ -150,6 +177,8 @@ async function submit() {
     form.email = ''
     form.memberOne = ''
     form.memberTwo = ''
+    form.ratingsOne = freshRatings()
+    form.ratingsTwo = freshRatings()
     phoneTouched.value = false
     emailTouched.value = false
     emit('submitted')
@@ -226,6 +255,27 @@ async function submit() {
           :disabled="loading"
         />
       </div>
+
+      <template v-if="asksRating">
+        <PlayerRatingFields
+          :rows="form.ratingsOne"
+          :sport="sport"
+          :label="ratingLabel(1)"
+          :required="ratingRequired"
+          :disabled="loading"
+          id-prefix="reg-rating-one"
+        />
+        <PlayerRatingFields
+          v-if="showMemberTwo || (showMemberTwoOptional && form.memberTwo.trim())"
+          :rows="form.ratingsTwo"
+          :sport="sport"
+          :label="ratingLabel(2)"
+          :required="ratingRequired"
+          :disabled="loading"
+          id-prefix="reg-rating-two"
+          hide-hint
+        />
+      </template>
 
       <div class="form-field">
         <label for="reg-display-name">{{ showEntryType ? t('registrationForm.displayName') : t('registrationForm.displayNameSolo') }}</label>

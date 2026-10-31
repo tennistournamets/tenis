@@ -54,18 +54,18 @@ test('draft fields, validation and the settings patch only carry real columns', 
   const row = { registration_capacity: 16, capacity_public: false, registration_deadline: '2026-09-25T15:00:00.000Z',
     entry_fee_mode: 'paid', entry_fee_minor: 1500, entry_fee_currency: 'EUR', entry_fee_unit: 'pair', sport: 'tennis', category: 'doubles' }
   const draft = registrationDraftFields(row)
-  assert.deepEqual(Object.keys(draft).sort(), ['capacity_public', 'entry_fee_amount', 'entry_fee_currency', 'entry_fee_mode', 'entry_fee_unit', 'registration_capacity', 'registration_deadline', 'waitlist_enabled'])
+  assert.deepEqual(Object.keys(draft).sort(), ['capacity_public', 'entry_fee_amount', 'entry_fee_currency', 'entry_fee_mode', 'entry_fee_unit', 'player_rating', 'registration_capacity', 'registration_deadline', 'waitlist_enabled'])
   assert.equal(draft.registration_capacity, '16')
   assert.equal(draft.entry_fee_amount, '15.00')
   assert.equal(fromDatetimeLocal(draft.registration_deadline), row.registration_deadline)
   assert.equal(validateRegistrationForm(draft), null)
   assert.deepEqual(registrationPatch(draft, row), { registration_capacity: 16, capacity_public: false, registration_deadline: row.registration_deadline,
-    entry_fee_mode: 'paid', entry_fee_minor: 1500, entry_fee_currency: 'EUR', entry_fee_unit: 'pair', waitlist_enabled: false })
+    entry_fee_mode: 'paid', entry_fee_minor: 1500, entry_fee_currency: 'EUR', entry_fee_unit: 'pair', waitlist_enabled: false, player_rating: 'off' })
 
   const empty = registrationDraftFields({})
   assert.equal(hasRegistrationRules(empty), false)
   assert.deepEqual(registrationPatch(empty), { registration_capacity: null, capacity_public: true, registration_deadline: null,
-    entry_fee_mode: null, entry_fee_minor: null, entry_fee_currency: null, entry_fee_unit: null, waitlist_enabled: false })
+    entry_fee_mode: null, entry_fee_minor: null, entry_fee_currency: null, entry_fee_unit: null, waitlist_enabled: false, player_rating: 'off' })
   assert.equal(hasRegistrationRules({ ...empty, waitlist_enabled: true }), true)
   assert.equal(registrationPatch({ ...empty, entry_fee_mode: 'paid', entry_fee_amount: '5' }, { sport: 'football' }).entry_fee_unit, 'team')
   assert.equal(registrationPatch({ ...empty, entry_fee_mode: 'free', entry_fee_amount: '5' }).entry_fee_minor, null)

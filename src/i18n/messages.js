@@ -13,6 +13,7 @@ import { pluralMessages } from './plurals'
 import { groupsFlowMessages } from './groupsFlow'
 import { pointsFormatMessages } from './pointsFormat'
 import { aiMessages } from './ai'
+import { playerRatingMessages } from './playerRating'
 
 export const messages = {
   ru: {
@@ -356,6 +357,7 @@ export const messages = {
     groupsFlow: groupsFlowMessages.ru,
     pointsFormat: pointsFormatMessages.ru,
     ai: aiMessages.ru,
+    playerRating: playerRatingMessages.ru,
     app: {
       title: 'Bracketa',
       subtitle: 'Организация турниров, жеребьёвка и live-сетка',
@@ -1618,6 +1620,7 @@ export const messages = {
     groupsFlow: groupsFlowMessages.en,
     pointsFormat: pointsFormatMessages.en,
     ai: aiMessages.en,
+    playerRating: playerRatingMessages.en,
     app: {
       title: 'Bracketa',
       subtitle: 'Run tournaments, draws, and live brackets',
@@ -2817,10 +2820,10 @@ export const messages = {
       },
     },
     seeding: {
-      locked: 'Po starto reitingo keisti negalima.',
+      locked: 'Po starto skirstymo keisti negalima.',
       duplicate: 'Dalyvis nurodytas du kartus.',
-      foreignEntry: 'Reitinge yra nepatvirtintas arba kito turnyro dalyvis.',
-      unavailable: 'Reitingas bus prieinamas atnaujinus duomenų bazę.',
+      foreignEntry: 'Skirstyme yra nepatvirtintas arba kito turnyro dalyvis.',
+      unavailable: 'Skirstymas bus prieinamas atnaujinus duomenų bazę.',
     },
     nextStep: {
       lead_entries: 'Peržiūrėkite paraiškas',
@@ -2880,6 +2883,7 @@ export const messages = {
     groupsFlow: groupsFlowMessages.lt,
     pointsFormat: pointsFormatMessages.lt,
     ai: aiMessages.lt,
+    playerRating: playerRatingMessages.lt,
     app: {
       title: 'Bracketa',
       subtitle: 'Turnyrai, burtai ir tinkleliai tiesiogiai',
@@ -3174,21 +3178,21 @@ export const messages = {
       wizardRecapFee: 'mokamas dalyvavimas',
       wizardRecapNoRules: 'registracija be apribojimų',
       divisionLabel: 'Įskaita',
-      seedHint: 'Skaičius kairėje – reitingas: pagal jį nustatoma tvarka rankiniuose burtuose ir grupėse. Keisti galima meniu ⋯.',
-      seedLabel: 'Reitingas',
+      seedHint: 'Skaičius kairėje – skirstymo numeris: pagal jį nustatoma tvarka rankiniuose burtuose ir grupėse. Keisti galima meniu ⋯.',
+      seedLabel: 'Skirstymo numeris',
       seedUp: 'Pakelti',
       seedDown: 'Nuleisti',
       rowActions: 'Veiksmai: {name}',
       searchEntries: 'Rasti dalyvį',
       noSearchResults: 'Nieko nerasta',
       drawRandomHint: 'Dalyviai išdėstomi atsitiktinai. Rankiniu režimu tvarką galima keisti tempiant.',
-      drawManualHint: 'Tinklelis sudaromas pagal reitingą: 1 ir 2 numeriai skirtingose pusėse, BYE gauna aukščiausi numeriai. Po to dalyvius galima sukeisti tempiant.',
+      drawManualHint: 'Tinklelis sudaromas pagal skirstymą: 1 ir 2 numeriai skirtingose pusėse, BYE gauna aukščiausi numeriai. Po to dalyvius galima sukeisti tempiant.',
       bracketPlanSE: '{nText} → {size} vietų tinklelis: {roundsText}, {matchesText}.',
       bracketPlanByes: '{nText} → {size} vietų tinklelis: {roundsText}, {byesText}.',
       bracketPlanDE: '{nText} → viršutinis tinklelis: {upperText}, apatinis: {lowerText}, finalas. Kartą pralaimėjęs patenka į apatinį tinklelį, du kartus – iškrenta.',
       doubleElimNeedsPow2: 'Dvigubas atkritimas kol kas veikia tik su 4, 8, 16 arba 32 dalyviais. Dabar patvirtinta {n}.',
       groupPlan: '{groupsText} po {size} · grupėse {matchesText} · į atkrintamąsias patenka po {advance} iš kiekvienos grupės ({qualifiers}).',
-      groupSeedingHint: 'Dalyviai paskirstomi „gyvatėle“ pagal reitingą.',
+      groupSeedingHint: 'Dalyviai paskirstomi „gyvatėle“ pagal skirstymą.',
       groupNeedMore: 'Grupėms reikia bent 4 patvirtintų dalyvių.',
       scoresBeforeStartTitle: 'Rezultatus įvesti galėsite prasidėjus turnyrui',
       tabTable: 'Lentelė',
@@ -3225,7 +3229,7 @@ export const messages = {
       generateRandom: 'Generuoti tinklelį',
       generateManual: 'Generuoti tinklelį',
       rebuild: 'Perkurti atsitiktine tvarka',
-      rebuildManual: 'Perkurti pagal reitingą',
+      rebuildManual: 'Perkurti pagal skirstymą',
       rebuildConfirm: 'Perkūrimas ištrins visus esamus rezultatus. Tęsti?',
       rebuildMatchesConfirm: 'Perkūrus mačus bus ištrinti visi esami rezultatai. Tęsti?',
       resetBracket: 'Ištrinti tinklelį',

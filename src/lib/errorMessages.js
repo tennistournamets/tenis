@@ -22,6 +22,7 @@ const NAMESPACES = {
   'pointsFormat.': 'pointsFormat.errors.',
   'serverErrors.': 'serverErrors.',
   'ai.': 'ai.errors.',
+  'rating.': 'playerRating.errors.',
 }
 
 export const SERVER_ERRORS = [
