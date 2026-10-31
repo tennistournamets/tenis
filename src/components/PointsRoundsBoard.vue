@@ -39,7 +39,17 @@ const sidePlayers = (match, side) => [match[`side_${side}_entry_id`], match[`sid
   .map(id => entryDisplayNames(props.entriesMap[id]).join(' / ') || t('bracket.tbd'))
 const sideLabel = (match, side) => matchSideLabel(match, side, props.entriesMap, t('bracket.tbd'))
 const sidesText = match => ({ teamA: sideLabel(match, 'a'), teamB: sideLabel(match, 'b') })
-const restingNames = round => round.resting.map(id => entryDisplayNames(props.entriesMap[id]).join(' / ')).filter(Boolean).join(', ')
+// A player who withdrew is not "resting" in the rounds after their last match.
+const lastPlayedRound = computed(() => {
+  const last = {}
+  for (const round of props.rounds) for (const m of round.matches) {
+    for (const id of [m.side_a_entry_id, m.side_a2_entry_id, m.side_b_entry_id, m.side_b2_entry_id]) if (id) last[id] = round.round
+  }
+  return last
+})
+const isGone = (id, round) => props.entriesMap[id]?.withdrawn_at && (lastPlayedRound.value[id] ?? 0) < round.round
+const restingList = round => round.resting.filter(id => !isGone(id, round))
+const restingNames = round => restingList(round).map(id => entryDisplayNames(props.entriesMap[id]).join(' / ')).filter(Boolean).join(', ')
 
 const live = match => props.liveScoresByMatch[match.id]
 const isLive = match => live(match)?.status === 'active'
@@ -114,7 +124,7 @@ function matchAria(match) {
         </article>
       </div>
 
-      <p v-if="round.resting.length" class="points-round__rest">
+      <p v-if="restingList(round).length" class="points-round__rest">
         <strong>{{ t('pointsFormat.resting') }}:</strong> {{ restingNames(round) }}
       </p>
     </details>

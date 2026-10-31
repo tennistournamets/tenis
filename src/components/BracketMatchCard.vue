@@ -6,6 +6,7 @@ import { scheduleSummary } from '../lib/schedule'
 import { entryDisplayNames } from '../lib/entryDisplay'
 import { isByeMatch } from '../lib/bracketDisplay'
 import { formatSetScore } from '../lib/tennisRules'
+import { isWalkover, resultTag } from '../lib/matchResult'
 import { pointLabel, scoreLine } from '../lib/useTennisScoring'
 import MatchStreamLink from './MatchStreamLink.vue'
 import { matchStreamUrl } from '../lib/matchStream'
@@ -292,8 +293,11 @@ function selectSlot(event, side) {
       <span v-else class="match-card__name">{{ memberLines(match.side_b_entry_id, 'b')[0] }}</span>
     </div>
     <div class="match-card__meta">
-      <template v-if="(setsByMatch[match.id] || []).length">
-        {{ setsLabel(match.id) }}: <span class="match-card__score">{{ setSummary(match.id) }}</span>
+      <template v-if="isWalkover(match)">
+        <span class="match-card__score">{{ resultTag(match) }}</span>
+      </template>
+      <template v-else-if="(setsByMatch[match.id] || []).length">
+        {{ setsLabel(match.id) }}: <span class="match-card__score">{{ setSummary(match.id) }}</span><span v-if="resultTag(match)" class="result-tag">{{ resultTag(match) }}</span>
         <span v-if="!matchFinished()" class="match-card__unfinished">· {{ t('bracket.unfinished') }}</span>
       </template>
       <template v-else-if="match.side_a_score != null && match.side_b_score != null">

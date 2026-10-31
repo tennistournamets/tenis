@@ -13,6 +13,8 @@ const props = defineProps({
   format: { type: String, default: 'americano' },
   // Points per match: a round of rest earns half of it.
   target: { type: Number, default: 24 },
+  // Entries by id: players who withdrew are marked in the table.
+  entriesMap: { type: Object, default: () => ({}) },
 })
 const { t } = useI18n()
 
@@ -46,7 +48,7 @@ const compensationHint = computed(() => t('pointsFormat.compensationHint', { n: 
       <tbody>
         <tr v-for="r in rows" :key="r.entry_id" :class="{ 'points-standings__leader': r.rank === 1 && r.played > 0 }">
           <td class="standings__rank">{{ r.rank }}</td>
-          <th scope="row" class="standings__team">{{ r.display_name }}</th>
+          <th scope="row" class="standings__team">{{ r.display_name }}<span v-if="entriesMap[r.entry_id]?.withdrawn_at" class="badge badge--neutral points-standings__withdrawn">{{ t('walkover.withdrawn') }}</span></th>
           <td v-if="kotc">{{ r.court ?? '—' }}</td>
           <td class="col-extra">{{ r.played }}</td>
           <td>{{ r.won }}</td>
@@ -65,6 +67,7 @@ const compensationHint = computed(() => t('pointsFormat.compensationHint', { n: 
 </template>
 
 <style scoped>
+.points-standings__withdrawn { margin-left: 6px; vertical-align: middle; font-weight: 500; }
 .standings-wrap { overflow-x: auto; container-type: inline-size; }
 .standings { width: 100%; border-collapse: collapse; font-size: var(--font-sm, 0.9rem); }
 .standings th,

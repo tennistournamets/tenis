@@ -797,7 +797,7 @@ onBeforeUnmount(() => {
 
         <div v-else-if="isPointsFmt" class="card">
           <div class="pub-table-head"><h3 class="section-title">{{ pointsTableTitle }}</h3><SponsorLockup v-if="lockup('standings')" :lockup="lockup('standings')" :campaign="tournament.slug" /></div>
-          <PointsStandingsTable :rows="pointsStandings" :format="tournament.format" :target="pointsMatchTarget" />
+          <PointsStandingsTable :rows="pointsStandings" :entries-map="entriesMap" :format="tournament.format" :target="pointsMatchTarget" />
         </div>
         <template v-else-if="isRoundRobin">
           <div v-if="standings.length" class="card">
@@ -825,7 +825,7 @@ onBeforeUnmount(() => {
       <template v-else-if="isPointsFmt">
         <div v-if="pointsStandings.length" class="card">
           <div class="pub-table-head"><h3 class="section-title">{{ pointsTableTitle }}</h3><SponsorLockup v-if="lockup('standings')" :lockup="lockup('standings')" :campaign="tournament.slug" /></div>
-          <PointsStandingsTable :rows="pointsStandings" :format="tournament.format" :target="pointsMatchTarget" />
+          <PointsStandingsTable :rows="pointsStandings" :entries-map="entriesMap" :format="tournament.format" :target="pointsMatchTarget" />
         </div>
         <div class="card" style="margin-top: var(--space-4)">
           <h3 class="section-title">{{ t('pointsFormat.roundsTitle') }}</h3>

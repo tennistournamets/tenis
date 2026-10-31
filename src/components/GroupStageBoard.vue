@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import StandingsTable from './StandingsTable.vue'
 import { entryDisplayNames } from '../lib/entryDisplay'
 import { formatSetScore } from '../lib/tennisRules'
+import { resultTag } from '../lib/matchResult'
 import { normalizeTennisState, pointLabel, scoreLine } from '../lib/useTennisScoring'
 import { scheduleSummary } from '../lib/schedule'
 import { roundInGroup } from '../lib/groupsFlow'
@@ -102,6 +103,7 @@ const liveCount = g => g.rounds.reduce((n, r) => n + r.list.filter(isLive).lengt
                   </span>
                   <span v-else-if="m.status === 'finished'" class="gs-side__sets"><span class="gs-set gs-set--won">{{ m[`side_${side}_score`] }}</span></span>
                 </span>
+                <span v-if="resultTag(m)" class="gs-match__status"><span class="result-tag">{{ resultTag(m) }}</span></span>
                 <span v-if="isLive(m) || m.status !== 'finished'" class="gs-match__status">
                   <span v-if="isLive(m)" class="gs-live-badge"><span class="live-dot" aria-hidden="true" />{{ t('live.live') }}</span>
                   <span v-else class="gs-match__pending">{{ t('tournament.notPlayed') }}</span>

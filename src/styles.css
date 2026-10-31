@@ -1733,6 +1733,24 @@ summary:focus-visible,
   border: 1px solid var(--border);
 }
 
+/* W.O. / RET next to a match score (lib/matchResult.js) */
+.result-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 6px;
+  border: 1px solid var(--warning-border);
+  background: var(--warning-bg);
+  color: var(--warning-text);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.5;
+  letter-spacing: 0.02em;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
 .badge--meta::before {
   display: none;
 }
