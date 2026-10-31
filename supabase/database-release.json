@@ -210,6 +210,12 @@
       "sha256": "2590855e5a0a328dbe4ef650929e72fe5ac7a3036ddee2956e2e229a786f0b63",
       "tenisAppliedVersion": "20261031122957",
       "tenisNote": "Applied 2026-10-31 with supabase db push --db-url (session pooler) after logical backup (tenis-public-20261031-1538-pre-player-ratings.dump + migrations journal export); player_rating setting, entry_member_ratings, rating RPCs, pair forming moves member rows."
+    },
+    {
+      "path": "supabase/migrations/20261031141021_tennis_seeded_draw.sql",
+      "sha256": "ce889565e346948f9dff75ebb7b14a18adc5217624b5b7e4e02a637bb09c0114",
+      "tenisAppliedVersion": "20261031141021",
+      "tenisNote": "Applied 2026-10-31 with supabase db push --db-url (session pooler) after logical backup (tenis-public-20261031-1803-pre-seeded-draw-and-pairs.dump + migrations journal export); draw_mode seeded, tennis_seed_count, knockout_tennis_slots, generate_bracket seeded branch."
     }
   ],
   "baseline": {

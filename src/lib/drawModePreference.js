@@ -1,7 +1,7 @@
 // The draw mode an organizer picked for a tournament, remembered on this
 // device so a reload does not silently switch a manual draw back to random.
 // Storage can be missing or throw (private mode, blocked site data).
-const MODES = new Set(['auto-random', 'manual'])
+const MODES = new Set(['auto-random', 'manual', 'seeded'])
 const key = tournamentId => `champ_draw_mode:${tournamentId}`
 const defaultStorage = () => (typeof localStorage === 'undefined' ? null : localStorage)
 
