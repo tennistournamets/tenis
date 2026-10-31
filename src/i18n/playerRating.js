@@ -98,7 +98,7 @@ export const playerRatingMessages = {
   lt: {
     label: 'Reitingas',
     labelFor: 'Reitingas: {name}',
-    player: '{n} žaidėjas',
+    player: 'žaidėjas {n}',
     kind: 'Reitingo rūšis',
     value: 'Reikšmė',
     add: 'Pridėti reitingą',

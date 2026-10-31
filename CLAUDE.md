@@ -157,6 +157,7 @@ supabase/
 - Access: `add_tournament_admin_by_email()`/`remove_tournament_admin()` (owner rules), `transfer_tournament_ownership()`, `set_tournament_password()`, `tournament_access_mode()`, `unlock_tournament()` (returns `{ok, ...}`), `get_tournament_sync_state_with_token()`
 - `get_tournament_sync_state()` - one RLS-respecting snapshot for public and admin pages (tournament, registration state, entries, matches, sets, live, groups, courts, schedule, standings)
 - `generate_bracket()` / `rebuild_bracket()` - single-elimination; **dispatches to `generate_double_elim()`** when format is double_elimination
+  Draw modes (`draw_mode`): `auto-random` (everyone by lot, BYEs spread evenly), `manual` = strict seeding (`knockout_seeded_slots`: 1 v last, no lot), `seeded` = tennis draw (`knockout_tennis_slots`: `tennis_seed_count()` seeds 2/4/8/16 by draw size on ITF lines — 1 top, 2 bottom, 3-4 / 5-8 / 9-16 drawn into their sections — BYEs to seeds first, unseeded by lot; mirrored by `src/lib/drawSeeding.js`). The UI remembers the mode per tournament (`drawModePreference.js`) and shows who the seeds are and where the BYEs go
 - `generate_single_elim(seeds, stage)` - seed-array tree builder (reused by group playoff)
 - `generate_round_robin()` / `generate_round_robin_matches()` - circle-method all-play-all
 - `generate_groups(count)` - snake-distribute into groups + per-group round-robin

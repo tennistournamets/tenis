@@ -74,6 +74,7 @@ import { pluralParams } from '../lib/plural'
 import { bracketPlan, groupAdvanceWarning, groupCountOptions, groupPlan, roundRobinPlan } from '../lib/formatPlan'
 import { isFedMatch, swapDraftSlots } from '../lib/bracketDisplay'
 import { readDrawMode, writeDrawMode } from '../lib/drawModePreference'
+import { drawSummary } from '../lib/drawSeeding'
 import { track } from '../lib/analytics'
 import { advanceOptions, advanceToSend, changesField, effectiveAdvance, groupMatchProgress, groupsError, playoffPreviewItems, rosterMismatch } from '../lib/groupsFlow'
 
@@ -794,6 +795,14 @@ const groupPlanText = computed(() => {
 // Double elimination (v1) needs a power-of-two field; any other count builds nothing.
 const doubleElimCountInvalid = computed(() => isDoubleElim.value && approvedEntries.value.length >= 2 && !bracketPlan(approvedEntries.value.length, 'double_elimination').valid)
 const bracketPlanBlocked = computed(() => doubleElimCountInvalid.value && !hasBracket.value)
+// The line under the draw mode: who the seeds are and where the BYEs go.
+const drawSeedingInfo = computed(() => {
+  const count = approvedEntries.value.length
+  if (count < 2 || isDoubleElim.value && doubleElimCountInvalid.value) return null
+  const plan = drawSummary(drawMode.value, count)
+  const names = sortedApproved.value.slice(0, plan.seeds).map(entryLabel)
+  return { ...plan, names }
+})
 const bracketPlanText = computed(() => {
   const plan = bracketPlan(approvedEntries.value.length, tournamentFormat.value)
   if (plan.n < 2) return t('nextStep.entriesTooFew')
@@ -2655,11 +2664,31 @@ onBeforeUnmount(() => {
 
           <div class="form-field form-field--narrow">
             <label for="adm-draw">{{ t('admin.drawMode') }}</label>
-            <select id="adm-draw" v-model="drawMode" class="input" aria-describedby="adm-draw-hint">
+            <select id="adm-draw" v-model="drawMode" class="input" aria-describedby="adm-draw-hint adm-draw-plan">
+              <option value="seeded">{{ t('admin.drawSeeded') }}</option>
               <option value="auto-random">{{ t('admin.drawRandom') }}</option>
               <option value="manual">{{ t('admin.drawManual') }}</option>
             </select>
-            <p id="adm-draw-hint" class="field-hint">{{ t(drawMode === 'manual' ? 'admin.drawManualHint' : 'admin.drawRandomHint') }}</p>
+            <p id="adm-draw-hint" class="field-hint">{{ t(drawMode === 'manual' ? 'admin.drawManualHint' : drawMode === 'seeded' ? 'admin.drawSeededHint' : 'admin.drawRandomHint') }}</p>
+          </div>
+          <div v-if="drawSeedingInfo" id="adm-draw-plan" class="draw-seeding" role="status">
+            <p v-if="drawSeedingInfo.seeds" class="draw-seeding__line">
+              <strong>{{ t('drawSeeding.seeds', { count: drawSeedingInfo.seeds }) }}</strong>
+              {{ drawSeedingInfo.names.join(', ') }}
+            </p>
+            <p v-if="drawSeedingInfo.byes" class="draw-seeding__line">
+              {{ drawMode === 'seeded'
+                ? (drawSeedingInfo.byesByLot
+                  ? t('drawSeeding.byesSeededLot', { byes: drawSeedingInfo.byes, seeds: drawSeedingInfo.byesToSeeds, lot: drawSeedingInfo.byesByLot })
+                  : t('drawSeeding.byesSeeded', { byes: drawSeedingInfo.byes, seeds: drawSeedingInfo.byesToSeeds }))
+                : drawMode === 'manual'
+                  ? t('drawSeeding.byesStrict', { byes: drawSeedingInfo.byes })
+                  : t('drawSeeding.byesRandom', { byes: drawSeedingInfo.byes }) }}
+            </p>
+            <p v-if="drawMode === 'seeded'" class="draw-seeding__line">{{ t('drawSeeding.unseeded', { count: drawSeedingInfo.unseeded }) }}</p>
+            <button v-if="drawMode !== 'auto-random'" class="btn btn--ghost btn--sm draw-seeding__edit" type="button" @click="setTab('entries')">
+              {{ t('drawSeeding.editSeeding') }}
+            </button>
           </div>
 
           <template v-if="!hasBracket">
@@ -2670,7 +2699,7 @@ onBeforeUnmount(() => {
                 :disabled="actionLoading || bracketPlanBlocked || approvedEntries.length < 2"
                 @click="generateBracket"
               >
-                {{ drawMode === 'manual' ? t('admin.generateManual') : t('admin.generateRandom') }}
+                {{ drawMode === 'manual' ? t('admin.generateManual') : drawMode === 'seeded' ? t('admin.generateSeeded') : t('admin.generateRandom') }}
               </button>
             </div>
 
@@ -2685,7 +2714,7 @@ onBeforeUnmount(() => {
                 :disabled="actionLoading || doubleElimCountInvalid"
                 @click="generateBracket"
               >
-                {{ drawMode === 'manual' ? t('admin.rebuildManual') : t('admin.rebuild') }}
+                {{ drawMode === 'manual' ? t('admin.rebuildManual') : drawMode === 'seeded' ? t('admin.rebuildSeeded') : t('admin.rebuild') }}
               </button>
               <button
                 class="btn btn--ghost btn--sm"
@@ -3187,6 +3216,9 @@ onBeforeUnmount(() => {
 .entry-avatars--pair .entry-avatar + .entry-avatar { margin-left: -8px; }
 
 .entry-search { max-width: 320px; margin-bottom: var(--space-3); }
+.draw-seeding { display: grid; gap: 4px; justify-items: start; padding: var(--space-3); border-radius: var(--radius-sm); background: var(--surface-2); font-size: 0.875rem; }
+.draw-seeding__line { margin: 0; }
+.draw-seeding__edit { margin-top: 4px; }
 .rating-seed { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-2) var(--space-3); }
 .rating-seed__field { flex: 1 1 220px; max-width: 320px; margin: 0; }
 .rating-seed__hint { flex-basis: 100%; margin: 0; }

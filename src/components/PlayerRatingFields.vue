@@ -48,7 +48,7 @@ function remove(index) {
     <div v-for="(row, index) in rows" :key="index" class="rating-fields__row">
       <select
         :id="`${idPrefix}-type-${index}`"
-        class="input"
+        class="input rating-fields__kind"
         :value="row.type"
         :aria-label="t('playerRating.kind')"
         @change="changeKind(row, $event.target.value)"
@@ -98,5 +98,10 @@ function remove(index) {
 .rating-fields__row { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) var(--touch-min); gap: 8px; align-items: center; }
 .rating-fields__row > * { min-width: 0; }
 .rating-fields__add { justify-self: start; }
+/* Phones: the kind gets its own line so neither select is cut. */
+@media (max-width: 520px) {
+  .rating-fields__row { grid-template-columns: minmax(0, 1fr) var(--touch-min); }
+  .rating-fields__kind { grid-column: 1 / -1; }
+}
 .rating-fields__hint { margin: 0; }
 </style>
