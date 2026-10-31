@@ -104,7 +104,9 @@ test('pair drafts detect entry, settings and bracket changes without partially s
 test('malformed, repeated, foreign or unavailable pair members cause no mutations', async () => {
   const t=await fixture(ctx,{category:'doubles',pairing:'pick_random',status:'registration_closed'}), other=await fixture(ctx)
   const s=await state(t.id), ids=mids(s), foreign=mids(await state(other.id))[0]
-  for(const pairs of [[],null,{},[1],[[ids[0]]],[[null,ids[1]]],[[ids[0],ids[0]]],[[ids[0],ids[1]],[ids[0],ids[2]]],[[ids[0],foreign]],[[ids[0],'bad-uuid']]]) {
+  // An empty replacement splits every pair; with no pairs yet it changes nothing.
+  let unchanged=await snapshot(ctx);await pairSave(t,[],true,s);assert.deepEqual(await snapshot(ctx),unchanged)
+  for(const pairs of [null,{},[1],[[ids[0]]],[[null,ids[1]]],[[ids[0],ids[0]]],[[ids[0],ids[1]],[ids[0],ids[2]]],[[ids[0],foreign]],[[ids[0],'bad-uuid']]]) {
     const before=await snapshot(ctx);await assert.rejects(pairSave(t,pairs,true,s));assert.deepEqual(await snapshot(ctx),before)
   }
   await drop(t);await drop(other)
