@@ -5,6 +5,7 @@ import { compareBySchedule, scheduleSummary } from '../lib/schedule'
 
 import { matchSideLabel } from '../lib/entryDisplay'
 import { formatSetScore } from '../lib/tennisRules'
+import { isWalkover, resultTag } from '../lib/matchResult'
 import { knockoutTotals, matchRoundName } from '../lib/roundLabels'
 import { pointLabel, scoreLine } from '../lib/useTennisScoring'
 import { compareGroupMatches, groupNamesById, groupRoundLabel } from '../lib/groupsFlow'
@@ -95,8 +96,9 @@ function matchHeading(match) {
 }
 
 function finalScore(match) {
+  if (isWalkover(match)) return resultTag(match)
   const sets = [...(props.setsByMatch[match.id] || [])].sort((a, b) => a.set_index - b.set_index)
-  if (sets.length) return sets.map(formatSetScore).join(' · ')
+  if (sets.length) return [sets.map(formatSetScore).join(' · '), resultTag(match)].filter(Boolean).join(' ')
   if (match.side_a_score != null && match.side_b_score != null) {
     const base = `${match.side_a_score} : ${match.side_b_score}`
     return match.side_a_pens != null && match.side_b_pens != null

@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { confirmDialog } from '../lib/confirmDialog'
 import AppModal from './AppModal.vue'
+import SpecialResultPanel from './SpecialResultPanel.vue'
 
 import { normalizeTennisState, pointLabel } from '../lib/useTennisScoring'
 import { useDeferredChangeover } from '../lib/liveSides'
@@ -444,6 +445,18 @@ async function stopLive() {
       <p v-if="!isOnline" class="error-text" role="alert">{{ t('sync.offline') }}</p>
       <p v-if="cancelledTaps" class="error-text live-modal__cancelled" role="alert">{{ t('live.cancelledPoints', { count: cancelledTaps }) }}</p>
       <p v-if="errorText" class="error-text" role="alert">{{ errorText }}</p>
+
+      <!-- A player retires mid-match: the games played stay, the rest goes to the opponent. -->
+      <SpecialResultPanel
+        v-if="family === 'sets' && match.status !== 'finished' && match.side_a_entry_id && match.side_b_entry_id"
+        :match="match"
+        family="sets"
+        :types="['retired']"
+        :side-names="{ a: teamA, b: teamB }"
+        :revision="match.score_revision"
+        :disabled="!isSessionCurrent() || !isOnline || loading || pendingTaps > 0"
+        @saved="emit('changed'); emit('close')"
+      />
     </div>
   </AppModal>
 </template>

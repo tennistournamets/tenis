@@ -18,6 +18,8 @@ import { confirmDialog } from '../lib/confirmDialog'
 import { useAuthStore } from '../stores/auth'
 import TennisSetInputs from './TennisSetInputs.vue'
 import MatchStreamButton from './admin/MatchStreamButton.vue'
+import SpecialResultPanel from './SpecialResultPanel.vue'
+import { resultTag } from '../lib/matchResult'
 import { scoreRows, buildSetPayload, scoringError } from '../lib/tennisRules'
 
 const props = defineProps({
@@ -248,6 +250,15 @@ async function save() {
   emit('saved')
   setTimeout(() => emit('close'), 600)
 }
+// W.O. / RET written by SpecialResultPanel: the typed draft is no longer needed.
+const canRecordSpecial = computed(() => props.canEditFinal && props.exists && !isPoints.value
+  && props.match.status !== 'finished' && Boolean(props.match.side_a_entry_id && props.match.side_b_entry_id))
+function specialSaved() {
+  savedFlash.value = true
+  clearScoreDraft()
+  emit('saved')
+  setTimeout(() => emit('close'), 600)
+}
 </script>
 
 <template>
@@ -275,6 +286,7 @@ async function save() {
         <button class="btn btn--ghost btn--sm" @click="reloadResult">{{ t('scoringFlow.reload') }}</button>
       </div>
       <p v-else class="muted">{{ t('scoringFlow.hint') }}</p>
+      <p v-if="resultTag(match)" class="msm-result-note">{{ t('walkover.resultNote', { tag: resultTag(match) }) }}</p>
       <!-- sets sports -->
       <TennisSetInputs v-if="isSets" v-model="setRows" :scoring-config="scoringConfig" :set-format="setFormat"
         :team-a="sideLabel('a')" :team-b="sideLabel('b')"
@@ -344,11 +356,25 @@ async function save() {
       </div>
 
       <p v-if="errorText" class="error-text" role="alert">{{ errorText }}</p>
+
+      <SpecialResultPanel
+        v-if="canRecordSpecial"
+        :match="match"
+        :entries-map="entriesMap"
+        :family="family"
+        :set-rows="setRows"
+        :scoring-config="scoringConfig"
+        :set-format="setFormat"
+        :revision="match.score_revision"
+        :disabled="saving || savedFlash"
+        @saved="specialSaved"
+      />
     </div>
   </AppModal>
 </template>
 
 <style scoped>
+.msm-result-note { margin: 0; font-weight: 600; }
 .msm-matchup {
   display: -webkit-box;
   overflow: hidden;
