@@ -386,10 +386,14 @@ const deadlineIso = computed(() => registration.value?.deadline_at || tournament
 const badgeText = computed(() => statusText(t, locale.value, { ...tournament.value, registration_deadline: deadlineIso.value }, badgeStatus.value))
 const showDeadlineHint = computed(() => canManageTournament.value && regState.value.deadlinePassed && tournament.value?.status === 'registration_open')
 const waitlistSeatFree = computed(() => Boolean(registration.value?.capacity) && !registration.value.is_full && waitlistedEntries.value.length > 0)
+// Contacts and ratings are private (not in the snapshot or Realtime). An entry
+// event from Realtime (another tab, a rating set elsewhere) bumps this tick so
+// both are re-read, not only when the entry list itself changes.
+const privateDataTick = ref(0)
 // Applicants' contacts: owners and editors only, re-read when the entry list changes.
 const entryContacts = ref({})
 let entryContactsRead = 0
-watch(() => (canManageTournament.value ? entries.value.map(e => e.id).join(',') : ''), async key => {
+watch(() => (canManageTournament.value ? `${entries.value.map(e => e.id).join(',')}|${privateDataTick.value}` : ''), async key => {
   const read = ++entryContactsRead
   if (!key) { entryContacts.value = {}; return }
   try {
@@ -411,7 +415,7 @@ async function reloadEntryRatings(key = entryRatingsKey.value) {
   } catch { /* Ratings are an aid; the lists work without them. */ }
 }
 const entryRatingsKey = computed(() => (ratingKinds.value.length
-  ? entries.value.map(e => `${e.id}:${(e.entry_members || []).map(m => m.id).join('+')}`).join(',') : ''))
+  ? `${entries.value.map(e => `${e.id}:${(e.entry_members || []).map(m => m.id).join('+')}`).join(',')}|${privateDataTick.value}` : ''))
 watch(entryRatingsKey, key => reloadEntryRatings(key))
 // The organizer's own value for a player (EntryRatingsModal).
 const ratingsEntryId = ref(null)
@@ -611,6 +615,7 @@ function setupRealtime() {
       // list every half minute is pure traffic; after a drop or a rejoin the
       // channel may well have missed one, and syncFailed marks exactly that.
       if (payload?.table === 'tournament_admins' || syncFailed.value) adminListStale = true
+      if (payload?.table === 'entries' || (!payload && syncFailed.value)) privateDataTick.value++
       snapshotRefresh.request()
     },
     onStatus: status => { if (status !== 'SUBSCRIBED') syncFailed.value = true },
@@ -1084,6 +1089,33 @@ async function saveManualPairs() {
     if (error) throw error
     await closeManualPairing(true)
     await loadAll(true)
+  } catch (error) {
+    errorText.value = scoringError(error?.message, t)
+    try { await loadEntries() } catch { /* Preserve the local pairing draft. */ }
+  } finally { actionLoading.value = false }
+}
+
+// Split every pair at once: an empty list with p_replace makes the server
+// split all pairs (members move to new entries, so ratings and contacts stay).
+async function splitAllPairs() {
+  if (actionLoading.value) return
+  if (pairingConflict.value) { errorText.value = t('drafts.structureConflict'); return }
+  const baseline = cloneForm(pairingBaseline.value)
+  const message = [t('admin.splitAllConfirm'), matches.value.length ? t('admin.splitAllBracket') : ''].filter(Boolean).join('\n\n')
+  if (!(await confirmDialog(message, { danger: true, confirmLabel: t('admin.splitAllPairs') }))) return
+  actionLoading.value = true
+  errorText.value = ''
+  noticeText.value = ''
+  try {
+    const { error } = await supabase.rpc('save_tournament_pairs', {
+      p_tournament_id: props.id, p_pairs: [], p_replace: true,
+      p_expected_entries: baseline.entries, p_expected_matches: baseline.matches,
+      p_expected_revision: baseline.settings_revision,
+    })
+    if (error) throw error
+    await closeManualPairing(true)
+    await loadAll(true)
+    noticeText.value = t('admin.splitAllDone', { count: unpairedCount.value })
   } catch (error) {
     errorText.value = scoringError(error?.message, t)
     try { await loadEntries() } catch { /* Preserve the local pairing draft. */ }
@@ -2430,6 +2462,14 @@ onBeforeUnmount(() => {
                 >
                   {{ t('actions.cancel') }}
                 </button>
+                <button
+                  class="btn btn--ghost btn--sm manual-pairing__split"
+                  type="button"
+                  :disabled="actionLoading || pairingConflict"
+                  @click="splitAllPairs"
+                >
+                  {{ t('admin.splitAllPairs') }}
+                </button>
               </div>
             </div>
         </section>
@@ -3219,6 +3259,8 @@ onBeforeUnmount(() => {
 .draw-seeding { display: grid; gap: 4px; justify-items: start; padding: var(--space-3); border-radius: var(--radius-sm); background: var(--surface-2); font-size: 0.875rem; }
 .draw-seeding__line { margin: 0; }
 .draw-seeding__edit { margin-top: 4px; }
+.manual-pairing__footer { flex-wrap: wrap; }
+.manual-pairing__split { margin-left: auto; color: var(--danger); }
 .rating-seed { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-2) var(--space-3); }
 .rating-seed__field { flex: 1 1 220px; max-width: 320px; margin: 0; }
 .rating-seed__hint { flex-basis: 100%; margin: 0; }

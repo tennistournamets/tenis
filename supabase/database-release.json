@@ -216,6 +216,18 @@
       "sha256": "ce889565e346948f9dff75ebb7b14a18adc5217624b5b7e4e02a637bb09c0114",
       "tenisAppliedVersion": "20261031141021",
       "tenisNote": "Applied 2026-10-31 with supabase db push --db-url (session pooler) after logical backup (tenis-public-20261031-1803-pre-seeded-draw-and-pairs.dump + migrations journal export); draw_mode seeded, tennis_seed_count, knockout_tennis_slots, generate_bracket seeded branch."
+    },
+    {
+      "path": "supabase/migrations/20261031153833_rating_change_signal.sql",
+      "sha256": "435a99362d0e5735f501d362ee42909aa406e70646f61e294a30a9f5a29c8316",
+      "tenisAppliedVersion": "20261031153833",
+      "tenisNote": "Applied 2026-10-31 with supabase db push --db-url (session pooler) after logical backup (tenis-public-20261031-1803-pre-seeded-draw-and-pairs.dump + migrations journal export); rating change touches entries.updated_at (Realtime signal)."
+    },
+    {
+      "path": "supabase/migrations/20261031154027_split_all_pairs.sql",
+      "sha256": "b1f4baaea5a79446ef9012c96ceb4524ea45d97bd828e2ceed63cad173cbe58e",
+      "tenisAppliedVersion": "20261031154027",
+      "tenisNote": "Applied 2026-10-31 with supabase db push --db-url (session pooler) after logical backup (tenis-public-20261031-1803-pre-seeded-draw-and-pairs.dump + migrations journal export); save_tournament_pairs accepts an empty list with p_replace (split all pairs)."
     }
   ],
   "baseline": {
