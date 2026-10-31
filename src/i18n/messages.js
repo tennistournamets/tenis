@@ -15,6 +15,7 @@ import { pointsFormatMessages } from './pointsFormat'
 import { aiMessages } from './ai'
 import { playerRatingMessages } from './playerRating'
 import { drawSeedingMessages } from './drawSeeding'
+import { seedEditorMessages } from './seedEditor'
 
 export const messages = {
   ru: {
@@ -360,6 +361,7 @@ export const messages = {
     ai: aiMessages.ru,
     playerRating: playerRatingMessages.ru,
     drawSeeding: drawSeedingMessages.ru,
+    seedEditor: seedEditorMessages.ru,
     app: {
       title: 'Bracketa',
       subtitle: 'Организация турниров, жеребьёвка и live-сетка',
@@ -654,7 +656,7 @@ export const messages = {
       wizardRecapFee: 'платный взнос',
       wizardRecapNoRules: 'регистрация без ограничений',
       divisionLabel: 'Разряд',
-      seedHint: 'Номер слева — посев. По нему жеребьёвка выбирает сеяных, а группы распределяются «змейкой». Изменить: меню ⋯ у строки.',
+      seedHint: 'Номер слева — посев. По нему жеребьёвка выбирает сеяных, а группы распределяются «змейкой». Изменить: «Изменить посев» или меню ⋯ у строки.',
       seedLabel: 'Посев',
       seedUp: 'Поднять в посеве',
       seedDown: 'Опустить в посеве',
@@ -1632,6 +1634,7 @@ export const messages = {
     ai: aiMessages.en,
     playerRating: playerRatingMessages.en,
     drawSeeding: drawSeedingMessages.en,
+    seedEditor: seedEditorMessages.en,
     app: {
       title: 'Bracketa',
       subtitle: 'Run tournaments, draws, and live brackets',
@@ -1926,7 +1929,7 @@ export const messages = {
       wizardRecapFee: 'paid entry',
       wizardRecapNoRules: 'registration without limits',
       divisionLabel: 'Division',
-      seedHint: 'The number on the left is the seed: the draw picks the seeds by it and groups are filled in a snake. Change it in the ⋯ menu.',
+      seedHint: 'The number on the left is the seed: the draw picks the seeds by it and groups are filled in a snake. Change it with "Edit seeding" or the ⋯ menu.',
       seedLabel: 'Seed',
       seedUp: 'Move up',
       seedDown: 'Move down',
@@ -2904,6 +2907,7 @@ export const messages = {
     ai: aiMessages.lt,
     playerRating: playerRatingMessages.lt,
     drawSeeding: drawSeedingMessages.lt,
+    seedEditor: seedEditorMessages.lt,
     app: {
       title: 'Bracketa',
       subtitle: 'Turnyrai, burtai ir tinkleliai tiesiogiai',
@@ -3198,7 +3202,7 @@ export const messages = {
       wizardRecapFee: 'mokamas dalyvavimas',
       wizardRecapNoRules: 'registracija be apribojimų',
       divisionLabel: 'Įskaita',
-      seedHint: 'Skaičius kairėje – skirstymo numeris: pagal jį burtai parenka skirstomuosius, o grupės pildomos „gyvatėle“. Keisti galima meniu ⋯.',
+      seedHint: 'Skaičius kairėje – skirstymo numeris: pagal jį burtai parenka skirstomuosius, o grupės pildomos „gyvatėle“. Keisti: „Keisti skirstymą“ arba meniu ⋯.',
       seedLabel: 'Skirstymo numeris',
       seedUp: 'Pakelti',
       seedDown: 'Nuleisti',
