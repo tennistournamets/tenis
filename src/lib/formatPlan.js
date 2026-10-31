@@ -43,9 +43,11 @@ export function bracketPlan(n, format = 'single_elimination') {
   const size = count < 2 ? 0 : 2 ** Math.ceil(Math.log2(count))
   const rounds = size ? Math.log2(size) : 0
   if (format === 'double_elimination') {
-    // No byes in v1: other counts produce no bracket, so there is nothing to count.
-    const valid = count >= 2 && isPowerOfTwo(count)
-    return { n: count, size, rounds, byes: size - count, upper: valid ? size - 1 : 0, lower: valid && size > 2 ? size - 2 : 0, final: valid ? 1 : 0, valid }
+    // Any count: BYEs fill the first upper round. Games actually played: every
+    // entry but the champion loses in the upper bracket once (n-1), every
+    // entry but the two finalists is knocked out of the lower one (n-2).
+    const valid = count >= 2
+    return { n: count, size, rounds, byes: size - count, upper: valid ? count - 1 : 0, lower: valid ? count - 2 : 0, final: valid ? 1 : 0, valid }
   }
   return { n: count, size, rounds, byes: size - count, matches: count ? count - 1 : 0, valid: count >= 2 }
 }

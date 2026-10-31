@@ -153,27 +153,17 @@ test('six qualifiers from three groups retain group scores across playoff regene
   await drop(t.id)
 })
 
-test('unsupported double-elimination counts 3–63 fail before DELETE and preserve existing scores and snapshots',async()=>{
-  // A DELETE trigger detects even attempted writes before the validation error;
-  // unchanged snapshots alone would only prove transaction rollback.
-  await ctx.db.exec(`create function reject_test_delete() returns trigger language plpgsql as $$ begin raise exception 'DELETE before validation'; end $$;
-    create trigger guard_test_delete_matches before delete on matches for each statement execute function reject_test_delete();
-    create trigger guard_test_delete_sets before delete on match_sets for each statement execute function reject_test_delete();`)
-  // Before the start: a started tournament with a result is refused earlier (drafts.bracketResultsLocked).
-  const t=await fixture(ctx,{count:64,format:'double_elimination',status:'registration_closed'})
-  try{
-    // Privileged synthetic existing result, without invoking DELETE generators.
-    const m=(await ctx.db.query("insert into matches(tournament_id,stage,round_number,match_number,side_a_entry_id,side_b_entry_id,status) values($1,'winners',1,1,$2,$3,'ready') returning *",[t.id,t.entries[0],t.entries[1]])).rows[0]
-    await ctx.db.query("insert into match_sets(match_id,set_index,side_a_games,side_b_games) values($1,1,6,0)",[m.id])
-    for(let n=3;n<64;n++){
-      if((n&(n-1))===0)continue
-      await ctx.db.query("update entries set status=case when id=any($1::uuid[]) then 'approved'::registration_status else 'pending'::registration_status end where tournament_id=$2",[t.entries.slice(0,n),t.id])
-      for(const fn of ['generate_bracket','rebuild_bracket'])await assertDeniedUnchanged(ctx,'owner',`select ${fn}($1)`,[t.id],/power-of-two/)
-    }
-  }finally{
-    await ctx.db.exec('drop trigger guard_test_delete_matches on matches; drop trigger guard_test_delete_sets on match_sets; drop function reject_test_delete()')
-    await drop(t.id)
+test('double elimination builds for every count 3–63: everyone placed once, no empty first-round match',async()=>{
+  const t=await fixture(ctx,{count:63,format:'double_elimination',status:'registration_closed'})
+  for(let n=3;n<64;n++){
+    await ctx.db.query("update entries set status=case when id=any($1::uuid[]) then 'approved'::registration_status else 'pending'::registration_status end where tournament_id=$2",[t.entries.slice(0,n),t.id])
+    await asActor(ctx,'owner','select generate_bracket($1)',[t.id])
+    const first=(await ctx.db.query("select side_a_entry_id a,side_b_entry_id b from matches where tournament_id=$1 and stage='winners' and round_number=1",[t.id])).rows
+    const placed=first.flatMap(m=>[m.a,m.b]).filter(Boolean)
+    assert.equal(placed.length,n,`n=${n}`);assert.equal(new Set(placed).size,n,`n=${n}`)
+    assert.ok(first.every(m=>m.a||m.b),`n=${n}`)
   }
+  await drop(t.id)
 })
 
 test('all supported double-elimination sizes 2,4,8,16,32,64 reach the single grand final',async()=>{

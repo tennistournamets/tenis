@@ -27,6 +27,22 @@ const boardId = useId()
 const winners = computed(() => props.matches.filter((m) => m.stage === 'winners'))
 const losers = computed(() => props.matches.filter((m) => m.stage === 'losers'))
 const grandFinal = computed(() => props.matches.filter((m) => m.stage === 'grand_final'))
+// A slot no match feeds any more (its feeder was a BYE or was dropped) will
+// stay empty: the entrant there gets a free pass, so show it as a BYE.
+const byeSlots = computed(() => {
+  const fed = new Set(props.matches.flatMap((m) => [
+    m.next_match_id ? `${m.next_match_id}:${m.next_slot}` : null,
+    m.loser_next_match_id ? `${m.loser_next_match_id}:${m.loser_next_slot}` : null,
+  ]).filter(Boolean))
+  const out = {}
+  for (const m of props.matches) {
+    if (m.stage === 'winners' && m.round_number === 1) continue
+    for (const [side, slot, entry] of [['a', 'A', m.side_a_entry_id], ['b', 'B', m.side_b_entry_id]]) {
+      if (!entry && !fed.has(`${m.id}:${slot}`)) (out[m.id] ||= []).push(side)
+    }
+  }
+  return out
+})
 const panels = computed(() => [
   { key: 'winners', label: t('admin.winnersBracket'), count: winners.value.length },
   { key: 'losers', label: t('admin.losersBracket'), count: losers.value.length },
@@ -63,6 +79,7 @@ watch(panels, (next) => {
       </header>
       <div class="de-panel__canvas">
         <BracketBoard
+          :bye-slots="byeSlots"
           :matches="winners"
           :sets-by-match="setsByMatch"
           :entries-map="entriesMap"
@@ -85,6 +102,7 @@ watch(panels, (next) => {
       </header>
       <div class="de-panel__canvas">
         <BracketBoard
+          :bye-slots="byeSlots"
           :matches="losers"
           :sets-by-match="setsByMatch"
           :entries-map="entriesMap"
@@ -105,6 +123,7 @@ watch(panels, (next) => {
       </header>
       <div class="de-panel__canvas">
         <BracketBoard
+          :bye-slots="byeSlots"
           :matches="grandFinal"
           :sets-by-match="setsByMatch"
           :entries-map="entriesMap"

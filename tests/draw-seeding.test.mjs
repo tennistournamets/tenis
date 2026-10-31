@@ -37,3 +37,10 @@ test('draw texts exist in RU, EN and LT', () => {
     assert.equal(source.match(new RegExp(`^      ${key}: '`, 'gm'))?.length, 3, `admin.${key} in each locale`)
   }
 })
+
+test('one BYE has its own wording in every locale', () => {
+  for (const lang of ['ru', 'en', 'lt']) {
+    assert.ok(drawSeedingMessages[lang].byesSeededOne && drawSeedingMessages[lang].byesStrictOne, lang)
+    assert.ok(!/\{/.test(drawSeedingMessages[lang].byesSeededOne), 'no placeholders left')
+  }
+})

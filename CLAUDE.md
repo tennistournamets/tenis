@@ -163,7 +163,7 @@ supabase/
 - `generate_round_robin()` / `generate_round_robin_matches()` - circle-method all-play-all
 - `generate_groups(count)` - snake-distribute into groups + per-group round-robin
 - `generate_group_playoff()` - cross-group seeding → knockout (stage `winners`)
-- `generate_double_elim(seeds)` - winners+losers brackets + grand final (v1: power-of-two, single grand final)
+- `generate_double_elim(slots)` - winners+losers brackets + grand final for any field size: first-round slots come from the draw mode (`knockout_random_slots` / `knockout_seeded_slots` / `knockout_tennis_slots`, NULL = BYE); BYE matches are decided at once and lose their losers-bracket link, losers-bracket first-round matches fed by two BYEs are deleted, and `de_resolve_bye()` (called from `propagate_winner`) passes an entrant whose other slot nothing feeds. BYE places are fixed in a double-elimination layout (`drafts.byeFixedDoubleElim`); single grand final
 - `get_standings(tournament_id, group_id)` - computed standings (points→head-to-head→diff→score_for→name)
 - `update_match_sets()` - tennis/padel scoring; writes aggregate + propagates winner
 - `update_football_result(a_goals, b_goals, a_pens, b_pens)` - football scoring (draws/penalties) + propagate
@@ -200,7 +200,7 @@ Tables `tournaments`, `entries`, `matches`, `match_sets`, `tournament_admins`, `
 - **Tournaments accessed by slug** (public sharing).
 
 ### v1 limitations (documented)
-- Double-elim requires a power-of-two participant count; single grand final (no bracket reset).
+- Double-elim: single grand final (no bracket reset); BYE places cannot be rearranged.
 - Schedule conflicts: without match durations a court/participant clash is detected only for identical fixed start times; minimum rest is a warning between start times. Automatic scheduling uses one duration for all matches and is recalculated only on request (no breaks, no per-stage durations).
 - Group playoff seeding tuned for `advance_per_group = 2`.
 - Standings head-to-head handles pairwise/group ties; circular ties fall through to goal difference.
@@ -213,7 +213,6 @@ Tables `tournaments`, `entries`, `matches`, `match_sets`, `tournament_admins`, `
 Planned/known gaps, roughly by priority. Not implemented yet.
 
 ### Formats & brackets
-- **Double-elim: non-power-of-two** participant counts (bye handling in WB→LB routing).
 - **Double-elim: bracket reset** — true grand final where LB champion must beat WB champion twice (`format_config.double_gf_reset` flag exists, unused).
 - **Losers-bracket anti-rematch seeding** — current drop mapping is structural; doesn't optimize to delay rematches.
 - **Third-place match** — for single-elim and group playoff (`format_config.third_place_match`, `stage='third_place'` reserved, not wired).
