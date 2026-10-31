@@ -16,6 +16,7 @@ import { aiMessages } from './ai'
 import { playerRatingMessages } from './playerRating'
 import { drawSeedingMessages } from './drawSeeding'
 import { seedEditorMessages } from './seedEditor'
+import { entryEditMessages } from './entryEdit'
 
 export const messages = {
   ru: {
@@ -362,6 +363,7 @@ export const messages = {
     playerRating: playerRatingMessages.ru,
     drawSeeding: drawSeedingMessages.ru,
     seedEditor: seedEditorMessages.ru,
+    entryEdit: entryEditMessages.ru,
     app: {
       title: 'Bracketa',
       subtitle: 'Организация турниров, жеребьёвка и live-сетка',
@@ -1635,6 +1637,7 @@ export const messages = {
     playerRating: playerRatingMessages.en,
     drawSeeding: drawSeedingMessages.en,
     seedEditor: seedEditorMessages.en,
+    entryEdit: entryEditMessages.en,
     app: {
       title: 'Bracketa',
       subtitle: 'Run tournaments, draws, and live brackets',
@@ -2908,6 +2911,7 @@ export const messages = {
     playerRating: playerRatingMessages.lt,
     drawSeeding: drawSeedingMessages.lt,
     seedEditor: seedEditorMessages.lt,
+    entryEdit: entryEditMessages.lt,
     app: {
       title: 'Bracketa',
       subtitle: 'Turnyrai, burtai ir tinkleliai tiesiogiai',
