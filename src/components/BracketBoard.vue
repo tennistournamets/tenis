@@ -9,6 +9,8 @@ import { injectSponsorship } from '../lib/sponsorship'
 import SponsorLockup from './sponsor/SponsorLockup.vue'
 
 const props = defineProps({
+  // { [matchId]: ['a'|'b'] } sides shown as a BYE (double elimination).
+  byeSlots: { type: Object, default: () => ({}) },
   matches: {
     type: Array,
     default: () => [],
@@ -344,6 +346,7 @@ watch(splitSectionsFlat, () => scheduleUpdate(), { deep: true })
             :sets-by-match="setsByMatch"
             :entries-map="entriesMap"
             :editable-slots="slotsEditable(match)"
+            :bye-sides="byeSlots[match.id] || []"
             :selected-slot-key="selectedSlot ? `${selectedSlot.matchId}-${selectedSlot.side}` : ''"
             :live-score="liveScoresByMatch[match.id]"
             :can-live-score="canLiveScore"
@@ -369,6 +372,7 @@ watch(splitSectionsFlat, () => scheduleUpdate(), { deep: true })
             :sets-by-match="setsByMatch"
             :entries-map="entriesMap"
             :editable-slots="slotsEditable(match)"
+            :bye-sides="byeSlots[match.id] || []"
             :selected-slot-key="selectedSlot ? `${selectedSlot.matchId}-${selectedSlot.side}` : ''"
             :live-score="liveScoresByMatch[match.id]"
             :can-live-score="canLiveScore"

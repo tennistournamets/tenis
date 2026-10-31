@@ -11,6 +11,8 @@ import MatchStreamLink from './MatchStreamLink.vue'
 import { matchStreamUrl } from '../lib/matchStream'
 
 const props = defineProps({
+  // Sides that no match feeds any more (double elimination): shown as a BYE, not "waiting".
+  byeSides: { type: Array, default: () => [] },
   match: {
     type: Object,
     required: true,
@@ -57,9 +59,9 @@ const scheduleIsDraft = computed(() => Boolean(scheduleView?.value?.draftIds?.ha
 
 const dragOverKey = ref(null)
 
-function memberLines(entryId) {
+function memberLines(entryId, side) {
   if (!entryId) {
-    return [t(isByeMatch(props.match) ? 'bracket.bye' : 'bracket.tbd')]
+    return [t(isByeMatch(props.match) || (side && props.byeSides.includes(side)) ? 'bracket.bye' : 'bracket.tbd')]
   }
   const names = entryDisplayNames(props.entriesMap[entryId])
   return names.length ? names : [t('bracket.tbd')]
@@ -253,7 +255,7 @@ function selectSlot(event, side) {
       :draggable="editableSlots && !slotLocked() && Boolean(match.side_a_entry_id)"
       :role="editableSlots && !slotLocked() ? 'button' : undefined"
       :tabindex="editableSlots && !slotLocked() ? 0 : undefined"
-      :aria-label="editableSlots && !slotLocked() ? t('mobile.selectBracketSlot', { name: memberLines(match.side_a_entry_id).join(' / ') }) : undefined"
+      :aria-label="editableSlots && !slotLocked() ? t('mobile.selectBracketSlot', { name: memberLines(match.side_a_entry_id, 'a').join(' / ') }) : undefined"
       @dragstart="onDragStart($event, 'a', match.side_a_entry_id)"
       @dragend="onDragEnd"
       @dragover="onDragOver($event, 'a')"
@@ -264,9 +266,9 @@ function selectSlot(event, side) {
       @keydown.space="selectSlot($event, 'a')"
     >
       <div v-if="isStacked(match.side_a_entry_id)" class="match-card__members">
-        <span v-for="(n, i) in memberLines(match.side_a_entry_id)" :key="`a-${i}`" class="match-card__member">{{ n }}</span>
+        <span v-for="(n, i) in memberLines(match.side_a_entry_id, 'a')" :key="`a-${i}`" class="match-card__member">{{ n }}</span>
       </div>
-      <span v-else class="match-card__name">{{ memberLines(match.side_a_entry_id)[0] }}</span>
+      <span v-else class="match-card__name">{{ memberLines(match.side_a_entry_id, 'a')[0] }}</span>
     </div>
     <div
       class="match-card__row"
@@ -274,7 +276,7 @@ function selectSlot(event, side) {
       :draggable="editableSlots && !slotLocked() && Boolean(match.side_b_entry_id)"
       :role="editableSlots && !slotLocked() ? 'button' : undefined"
       :tabindex="editableSlots && !slotLocked() ? 0 : undefined"
-      :aria-label="editableSlots && !slotLocked() ? t('mobile.selectBracketSlot', { name: memberLines(match.side_b_entry_id).join(' / ') }) : undefined"
+      :aria-label="editableSlots && !slotLocked() ? t('mobile.selectBracketSlot', { name: memberLines(match.side_b_entry_id, 'b').join(' / ') }) : undefined"
       @dragstart="onDragStart($event, 'b', match.side_b_entry_id)"
       @dragend="onDragEnd"
       @dragover="onDragOver($event, 'b')"
@@ -285,9 +287,9 @@ function selectSlot(event, side) {
       @keydown.space="selectSlot($event, 'b')"
     >
       <div v-if="isStacked(match.side_b_entry_id)" class="match-card__members">
-        <span v-for="(n, i) in memberLines(match.side_b_entry_id)" :key="`b-${i}`" class="match-card__member">{{ n }}</span>
+        <span v-for="(n, i) in memberLines(match.side_b_entry_id, 'b')" :key="`b-${i}`" class="match-card__member">{{ n }}</span>
       </div>
-      <span v-else class="match-card__name">{{ memberLines(match.side_b_entry_id)[0] }}</span>
+      <span v-else class="match-card__name">{{ memberLines(match.side_b_entry_id, 'b')[0] }}</span>
     </div>
     <div class="match-card__meta">
       <template v-if="(setsByMatch[match.id] || []).length">

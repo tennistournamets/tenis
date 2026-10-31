@@ -228,6 +228,12 @@
       "sha256": "b1f4baaea5a79446ef9012c96ceb4524ea45d97bd828e2ceed63cad173cbe58e",
       "tenisAppliedVersion": "20261031154027",
       "tenisNote": "Applied 2026-10-31 with supabase db push --db-url (session pooler) after logical backup (tenis-public-20261031-1803-pre-seeded-draw-and-pairs.dump + migrations journal export); save_tournament_pairs accepts an empty list with p_replace (split all pairs)."
+    },
+    {
+      "path": "supabase/migrations/20261031181131_double_elim_any_size.sql",
+      "sha256": "bec880f00925c8ac2a120bae75fa1ca469a937d47251f1a77abd1e1d80e38b39",
+      "tenisAppliedVersion": "20261031181131",
+      "tenisNote": "Applied 2026-10-31 with supabase db push --db-url (session pooler) after logical backup (tenis-public-20261031-2049-pre-double-elim-any-size.dump + migrations journal export); double elimination for any field size (knockout_random_slots, generate_double_elim with BYEs, de_resolve_bye from propagate_winner, BYE places fixed in DE layouts)."
     }
   ],
   "baseline": {

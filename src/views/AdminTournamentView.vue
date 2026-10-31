@@ -834,13 +834,10 @@ const groupPlanText = computed(() => {
     qualifiers: plan.qualifiers,
   }, t, locale.value))
 })
-// Double elimination (v1) needs a power-of-two field; any other count builds nothing.
-const doubleElimCountInvalid = computed(() => isDoubleElim.value && approvedEntries.value.length >= 2 && !bracketPlan(approvedEntries.value.length, 'double_elimination').valid)
-const bracketPlanBlocked = computed(() => doubleElimCountInvalid.value && !hasBracket.value)
 // The line under the draw mode: who the seeds are and where the BYEs go.
 const drawSeedingInfo = computed(() => {
   const count = approvedEntries.value.length
-  if (count < 2 || isDoubleElim.value && doubleElimCountInvalid.value) return null
+  if (count < 2) return null
   const plan = drawSummary(drawMode.value, count)
   const names = sortedApproved.value.slice(0, plan.seeds).map(entryLabel)
   return { ...plan, names }
@@ -848,7 +845,7 @@ const drawSeedingInfo = computed(() => {
 const bracketPlanText = computed(() => {
   const plan = bracketPlan(approvedEntries.value.length, tournamentFormat.value)
   if (plan.n < 2) return t('nextStep.entriesTooFew')
-  if (isDoubleElim.value) return plan.valid ? t('admin.bracketPlanDE', pluralParams(plan, t, locale.value)) : ''
+  if (isDoubleElim.value) return t(plan.byes ? 'admin.bracketPlanDEByes' : 'admin.bracketPlanDE', pluralParams(plan, t, locale.value))
   return t(plan.byes ? 'admin.bracketPlanByes' : 'admin.bracketPlanSE', pluralParams(plan, t, locale.value))
 })
 const slotsEditable = computed(() => canManageTournament.value && (arrangeMode.value || bracketEditing.value)
@@ -2761,7 +2758,6 @@ onBeforeUnmount(() => {
         <section v-if="!isRoundRobin && !isGroupsPlayoff && !isPointsFmt && canManageTournament && !isTournamentActive && !isTournamentFinished" class="card stack stack--sm">
           <h2 class="section-title">{{ t('admin.drawSection') }}</h2>
           <p v-if="bracketPlanText" class="muted format-plan">{{ bracketPlanText }}</p>
-          <p v-if="doubleElimCountInvalid" class="alert alert--info" role="status">{{ t('admin.doubleElimNeedsPow2', { n: approvedEntries.length }) }}</p>
 
           <div class="form-field form-field--narrow">
             <label for="adm-draw">{{ t('admin.drawMode') }}</label>
@@ -2781,9 +2777,10 @@ onBeforeUnmount(() => {
               {{ drawMode === 'seeded'
                 ? (drawSeedingInfo.byesByLot
                   ? t('drawSeeding.byesSeededLot', { byes: drawSeedingInfo.byes, seeds: drawSeedingInfo.byesToSeeds, lot: drawSeedingInfo.byesByLot })
-                  : t('drawSeeding.byesSeeded', { byes: drawSeedingInfo.byes, seeds: drawSeedingInfo.byesToSeeds }))
+                  : drawSeedingInfo.byes === 1 ? t('drawSeeding.byesSeededOne')
+                    : t('drawSeeding.byesSeeded', { byes: drawSeedingInfo.byes, seeds: drawSeedingInfo.byesToSeeds }))
                 : drawMode === 'manual'
-                  ? t('drawSeeding.byesStrict', { byes: drawSeedingInfo.byes })
+                  ? (drawSeedingInfo.byes === 1 ? t('drawSeeding.byesStrictOne') : t('drawSeeding.byesStrict', { byes: drawSeedingInfo.byes }))
                   : t('drawSeeding.byesRandom', { byes: drawSeedingInfo.byes }) }}
             </p>
             <p v-if="drawMode === 'seeded'" class="draw-seeding__line">{{ t('drawSeeding.unseeded', { count: drawSeedingInfo.unseeded }) }}</p>
@@ -2797,7 +2794,7 @@ onBeforeUnmount(() => {
               <button
                 class="btn btn--primary btn--sm"
                 type="button"
-                :disabled="actionLoading || bracketPlanBlocked || approvedEntries.length < 2"
+                :disabled="actionLoading || approvedEntries.length < 2"
                 @click="generateBracket"
               >
                 {{ drawMode === 'manual' ? t('admin.generateManual') : drawMode === 'seeded' ? t('admin.generateSeeded') : t('admin.generateRandom') }}
@@ -2812,7 +2809,7 @@ onBeforeUnmount(() => {
               <button
                 class="btn btn--danger btn--sm"
                 type="button"
-                :disabled="actionLoading || doubleElimCountInvalid"
+                :disabled="actionLoading"
                 @click="generateBracket"
               >
                 {{ drawMode === 'manual' ? t('admin.rebuildManual') : drawMode === 'seeded' ? t('admin.rebuildSeeded') : t('admin.rebuild') }}
