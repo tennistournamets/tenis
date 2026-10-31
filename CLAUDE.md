@@ -150,6 +150,7 @@ supabase/
 ### Key PL/pgSQL Functions
 
 - `register_entry(..., p_ratings jsonb)` - `[[member one ratings], [member two ratings]]` of `{type, value}`; ignored while `player_rating = 'off'`, `required` needs one per named player (`rating.required`/`rating.invalid`/`rating.duplicate`)
+- `update_entry(entry, members text[], replace boolean[], display_name, phone, email)` - organizers (owner/editor) correct an entry in any tournament state (Entries tab: pencil on pending/waitlist rows, "Edit entry" in the approved row menu → `EntryEditModal`); member count stays; a member marked replaced loses ratings and `player_id`; contact re-checked for duplicates only when changed
 - `add_manual_entries(tournament, entries jsonb, status, notify)` - bulk manual entries (≤128) through `add_manual_entry()` row by row; returns per-row `{index, ok, id, status, error}`; `notify=false` sets `bracketa.quiet_entries` so `entries_queue_notification()` queues no emails
 - `create_tournament()` - inserts tournament (forces padel→doubles, football→singles, nulls set_format for goals) + owner row; `register_entry(..., p_access_token)` returns `{id, status}` (pending or waitlisted) and enforces deadline, capacity and waitlist
 - `tournament_registration_state()`, `approve_pending_entries()` - registration rules; `update_tournament_settings(p_patch, p_expected_revision)` - whitelisted settings write with CAS
