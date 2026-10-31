@@ -40,7 +40,7 @@ src/
     LiveScoreViewerModal.vue  # Read-only live score display (spectator)
     LiveScoringModal.vue      # Point-by-point tennis scoring input (admin)
     MatchStreamLink.vue       # "Watch" YouTube link of a match (every board + live viewer); admin/MatchStreamButton + admin/MatchStreamModal set it
-    RegistrationForm.vue      # Public registration form (sport-aware labels)
+    RegistrationForm.vue      # Public registration form (sport-aware labels; PlayerRatingFields rows when the organizer asks for ratings)
     LanguageSwitcher.vue      # RU/EN/LT locale selector
     MadeWithBracketa.vue      # "Made with Bracketa" footer on public pages (growth link with utm)
     EmbedCodeModal.vue        # "Website code" for club sites (snippet from lib/embedCode.js + public/embed.js)
@@ -134,6 +134,7 @@ supabase/
 - **courts**, **match_schedule** - manual schedule: per-match court and/or time (`fixed` or `not_before`) or court queue; rows exist in `draft` or `published` state, the public sees published only
 - **tournament_access_grants**, **tournament_unlock_attempts** - hashed 12-hour tokens for password pages and lockout counters; no API access
 - **entry_members** - individual member names (doubles = 2), optional `player_id`
+- **entry_member_ratings** - ratings a player gave at registration (`rating_type` tnl/lts for tennis, padel_level/tnl/padelution for padel; scales in `player_rating_valid()` and `src/lib/playerRatings.js`); closed to API roles, organizers read via `get_entry_ratings()`. `rating_value` = what the player gave, `organizer_value` = organizer's own (wins; set via `set_member_rating(member, type, value)`, null clears). "Seed by rating" in the Entries tab orders the field by one kind in the browser (`ratingSeedOrder`: pair = average, both rated > one > none, ties by lot, LTS lower is better) and saves it with `set_entry_seed_order`. Asked only when `tournaments.player_rating` is optional/required (default off). Pair forming/splitting moves member rows, so ratings follow the player
 - **groups**, **group_entries** - group-stage buckets (round_robin uses none; groups_playoff uses both)
 - **matches** - canonical aggregate `side_a_score`/`side_b_score` (points total in points formats; partners in `side_a2_entry_id`/`side_b2_entry_id`) (+ `side_a_pens`/`side_b_pens` for football knockout); `stage` (main/group/winners/losers/grand_final/third_place); `group_id`; winner tree via `next_match_id`/`next_slot`; loser routing via `loser_next_match_id`/`loser_next_slot` (double-elim); unique on `(tournament_id, stage, round_number, match_number)`
   `stream_url` - YouTube broadcast link (https youtube.com / youtu.be only), set via `set_match_stream()`; changing only it keeps `score_revision`
@@ -147,6 +148,7 @@ supabase/
 
 ### Key PL/pgSQL Functions
 
+- `register_entry(..., p_ratings jsonb)` - `[[member one ratings], [member two ratings]]` of `{type, value}`; ignored while `player_rating = 'off'`, `required` needs one per named player (`rating.required`/`rating.invalid`/`rating.duplicate`)
 - `add_manual_entries(tournament, entries jsonb, status, notify)` - bulk manual entries (≤128) through `add_manual_entry()` row by row; returns per-row `{index, ok, id, status, error}`; `notify=false` sets `bracketa.quiet_entries` so `entries_queue_notification()` queues no emails
 - `create_tournament()` - inserts tournament (forces padel→doubles, football→singles, nulls set_format for goals) + owner row; `register_entry(..., p_access_token)` returns `{id, status}` (pending or waitlisted) and enforces deadline, capacity and waitlist
 - `tournament_registration_state()`, `approve_pending_entries()` - registration rules; `update_tournament_settings(p_patch, p_expected_revision)` - whitelisted settings write with CAS

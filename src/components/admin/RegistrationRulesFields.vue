@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { FEE_CURRENCIES, feeUnitDefault, feeUnitsFor } from '../../lib/registrationRules'
+import { PLAYER_RATING_MODES, ratingTypesFor } from '../../lib/playerRatings'
 import DateTimeField from '../DateTimeField.vue'
 import InfoTip from '../InfoTip.vue'
 
@@ -43,6 +44,9 @@ const capacityModel = computed({
   // The draft keeps the capacity as text, like the number input does.
   set: value => { props.form.registration_capacity = value === '' ? '' : String(value) },
 })
+// Ratings exist for tennis and padel players; a football entry is a team.
+const ratingKinds = computed(() => ratingTypesFor(props.tournament?.sport || 'tennis'))
+const ratingKindNames = computed(() => ratingKinds.value.map(type => t(`playerRating.kinds.${type}`)).join(', '))
 const unitLabel = unit => t(unit === 'pair' ? 'registrationRules.feeUnitPair' : unit === 'team' ? 'registrationRules.feeUnitTeam' : 'registrationRules.feeUnitPlayer')
 </script>
 
@@ -111,6 +115,20 @@ const unitLabel = unit => t(unit === 'pair' ? 'registrationRules.feeUnitPair' : 
       <InfoTip :id="`${idPrefix}-waitlist-hint`" :text="t('registrationRules.waitlistSettingHint')" />
     </div>
 
+  </fieldset>
+
+  <fieldset v-if="ratingKinds.length" class="reg-rules" :disabled="disabled">
+    <legend :class="{ eyebrow: variant === 'plain' }">{{ t('playerRating.settingSection') }}</legend>
+    <div class="form-field">
+      <span class="reg-rules__label">
+        <label :for="`${idPrefix}-rating`">{{ t('playerRating.setting') }}</label>
+        <InfoTip :id="`${idPrefix}-rating-tip`" :text="t('playerRating.settingTip')" />
+      </span>
+      <select :id="`${idPrefix}-rating`" v-model="form.player_rating" class="input" :aria-describedby="`${idPrefix}-rating-hint ${idPrefix}-rating-tip`">
+        <option v-for="mode in PLAYER_RATING_MODES" :key="mode" :value="mode">{{ t(`playerRating.modes.${mode}`) }}</option>
+      </select>
+      <p :id="`${idPrefix}-rating-hint`" class="field-hint">{{ t('playerRating.settingKinds', { kinds: ratingKindNames }) }}</p>
+    </div>
   </fieldset>
 
   <fieldset class="reg-rules" :disabled="disabled">

@@ -204,6 +204,12 @@
       "sha256": "117cf9776fa668261068ddeef84a5e687e7bd58293f152a9b9415a1725448302",
       "tenisAppliedVersion": "20261024210615",
       "tenisNote": "Applied 2026-10-25 with supabase db push --db-url (session pooler) after logical backup (tenis-public-20261025-1231-pre-ai-create-limit.dump + migrations journal export); daily create limit 10 -> 30."
+    },
+    {
+      "path": "supabase/migrations/20261031122957_player_ratings.sql",
+      "sha256": "2590855e5a0a328dbe4ef650929e72fe5ac7a3036ddee2956e2e229a786f0b63",
+      "tenisAppliedVersion": "20261031122957",
+      "tenisNote": "Applied 2026-10-31 with supabase db push --db-url (session pooler) after logical backup (tenis-public-20261031-1538-pre-player-ratings.dump + migrations journal export); player_rating setting, entry_member_ratings, rating RPCs, pair forming moves member rows."
     }
   ],
   "baseline": {

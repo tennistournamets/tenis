@@ -3,11 +3,12 @@
 // and shape the organizer's form.
 import { errorMessage } from './errorMessages.js'
 import { scoringFamily } from './sportConfig.js'
+import { PLAYER_RATING_MODES } from './playerRatings.js'
 
 export const FEE_CURRENCIES = ['EUR', 'USD', 'GBP', 'PLN']
 export const FEE_UNITS = ['player', 'pair', 'team']
 export const REGISTRATION_DRAFT_KEYS = ['registration_capacity', 'capacity_public', 'registration_deadline',
-  'entry_fee_mode', 'entry_fee_amount', 'entry_fee_currency', 'entry_fee_unit', 'waitlist_enabled']
+  'entry_fee_mode', 'entry_fee_amount', 'entry_fee_currency', 'entry_fee_unit', 'waitlist_enabled', 'player_rating']
 
 export function registrationError(message, t, fallbackKey = 'errors.generic') {
   return errorMessage(message, t, fallbackKey)
@@ -115,6 +116,7 @@ export function registrationDraftFields(data = {}) {
     entry_fee_currency: data.entry_fee_currency || 'EUR',
     entry_fee_unit: data.entry_fee_unit || '',
     waitlist_enabled: data.waitlist_enabled === true,
+    player_rating: PLAYER_RATING_MODES.includes(data.player_rating) ? data.player_rating : 'off',
   }
 }
 
@@ -157,6 +159,7 @@ export function organizerContactError(phone, email) {
 
 export function hasRegistrationRules(form) {
   return String(form.registration_capacity ?? '').trim() !== '' || Boolean(form.registration_deadline) || Boolean(form.entry_fee_mode) || Boolean(form.waitlist_enabled)
+    || (form.player_rating || 'off') !== 'off'
 }
 
 /** Settings patch for update_tournament_settings; only real columns are included. */
@@ -171,6 +174,7 @@ export function registrationPatch(form, tournament = null) {
     entry_fee_currency: null,
     entry_fee_unit: null,
     waitlist_enabled: form.waitlist_enabled === true,
+    player_rating: PLAYER_RATING_MODES.includes(form.player_rating) ? form.player_rating : 'off',
   }
   if (patch.entry_fee_mode === 'paid') {
     patch.entry_fee_currency = form.entry_fee_currency
