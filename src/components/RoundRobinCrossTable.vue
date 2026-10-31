@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { buildRoundRobinModel, clickTarget, entryLabelFor, orientScore, pairMatches } from '../lib/roundRobin'
+import { resultTag } from '../lib/matchResult'
 
 const props = defineProps({
   matches: { type: Array, default: () => [] },
@@ -36,7 +37,7 @@ function cell(rowId, colId) {
   const list = pairMatches(model.value, rowId, colId)
   const results = list
     .filter((m) => m.status === 'finished')
-    .map((m) => orientScore(m, rowId))
+    .map((m) => ({ ...orientScore(m, rowId), tag: resultTag(m) }))
   const target = clickTarget(list)
   const live = list.find((m) => props.liveScoresByMatch[m.id]?.status === 'active') || null
   return {
@@ -109,7 +110,7 @@ function onCell(rowId, colId) {
                 </span>
                 <template v-else-if="cell(rowId, colId).results.length">
                   <span v-for="(r, idx) in cell(rowId, colId).results" :key="idx" class="rr-cross__score">
-                    {{ r.a }}:{{ r.b }}<span
+                    {{ r.a }}:{{ r.b }}<span v-if="r.tag" class="result-tag">{{ r.tag }}</span><span
                       v-if="family === 'goals' && r.pa != null && r.pb != null"
                       class="rr-cross__pens"
                       :title="t('football.pens')"

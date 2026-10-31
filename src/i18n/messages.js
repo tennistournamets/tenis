@@ -17,6 +17,7 @@ import { playerRatingMessages } from './playerRating'
 import { drawSeedingMessages } from './drawSeeding'
 import { seedEditorMessages } from './seedEditor'
 import { entryEditMessages } from './entryEdit'
+import { walkoverMessages } from './walkover'
 
 export const messages = {
   ru: {
@@ -364,6 +365,7 @@ export const messages = {
     drawSeeding: drawSeedingMessages.ru,
     seedEditor: seedEditorMessages.ru,
     entryEdit: entryEditMessages.ru,
+    walkover: walkoverMessages.ru,
     app: {
       title: 'Bracketa',
       subtitle: 'Организация турниров, жеребьёвка и live-сетка',
@@ -1638,6 +1640,7 @@ export const messages = {
     drawSeeding: drawSeedingMessages.en,
     seedEditor: seedEditorMessages.en,
     entryEdit: entryEditMessages.en,
+    walkover: walkoverMessages.en,
     app: {
       title: 'Bracketa',
       subtitle: 'Run tournaments, draws, and live brackets',
@@ -2912,6 +2915,7 @@ export const messages = {
     drawSeeding: drawSeedingMessages.lt,
     seedEditor: seedEditorMessages.lt,
     entryEdit: entryEditMessages.lt,
+    walkover: walkoverMessages.lt,
     app: {
       title: 'Bracketa',
       subtitle: 'Turnyrai, burtai ir tinkleliai tiesiogiai',
