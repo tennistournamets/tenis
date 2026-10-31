@@ -32,6 +32,7 @@ import EntryContact from '../components/admin/EntryContact.vue'
 import { loadEntryContacts } from '../lib/entryContacts'
 import EntryRatings from '../components/admin/EntryRatings.vue'
 import EntryRatingsModal from '../components/admin/EntryRatingsModal.vue'
+import EntryEditModal from '../components/admin/EntryEditModal.vue'
 import SeedOrderEditor from '../components/admin/SeedOrderEditor.vue'
 import { registrationOrder } from '../lib/seedOrder'
 import { defaultSeedKind, loadEntryRatings, ratingKindCounts, ratingSeedOrder, ratingTypesFor } from '../lib/playerRatings'
@@ -455,6 +456,13 @@ watch(entryRatingsKey, key => reloadEntryRatings(key))
 // The organizer's own value for a player (EntryRatingsModal).
 const ratingsEntryId = ref(null)
 const ratingsEntry = computed(() => entries.value.find(e => e.id === ratingsEntryId.value) || null)
+// Names, partner replacement and contact of one entry (EntryEditModal).
+const editEntryId = ref(null)
+const editEntry = computed(() => entries.value.find(e => e.id === editEntryId.value) || null)
+async function entryEdited() {
+  privateDataTick.value++
+  await refreshScoreData()
+}
 const scheduleIndex = computed(() => indexSchedule(schedule.value))
 const scheduleDraftCount = computed(() => draftDiff(schedule.value).count)
 // Organizers see their draft everywhere in the admin page; changed rows are marked.
@@ -2086,6 +2094,16 @@ onBeforeUnmount(() => {
                 <strong class="entry-name">{{ entryLabel(entry) }}<span v-if="customDisplayName(entry)" class="entry-alias">{{ t('admin.shownAs', { name: customDisplayName(entry) }) }}</span><EntryContact :contact="entryContacts[entry.id]" /><EntryRatings :ratings="entryRatings[entry.id]" :members="entry.entry_members" /></strong>
                 <div class="entry-actions">
                   <button
+                    class="entry-icon-btn entry-icon-btn--edit"
+                    type="button"
+                    :disabled="actionLoading"
+                    :aria-label="t('entryEdit.openFor', { name: entryLabel(entry) })"
+                    :title="t('entryEdit.open')"
+                    @click="editEntryId = entry.id"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+                  </button>
+                  <button
                     class="entry-icon-btn entry-icon-btn--approve"
                     type="button"
                     :disabled="actionLoading || seatsFull"
@@ -2123,6 +2141,16 @@ onBeforeUnmount(() => {
                   <span class="entry-avatar" :aria-label="String(index + 1)">{{ index + 1 }}</span>
                   <strong class="entry-name">{{ entryLabel(entry) }}<span v-if="customDisplayName(entry)" class="entry-alias">{{ t('admin.shownAs', { name: customDisplayName(entry) }) }}</span><EntryContact :contact="entryContacts[entry.id]" /><EntryRatings :ratings="entryRatings[entry.id]" :members="entry.entry_members" /></strong>
                   <div class="entry-actions">
+                    <button
+                      class="entry-icon-btn entry-icon-btn--edit"
+                      type="button"
+                      :disabled="actionLoading"
+                      :aria-label="t('entryEdit.openFor', { name: entryLabel(entry) })"
+                      :title="t('entryEdit.open')"
+                      @click="editEntryId = entry.id"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+                    </button>
                     <button
                       class="entry-icon-btn entry-icon-btn--approve"
                       type="button"
@@ -2237,17 +2265,17 @@ onBeforeUnmount(() => {
                     <span v-for="(initials, i) in memberInitials(entry)" :key="i" class="entry-avatar entry-avatar--ok">{{ initials }}</span>
                   </span>
                   <strong class="entry-name">{{ entryLabel(entry) }}<span v-if="customDisplayName(entry)" class="entry-alias">{{ t('admin.shownAs', { name: customDisplayName(entry) }) }}</span><EntryContact :contact="entryContacts[entry.id]" /><EntryRatings :ratings="entryRatings[entry.id]" :members="entry.entry_members" /></strong>
-                  <KebabMenu
-                    v-if="!isTournamentActive && !isTournamentFinished"
-                    :aria-label="t('admin.rowActions', { name: entryLabel(entry) })"
-                  >
-                    <template v-if="canSeed">
-                      <button type="button" role="menuitem" :disabled="actionLoading || seedPosition(entry) === 1" @click="moveSeed(entry, -1)">{{ t('admin.seedUp') }}</button>
-                      <button type="button" role="menuitem" :disabled="actionLoading || seedPosition(entry) === sortedApproved.length" @click="moveSeed(entry, 1)">{{ t('admin.seedDown') }}</button>
+                  <KebabMenu :aria-label="t('admin.rowActions', { name: entryLabel(entry) })">
+                    <button type="button" role="menuitem" :disabled="actionLoading" @click="editEntryId = entry.id">{{ t('entryEdit.open') }}</button>
+                    <template v-if="!isTournamentActive && !isTournamentFinished">
+                      <template v-if="canSeed">
+                        <button type="button" role="menuitem" :disabled="actionLoading || seedPosition(entry) === 1" @click="moveSeed(entry, -1)">{{ t('admin.seedUp') }}</button>
+                        <button type="button" role="menuitem" :disabled="actionLoading || seedPosition(entry) === sortedApproved.length" @click="moveSeed(entry, 1)">{{ t('admin.seedDown') }}</button>
+                      </template>
+                      <button v-if="ratingKinds.length" type="button" role="menuitem" :disabled="actionLoading" @click="ratingsEntryId = entry.id">{{ t('playerRating.editMenu') }}</button>
+                      <button type="button" role="menuitem" :disabled="actionLoading" @click="updateEntryStatus(entry.id, 'pending')">{{ t('admin.reopen') }}</button>
+                      <button type="button" role="menuitem" class="kebab__danger" :disabled="actionLoading" @click="updateEntryStatus(entry.id, 'rejected')">{{ t('admin.reject') }}</button>
                     </template>
-                    <button v-if="ratingKinds.length" type="button" role="menuitem" :disabled="actionLoading" @click="ratingsEntryId = entry.id">{{ t('playerRating.editMenu') }}</button>
-                    <button type="button" role="menuitem" :disabled="actionLoading" @click="updateEntryStatus(entry.id, 'pending')">{{ t('admin.reopen') }}</button>
-                    <button type="button" role="menuitem" class="kebab__danger" :disabled="actionLoading" @click="updateEntryStatus(entry.id, 'rejected')">{{ t('admin.reject') }}</button>
                   </KebabMenu>
                 </div>
               </div>
@@ -3282,6 +3310,15 @@ onBeforeUnmount(() => {
         @close="ratingsEntryId = null"
         @saved="reloadEntryRatings()"
       />
+      <EntryEditModal
+        v-if="editEntry && canManageTournament"
+        :key="editEntry.id"
+        :entry="editEntry"
+        :tournament="tournament"
+        :contact="entryContacts[editEntry.id] || null"
+        @close="editEntryId = null"
+        @saved="entryEdited"
+      />
       <MatchStreamModal
         v-if="streamMatch && canLiveScoreRole"
         :key="streamMatch.id"
@@ -3394,6 +3431,14 @@ onBeforeUnmount(() => {
 }
 
 .entry-icon-btn--reject:hover { filter: brightness(0.97); }
+
+.entry-icon-btn--edit {
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--border);
+}
+
+.entry-icon-btn--edit:hover { color: var(--text); background: var(--surface-row); }
 .add-admin-modal { max-width: 440px; display: grid; gap: var(--space-4); }
 .add-admin-modal__foot { display: flex; justify-content: flex-end; gap: var(--space-2); padding-top: var(--space-2); }
 .admin-add-btn { margin-left: auto; }
