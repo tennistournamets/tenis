@@ -5,6 +5,7 @@ import { computed, reactive, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { buildRoundRobinModel, entryLabelFor, orientScore } from '../lib/roundRobin'
+import { resultTag } from '../lib/matchResult'
 
 const props = defineProps({
   rows: { type: Array, default: () => [] },
@@ -149,7 +150,7 @@ const columns = computed(() => props.family === 'goals'
                           v-if="family === 'goals' && item.score.pa != null && item.score.pb != null"
                           class="rr-standings__pens"
                           :title="t('football.pens')"
-                        >({{ item.score.pa }}:{{ item.score.pb }})</span>
+                        >({{ item.score.pa }}:{{ item.score.pb }})</span><span v-if="resultTag(item.match)" class="result-tag">{{ resultTag(item.match) }}</span>
                       </span>
                     </li>
                   </ul>

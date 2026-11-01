@@ -341,6 +341,29 @@ async function seedByRating() {
   } finally { actionLoading.value = false }
 }
 
+// Withdraw a participant while the tournament runs (or take it back).
+// Americano, Team Americano and King of the Court replace the player instead.
+const canWithdrawEntries = computed(() => isTournamentActive.value
+  && (!isPointsFormat(tournament.value?.format) || tournament.value?.format === 'mexicano'))
+async function setWithdrawn(entry, on) {
+  if (actionLoading.value) return
+  const name = entryLabel(entry)
+  const key = !on ? 'walkover.restoreConfirm'
+    : tournament.value?.format === 'mexicano' ? 'walkover.withdrawConfirmMexicano' : 'walkover.withdrawConfirm'
+  if (!(await confirmDialog(t(key, { name }), { danger: on }))) return
+  actionLoading.value = true
+  errorText.value = ''
+  noticeText.value = ''
+  try {
+    const { data, error } = await supabase.rpc('set_entry_withdrawn', { p_entry_id: entry.id, p_withdrawn: on })
+    if (error) throw error
+    await refreshScoreData()
+    if (on) noticeText.value = data ? t('walkover.withdrawDone', { count: data }) : t('walkover.withdrawDoneNone')
+  } catch (error) {
+    errorText.value = errorMessage(error, t)
+  } finally { actionLoading.value = false }
+}
+
 async function moveSeed(entry, delta) {
   if (actionLoading.value) return
   const order = sortedApproved.value.map(e => e.id)
@@ -2268,9 +2291,13 @@ onBeforeUnmount(() => {
                   <span class="entry-avatars" :class="{ 'entry-avatars--pair': memberInitials(entry).length > 1 }" aria-hidden="true">
                     <span v-for="(initials, i) in memberInitials(entry)" :key="i" class="entry-avatar entry-avatar--ok">{{ initials }}</span>
                   </span>
-                  <strong class="entry-name">{{ entryLabel(entry) }}<span v-if="customDisplayName(entry)" class="entry-alias">{{ t('admin.shownAs', { name: customDisplayName(entry) }) }}</span><EntryContact :contact="entryContacts[entry.id]" /><EntryRatings :ratings="entryRatings[entry.id]" :members="entry.entry_members" /></strong>
+                  <strong class="entry-name">{{ entryLabel(entry) }}<span v-if="entry.withdrawn_at" class="badge badge--neutral entry-withdrawn">{{ t('walkover.withdrawn') }}</span><span v-if="customDisplayName(entry)" class="entry-alias">{{ t('admin.shownAs', { name: customDisplayName(entry) }) }}</span><EntryContact :contact="entryContacts[entry.id]" /><EntryRatings :ratings="entryRatings[entry.id]" :members="entry.entry_members" /></strong>
                   <KebabMenu :aria-label="t('admin.rowActions', { name: entryLabel(entry) })">
                     <button type="button" role="menuitem" :disabled="actionLoading" @click="editEntryId = entry.id">{{ t('entryEdit.open') }}</button>
+                    <template v-if="canWithdrawEntries">
+                      <button v-if="entry.withdrawn_at" type="button" role="menuitem" :disabled="actionLoading" @click="setWithdrawn(entry, false)">{{ t('walkover.restore') }}</button>
+                      <button v-else type="button" role="menuitem" class="kebab__danger" :disabled="actionLoading" @click="setWithdrawn(entry, true)">{{ t('walkover.withdraw') }}</button>
+                    </template>
                     <template v-if="!isTournamentActive && !isTournamentFinished">
                       <template v-if="canSeed">
                         <button type="button" role="menuitem" :disabled="actionLoading || seedPosition(entry) === 1" @click="moveSeed(entry, -1)">{{ t('admin.seedUp') }}</button>
@@ -2644,7 +2671,7 @@ onBeforeUnmount(() => {
 
           <section v-if="hasBracket && pointsStandings.length && showAdminBracketOverview" class="card stack stack--sm mt-4">
             <h2 class="section-title">{{ t(isIndividualFormat(tournament.format) ? 'pointsFormat.playersTable' : 'pointsFormat.pairsTable') }}</h2>
-            <PointsStandingsTable :rows="pointsStandings" :format="tournament.format" :target="matchTarget" />
+            <PointsStandingsTable :rows="pointsStandings" :entries-map="entriesMap" :format="tournament.format" :target="matchTarget" />
           </section>
 
           <section v-if="hasBracket && (!isNarrowLayout || !isTournamentActive)" class="card stack stack--sm mt-4">
@@ -3015,7 +3042,7 @@ onBeforeUnmount(() => {
           </section>
           <section v-if="pointsStandings.length" class="card stack stack--sm mt-4">
             <h2 class="section-title">{{ t(isIndividualFormat(tournament.format) ? 'pointsFormat.playersTable' : 'pointsFormat.pairsTable') }}</h2>
-            <PointsStandingsTable :rows="pointsStandings" :format="tournament.format" :target="matchTarget" />
+            <PointsStandingsTable :rows="pointsStandings" :entries-map="entriesMap" :format="tournament.format" :target="matchTarget" />
           </section>
         </template>
         <section v-else-if="isNarrowLayout" class="card mobile-score-center">
@@ -3444,6 +3471,7 @@ onBeforeUnmount(() => {
 }
 
 .entry-icon-btn--edit:hover { color: var(--text); background: var(--surface-row); }
+.entry-withdrawn { margin-left: 8px; vertical-align: middle; }
 .add-admin-modal { max-width: 440px; display: grid; gap: var(--space-4); }
 .add-admin-modal__foot { display: flex; justify-content: flex-end; gap: var(--space-2); padding-top: var(--space-2); }
 .admin-add-btn { margin-left: auto; }
