@@ -25,6 +25,7 @@ const NAMESPACES = {
   'rating.': 'playerRating.errors.',
   'entryEdit.': 'entryEdit.errors.',
   'walkover.': 'walkover.errors.',
+  'checkIn.': 'checkIn.errors.',
 }
 
 export const SERVER_ERRORS = [
