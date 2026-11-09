@@ -2,6 +2,7 @@
 // Used through src/lib/plural.js; `{n}` is the number.
 export const pluralMessages = {
   ru: {
+    tournaments: { one: '{n} турнир', few: '{n} турнира', many: '{n} турниров', other: '{n} турнира' },
     participants: { one: '{n} участник', few: '{n} участника', many: '{n} участников', other: '{n} участника' },
     matches: { one: '{n} матч', few: '{n} матча', many: '{n} матчей', other: '{n} матча' },
     rounds: { one: '{n} раунд', few: '{n} раунда', many: '{n} раундов', other: '{n} раунда' },
@@ -9,6 +10,7 @@ export const pluralMessages = {
     byes: { one: '{n} проходит первый раунд без игры', few: '{n} проходят первый раунд без игры', many: '{n} проходят первый раунд без игры', other: '{n} проходят первый раунд без игры' },
   },
   en: {
+    tournaments: { one: '{n} tournament', other: '{n} tournaments' },
     participants: { one: '{n} entry', other: '{n} entries' },
     matches: { one: '{n} match', other: '{n} matches' },
     rounds: { one: '{n} round', other: '{n} rounds' },
@@ -16,6 +18,7 @@ export const pluralMessages = {
     byes: { one: '{n} bye in round one', other: '{n} byes in round one' },
   },
   lt: {
+    tournaments: { one: '{n} turnyras', few: '{n} turnyrai', many: '{n} turnyro', other: '{n} turnyrų' },
     participants: { one: '{n} dalyvis', few: '{n} dalyviai', many: '{n} dalyvio', other: '{n} dalyvių' },
     matches: { one: '{n} mačas', few: '{n} mačai', many: '{n} mačo', other: '{n} mačų' },
     rounds: { one: '{n} raundas', few: '{n} raundai', many: '{n} raundo', other: '{n} raundų' },

@@ -5,7 +5,8 @@ do $$ begin create role service_role bypassrls; exception when duplicate_object 
 create schema auth;
 create schema extensions;
 create extension pgcrypto with schema extensions;
-create table auth.users (id uuid primary key, email text, raw_user_meta_data jsonb not null default '{}'::jsonb);
+create table auth.users (id uuid primary key, email text, raw_user_meta_data jsonb not null default '{}'::jsonb, created_at timestamptz default now(), last_sign_in_at timestamptz);
+create table auth.sessions (id uuid primary key default gen_random_uuid(), user_id uuid not null references auth.users (id) on delete cascade, created_at timestamptz default now(), updated_at timestamptz default now(), refreshed_at timestamp);
 create function auth.uid() returns uuid language sql stable as $$
   select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid
 $$;

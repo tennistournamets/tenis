@@ -66,6 +66,7 @@ src/
     sponsorship.js            # Sponsorship model (sponsors, places, partners): cached per tournament from `tournament_sponsorship`, saved via save_sponsorship (revision CAS, queued, optimistic); public view gated by approval + feature flag
     sponsorAssets.js          # Sponsor images: browser downscale to WebP (SVG rasterized), upload to Storage bucket `sponsor-assets` as `<tournament id>/<uuid>.webp`, public CDN URLs, draft cleanup
     sponsorshipRequests.js    # Paid-feature gate: request/list/decide RPCs, cached is_sponsorship_approved
+    platformUsers.js          # Users page: search/filter/sort over platform_users_overview().users
     useTennisScoring.js       # Tennis scoring composable (sets family; reused by padel)
     entryDisplay.js           # Entry/member name display helper
     matchStream.js            # YouTube stream link of a match: normalize/validate (mirrors matches_stream_url_ck)
@@ -85,6 +86,7 @@ src/
     AdminTournamentView.vue   # Main admin page (7 tabs: Entries, Bracket/Stage, Courts, Schedule, Scores, Sponsors, Settings) - LARGEST FILE
     AdminSettingsView.vue     # User settings
     AdminPlatformView.vue     # Super-admin only: sponsorship requests + feature flags (sport toggles)
+    AdminUsersView.vue        # Super-admin only: every account, its tournaments, platform totals (profile menu → Users)
     PublicTournamentView.vue  # Public tournament page (registration + bracket/standings/groups)
   App.vue                     # Root component
   main.js                     # App entry point
@@ -120,6 +122,7 @@ supabase/
 | `/admin/tournaments/:id` | AdminTournamentView | Yes |
 | `/admin/settings` | AdminSettingsView | Yes |
 | `/admin/platform` | AdminPlatformView (sponsorship requests, feature flags) | Yes + `platform_admins` row (else redirect to list) |
+| `/admin/users` | AdminUsersView (users, their tournaments, totals) | Yes + `platform_admins` row (else redirect to list) |
 
 ## Database (Supabase PostgreSQL)
 
@@ -179,6 +182,7 @@ supabase/
 - `is_feature_enabled(key)` / `set_feature_flag(key, enabled, description)` - feature flags; `create_tournament()` rejects a sport whose `sport.<x>` flag is off
 - Sponsorship: `request_sponsorship(tournament, message)` (owner only; approved stays approved, rejected → pending again), `decide_sponsorship_request(id, status)` and `list_sponsorship_requests()` (platform admin; owner name/email + tournament), `is_sponsorship_approved(tournament)` (anon ok; public sponsor slots render only when true); `can_manage_sponsorship(tournament)` (admin + approved + flag on), `save_sponsorship(tournament, config, expected_revision)` (validates http(s) links, own-folder/demo image refs, size; raises `Sponsorship changed` on a stale revision)
 - AI: `is_ai_feature_enabled(feature)` (`ai` master switch AND `ai.<feature>`; features import/create/score/posts/voice, seeded off; voice rows keep audio seconds in tokens_in), `ai_begin_call(task, tournament)` (switches, rights, 24 h limit per user and task; raises `ai.disabled`/`ai.forbidden`/`ai.limit`), `ai_finish_call()`, `ai_usage_summary(days)` (platform admin)
+- `platform_users_overview()` - super-admin Users page: totals + every `auth.users` account (name, email, avatar, `created_at`, `last_sign_in_at`, `last_seen_at` = later of sign-in and latest `auth.sessions` refresh) with the tournaments it administers (role, status, approved/pending entries, played/total matches); raises for non-platform-admins
 - `claim_notifications(limit)`, `complete_notification(id, ok, error)`, `notifications_due()` - email sender (service_role only; `api/notifications.js`, triggered by pg_cron — setup in docs/GROWTH.md)
 
 ### Security
@@ -235,7 +239,7 @@ Planned/known gaps, roughly by priority. Not implemented yet.
 - i18n completeness pass for `lt` (some strings still English).
 
 ### Platform
-- Super-admin dashboard (list all tournaments/users). Feature-flag toggles exist at `/admin/platform`; tournament/user listing does not.
+- Super-admin dashboard: feature flags at `/admin/platform`, users with their tournaments and totals at `/admin/users`. No user actions yet (block, impersonate, contact).
 
 ## Dev Setup
 

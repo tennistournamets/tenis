@@ -316,6 +316,36 @@ summary:focus-visible,
   flex-wrap: wrap;
 }
 
+/* Narrow phones: the brand and the three controls stay on one row
+   (the 24px gutters and 16px gap pushed them onto two below ~370px). */
+@media (max-width: 420px) {
+  .app-header {
+    gap: var(--space-3);
+    padding-right: calc(var(--space-4) + var(--safe-area-right));
+    padding-left: calc(var(--space-4) + var(--safe-area-left));
+  }
+
+  .app-header__actions {
+    gap: 6px;
+  }
+
+  .app-header .lang-dropdown__trigger {
+    padding: 0 var(--space-2);
+  }
+}
+
+/* Smallest phones (320px): the logo alone; the name stays for screen readers. */
+@media (max-width: 340px) {
+  .app-header__name {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+}
+
 /* =============================================
    LANDING PAGE
    ============================================= */
