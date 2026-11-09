@@ -15,6 +15,7 @@ const AdminTournamentAiCreateView = () => import('../views/AdminTournamentAiCrea
 const AdminTournamentView = () => import('../views/AdminTournamentView.vue')
 const AdminSettingsView = () => import('../views/AdminSettingsView.vue')
 const AdminPlatformView = () => import('../views/AdminPlatformView.vue')
+const AdminUsersView = () => import('../views/AdminUsersView.vue')
 const NotFoundView = () => import('../views/NotFoundView.vue')
 const TournamentPosterView = () => import('../views/TournamentPosterView.vue')
 
@@ -95,6 +96,12 @@ const router = createRouter({
           component: AdminPlatformView,
           meta: { requiresPlatformAdmin: true },
         },
+        {
+          path: 'users',
+          name: 'admin-users',
+          component: AdminUsersView,
+          meta: { requiresPlatformAdmin: true },
+        },
       ],
     },
     { path: '/:pathMatch(.*)*', name: 'not-found', component: NotFoundView },
@@ -128,7 +135,7 @@ router.beforeEach(async (to, from) => {
     return { name: 'home' }
   }
 
-  // Super-admin only pages (feature flags). Non-admins land on the tournament list.
+  // Super-admin only pages (feature flags, users). Non-admins land on the tournament list.
   if (to.matched.some((record) => record.meta.requiresPlatformAdmin)) {
     if (auth.platformRole === null) {
       try { await auth.checkPlatformRole() } catch { /* treated as non-admin */ }

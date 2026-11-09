@@ -35,6 +35,7 @@ watchEffect(() => {
     'admin-tournament-new': 'admin.createTournament',
     'admin-settings': 'admin.settingsTitle',
     'admin-platform': 'admin.platformTitle',
+    'admin-users': 'platformUsers.title',
     'admin-tournament': 'a11y.manageTournament',
     'public-tournament': 'a11y.tournamentPage',
   }
@@ -106,6 +107,8 @@ const profileAvatar = computed(() => (
   || auth.user?.user_metadata?.picture
   || ''
 ))
+// Google refuses its avatar URLs when a referrer is sent; a picture that still fails shows the initial.
+const failedAvatar = ref('')
 
 async function toggleProfile() {
   profileOpen.value = !profileOpen.value
@@ -143,6 +146,11 @@ function goToPlatform() {
   profileOpen.value = false
   router.push({ name: 'admin-platform' })
 }
+
+function goToUsers() {
+  profileOpen.value = false
+  router.push({ name: 'admin-users' })
+}
 </script>
 
 <template>
@@ -151,7 +159,7 @@ function goToPlatform() {
     <header v-if="layout === 'admin'" class="app-header">
       <RouterLink class="app-header__brand" :to="{ name: 'admin-tournaments' }">
         <BrandLogo />
-        <span translate="no">{{ t('app.title') }}</span>
+        <span class="app-header__name" translate="no">{{ t('app.title') }}</span>
       </RouterLink>
       <div class="app-header__actions">
         <ThemeToggle />
@@ -166,7 +174,7 @@ function goToPlatform() {
             :aria-controls="profileOpen ? profileId : undefined"
             @click="toggleProfile"
           >
-            <img v-if="profileAvatar" class="profile-menu__avatar profile-menu__avatar--image" :src="profileAvatar" alt="" />
+            <img v-if="profileAvatar && failedAvatar !== profileAvatar" class="profile-menu__avatar profile-menu__avatar--image" :src="profileAvatar" alt="" referrerpolicy="no-referrer" @error="failedAvatar = profileAvatar" />
             <span v-else class="profile-menu__avatar">{{ userInitial }}</span>
           </button>
           <div v-if="profileOpen" :id="profileId" class="profile-menu__dropdown" role="group" :aria-label="t('a11y.profileMenu')">
@@ -183,6 +191,10 @@ function goToPlatform() {
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="4" width="13" height="8" rx="4"/><circle cx="10" cy="8" r="2.5"/></svg>
               {{ t('admin.platformTitle') }}
             </button>
+            <button v-if="auth.platformRole === 'superadmin'" class="profile-menu__item" type="button" @click="goToUsers">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="5.5" r="2.5"/><path d="M1.5 13.5a4.5 4.5 0 0 1 9 0"/><path d="M10.5 3.2a2.5 2.5 0 0 1 0 4.6"/><path d="M12.5 10a4.5 4.5 0 0 1 2 3.5"/></svg>
+              {{ t('platformUsers.title') }}
+            </button>
             <button class="profile-menu__item profile-menu__item--danger" type="button" @click="handleSignOut">
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 14H3.33A1.33 1.33 0 0 1 2 12.67V3.33A1.33 1.33 0 0 1 3.33 2H6"/><polyline points="10.67 11.33 14 8 10.67 4.67"/><line x1="14" y1="8" x2="6" y2="8"/></svg>
               {{ t('auth.logout') }}
@@ -193,7 +205,7 @@ function goToPlatform() {
     </header>
 
     <header v-else-if="layout === 'public'" class="app-header">
-      <span class="app-header__brand"><BrandLogo /><span translate="no">{{ t('app.title') }}</span></span>
+      <span class="app-header__brand"><BrandLogo /><span class="app-header__name" translate="no">{{ t('app.title') }}</span></span>
       <div class="app-header__actions">
         <ThemeToggle />
         <LanguageSwitcher />
