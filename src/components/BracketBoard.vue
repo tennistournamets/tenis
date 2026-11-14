@@ -33,6 +33,8 @@ const props = defineProps({
   },
   // Organizers attach a YouTube broadcast link (owner, editor, counter).
   canStream: { type: Boolean, default: false },
+  // Team tournaments: cards open their tie.
+  openTie: { type: Boolean, default: false },
   // Managers assign a court and time from the card.
   canSchedule: { type: Boolean, default: false },
   canLiveScore: {
@@ -351,6 +353,7 @@ watch(splitSectionsFlat, () => scheduleUpdate(), { deep: true })
             :live-score="liveScoresByMatch[match.id]"
             :can-live-score="canLiveScore"
             :can-stream="canStream"
+            :open-tie="openTie"
             :can-schedule="canSchedule"
             @edit-stream="emit('edit-stream', $event)"
             @edit-schedule="emit('edit-schedule', $event)"
@@ -377,6 +380,7 @@ watch(splitSectionsFlat, () => scheduleUpdate(), { deep: true })
             :live-score="liveScoresByMatch[match.id]"
             :can-live-score="canLiveScore"
             :can-stream="canStream"
+            :open-tie="openTie"
             :can-schedule="canSchedule"
             @edit-stream="emit('edit-stream', $event)"
             @edit-schedule="emit('edit-schedule', $event)"

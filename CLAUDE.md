@@ -8,6 +8,7 @@ Web-application for organizing tournaments across multiple sports with live scor
   - Tennis & padel share the "sets" scoring family (games/sets/tiebreaks). Padel is always doubles.
   - Football uses the "goals" scoring family (single integer per side; draws allowed in round-robin/group stages; penalty shootout breaks knockout ties). A football entry is one team (category `singles`).
 - **Tournament formats (v1):** `single_elimination`, `round_robin`, `groups_playoff`, `double_elimination`; padel only: `americano`, `mexicano`, `team_americano`, `king_of_court` (points formats, spec in `docs/PADEL_FORMATS.md`).
+  - Team ties (tennis only, category `team`, behind flag `feature.teams`; spec `docs/TEAM_FORMATS.md`): a team = entry with a roster (`entry_members`, gender); a tie = ordinary match between two teams in `round_robin`/`groups_playoff`/`single_elimination`; its lines (singles/doubles/mixed from `format_config.tie`) are child matches (`parent_match_id`, `line_no`, stage `rubber`) scored like any match; players per line in `tie_lineups` (organizer or team captain); the tie score is recomputed from its lines (lines won or games), level knockout ties get a decider line; standings count ties only.
   - Points formats: a match is played to a total of N points (`scoring_config.points_per_match`, sum of both scores = N); the table sums points (`get_points_standings`), a completed round of rest earns half a match, floor(N/2); ties go to wins, draws, then point difference; Mexicano/KotC round 1 is a random draw unless `format_config.first_round = 'seeded'`; KotC plays `format_config.rounds` rounds (set before the start), Mexicano is open-ended; Americano defaults to a full partner cycle. Americano/Mexicano/King of the Court: one player per entry (forced `pick_random` registration), partners in `matches.side_a2_entry_id`/`side_b2_entry_id`.
 - **Create flow:** 6-step wizard — sport → format → details (name, slug, venue) → game rules → registration conditions → publication (visibility, QR).
 
@@ -137,16 +138,18 @@ supabase/
 - **entries** - registrations with approval status (pending/approved/rejected/waitlisted), seed_order. Capacity is enforced by triggers when an entry becomes approved (approved entries occupy seats; pick_random doubles count people).
 - **courts**, **match_schedule** - manual schedule: per-match court and/or time (`fixed` or `not_before`) or court queue; rows exist in `draft` or `published` state, the public sees published only
 - **tournament_access_grants**, **tournament_unlock_attempts** - hashed 12-hour tokens for password pages and lockout counters; no API access
-- **entry_members** - individual member names (doubles = 2), optional `player_id`
+- **entry_members** - individual member names (doubles = 2, team roster up to 30), optional `player_id`, `gender` (male/female, used by team lines)
 - **entry_member_ratings** - ratings a player gave at registration (`rating_type` tnl/lts for tennis, padel_level/tnl/padelution for padel; scales in `player_rating_valid()` and `src/lib/playerRatings.js`); closed to API roles, organizers read via `get_entry_ratings()`. `rating_value` = what the player gave, `organizer_value` = organizer's own (wins; set via `set_member_rating(member, type, value)`, null clears). "Seed by rating" in the Entries tab orders the field by one kind in the browser (`ratingSeedOrder`: pair = average, both rated > one > none, ties by lot, LTS lower is better) and saves it with `set_entry_seed_order`. Asked only when `tournaments.player_rating` is optional/required (default off). Pair forming/splitting moves member rows, so ratings follow the player. A rating change touches its entry's `updated_at` (trigger), so open admin pages get the `entries` Realtime signal and re-read ratings and contacts
 - **groups**, **group_entries** - group-stage buckets (round_robin uses none; groups_playoff uses both)
-- **matches** - canonical aggregate `side_a_score`/`side_b_score` (points total in points formats; partners in `side_a2_entry_id`/`side_b2_entry_id`) (+ `side_a_pens`/`side_b_pens` for football knockout); `stage` (main/group/winners/losers/grand_final/third_place); `group_id`; winner tree via `next_match_id`/`next_slot`; loser routing via `loser_next_match_id`/`loser_next_slot` (double-elim); unique on `(tournament_id, stage, round_number, match_number)`
+- **matches** - canonical aggregate `side_a_score`/`side_b_score` (points total in points formats; partners in `side_a2_entry_id`/`side_b2_entry_id`) (+ `side_a_pens`/`side_b_pens` for football knockout); `stage` (main/group/winners/losers/grand_final/third_place); `group_id`; winner tree via `next_match_id`/`next_slot`; loser routing via `loser_next_match_id`/`loser_next_slot` (double-elim); team lines: `parent_match_id` + `line_no`, stage `rubber` (every consumer that counts matches must skip them); unique on `(tournament_id, stage, round_number, match_number)`
   `stream_url` - YouTube broadcast link (https youtube.com / youtu.be only), set via `set_match_stream()`; changing only it keeps `score_revision`
 - **match_sets** - per-set game scores (tennis/padel only)
 - **bracket_versions** - bracket snapshots for undo
 - **live_scores** - real-time point-by-point scoring state (JSON state/history/revision)
 - **sponsorship_requests** - paid-feature gate, one row per tournament: `status` pending/approved/rejected, `message`, `requested_by`, `decided_by/at`. Read: tournament admins + platform admin (RLS); no direct writes
 - **tournament_sponsorship** - one JSON document per tournament (sponsors, places, banners; shape in `src/lib/sponsorship.js`) + `revision`. Read: organizers always, others while the tournament is readable and sponsorship approved + `feature.sponsorship` on. Written only by `save_sponsorship()`. Images: public Storage bucket `sponsor-assets` (2 MB, webp/png/jpeg/gif, no SVG), upload/delete only by `can_manage_sponsorship()` of the folder's tournament
+- **team_captains**, **team_captain_invites** - team captains (user per team entry) and one single-use invite per team (SHA-256 only, 30 days); no direct writes
+- **tie_lineups**, **tie_lineup_submissions** - players per tie line and side, submitted sides; read through RLS `tie_lineup_visible()` (organizers, own captain, everyone once both sides are in or play started); written only by `save_tie_lineup()`
 - **ai_usage** - AI call journal (user, task, tournament, tokens, ok/error code; never the request text). Read: platform admin only; written by `ai_begin_call()`/`ai_finish_call()`
 - **notification_outbox** - participant emails queued by triggers on `entries` (received/waitlisted/approved/rejected) and by `enqueue_match_reminders()`; no addresses stored; closed to API roles. `entries.notify_locale` comes from the `x-bracketa-locale` request header (RegistrationForm sets it)
 
@@ -173,6 +176,7 @@ supabase/
 - `propagate_winner()` - advances winner via `next_match_id`; routes loser via `loser_next_match_id` (double-elim)
 - `swap_bracket_slots()`, `apply_bracket_layout()` - manual single-elim arrangement
 - `form_random_pairs()`, `form_manual_pairs()`, `split_pairs()` - doubles pairing; the pair editor saves through `save_tournament_pairs(…, p_replace)` — an empty list with `p_replace` splits every pair ("Split all pairs")
+- Team ties: `add_team_entry()`, `register_team()` (public, signed-in registrant = captain), `save_team_roster()`, `update_tie_template()`, `create_captain_invite()` / `claim_team_captain()` / `remove_team_captain()` / `list_team_captains()`, `save_tie_lineup(tie, side, lines, submit)`, `reopen_tie_lineup()`; internal `team_tie_config()` (normalized template), `create_tie_rubbers()` (trigger `trg_team_tie_sides`), `recompute_tie()` (trigger `trg_team_rubber_changed`); guards `guard_team_category`, `guard_team_entry` (team entries only via team RPCs, `team.useTeamForm`), `guard_team_rubber_result` (`team.lineupMissing`), `guard_team_match_sets` / `guard_team_live` (`team.tieComputed`)
 - Points formats: `generate_points_format(id, rounds, courts, first_round)` (Americano schedule: full partner cycle by default, cyclic whist designs for 8/12/13/16/17/20/21/24/25 players, else circle/greedy with rest spread ≤ 1; Team Americano RR; Mexicano/KotC round 1, roster stored in `format_config.roster`), `generate_next_round()`, `undo_last_round()`, `update_match_points(match, a, b, rev)`, `get_points_standings()`; live `record_point` counts rallies to N; triggers `guard_points_format` (padel only, forced pick_random, odd N for KotC), `guard_individual_entry_members`, `guard_points_match_sets`
 - `set_entry_seed_order(tournament_id, entry_ids[])` - manual seeding of the approved field before the draw (feeds manual draw and group snake); snapshot entries carry `seed_order`
 - `start_live_match()`, `record_point()`, `stop_live_match()` - live scoring lifecycle
@@ -192,7 +196,7 @@ supabase/
 
 ### Realtime
 
-Tables `tournaments`, `entries`, `matches`, `match_sets`, `tournament_admins`, `live_scores`, `groups`, `group_entries`, `courts`, `match_schedule`, `feature_flags` are in the `supabase_realtime` publication. Payloads are only invalidation signals: the client re-reads the full snapshot (`src/lib/tournamentSync.js`). Password pages have no Realtime (RLS hides their rows); they poll every 30 s.
+Tables `tournaments`, `entries`, `matches`, `match_sets`, `tournament_admins`, `live_scores`, `groups`, `group_entries`, `courts`, `match_schedule`, `feature_flags`, `tie_lineups`, `tie_lineup_submissions` are in the `supabase_realtime` publication. Payloads are only invalidation signals: the client re-reads the full snapshot (`src/lib/tournamentSync.js`). Password pages have no Realtime (RLS hides their rows); they poll every 30 s.
 
 ## Key Architecture Patterns
 
@@ -210,6 +214,7 @@ Tables `tournaments`, `entries`, `matches`, `match_sets`, `tournament_admins`, `
 - Standings head-to-head handles pairwise/group ties; circular ties fall through to goal difference.
 - Football live scoring not implemented (final result entry only).
 - Manual slot editing only for single-elim.
+- Team ties: tennis only; no double elimination; one match format for every line; decider line plays the tournament rules; captains only edit rosters/lineups (no score entry) and only in public/link/password tournaments; a line correction that changes a tie's outcome is refused once a later tie has results, group ties are frozen once the playoff exists.
 - Points formats: King of the Court needs a multiple of 4 players (≥ 8, no rests); Americano roster and courts are fixed at generation; no mixed Americano or "first to N"/timed matches; a dynamic-format result is locked once the next round exists (undo that round first).
 
 ## Roadmap / Missing Features

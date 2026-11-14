@@ -17,8 +17,11 @@ const props = defineProps({
   family: { type: String, default: 'goals' },
   setsByMatch: { type: Object, default: () => ({}) },
   liveScoresByMatch: { type: Object, default: () => ({}) },
+  // Team tournaments: a fixture opens its tie.
+  openTie: { type: Boolean, default: false },
 })
 const emit = defineEmits(['view-live'])
+const tieOpenable = m => props.openTie && Boolean(m.side_a_entry_id && m.side_b_entry_id)
 const { t, locale } = useI18n()
 
 // Provided by the tournament views: published rows for spectators, the draft
@@ -87,12 +90,12 @@ const liveCount = g => g.rounds.reduce((n, r) => n + r.list.filter(isLive).lengt
               :class="{ 'gs-match--live': isLive(m), 'gs-match--done': m.status === 'finished' }"
             >
               <component
-                :is="isLive(m) ? 'button' : 'div'"
-                :type="isLive(m) ? 'button' : undefined"
+                :is="isLive(m) || tieOpenable(m) ? 'button' : 'div'"
+                :type="isLive(m) || tieOpenable(m) ? 'button' : undefined"
                 class="gs-match__body"
-                :tabindex="!isLive(m) && hasDetails(m) ? 0 : undefined"
-                :aria-label="isLive(m) ? t('a11y.matchAction', { action: t('mobile.watchLive'), teamA: name(m.side_a_entry_id), teamB: name(m.side_b_entry_id) }) : undefined"
-                @click="isLive(m) && emit('view-live', m)"
+                :tabindex="!isLive(m) && !tieOpenable(m) && hasDetails(m) ? 0 : undefined"
+                :aria-label="isLive(m) ? t('a11y.matchAction', { action: t('mobile.watchLive'), teamA: name(m.side_a_entry_id), teamB: name(m.side_b_entry_id) }) : tieOpenable(m) ? `${t('team.tie.openTie')}: ${name(m.side_a_entry_id)} — ${name(m.side_b_entry_id)}` : undefined"
+                @click="(isLive(m) || tieOpenable(m)) && emit('view-live', m)"
               >
                 <span v-for="side in ['a', 'b']" :key="side" class="gs-side" :class="{ 'gs-side--won': winnerSide(m) === side }">
                   <span class="gs-side__name">{{ name(m[`side_${side}_entry_id`]) }}</span>

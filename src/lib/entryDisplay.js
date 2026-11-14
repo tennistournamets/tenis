@@ -8,6 +8,11 @@ export function entryMemberNames(entry) {
   if (!entry) {
     return []
   }
+  // A team is shown by its name everywhere; its roster lives in entry_members.
+  if (entry.entry_type === 'team') {
+    const team = (entry.display_name ?? '').trim()
+    return team ? [team] : []
+  }
   const rows = entry.entry_members
   if (Array.isArray(rows) && rows.length) {
     const names = [...rows]
@@ -42,6 +47,7 @@ export function isDoublesEntry(entry) {
  * @returns {string}
  */
 export function customDisplayName(entry) {
+  if (entry?.entry_type === 'team') return ''
   const name = (entry?.display_name ?? '').trim()
   const rows = Array.isArray(entry?.entry_members) ? entry.entry_members : []
   const members = [...rows]
@@ -84,6 +90,8 @@ export function sideEntryIds(match, side) {
  * @returns {string}
  */
 export function matchSideLabel(match, side, entriesMap = {}, fallback = '') {
+  // A team-tie line carries its players' names (lib/teamTie.js labelledLine).
+  if (match?.[`side_${side}_label`]) return match[`side_${side}_label`]
   const names = sideEntryIds(match, side)
     .map(id => entryDisplayNames(entriesMap[id]).join(' / '))
     .filter(Boolean)

@@ -11,6 +11,7 @@ import { track } from '../lib/analytics'
 import { legalPath } from '../lib/localeRoute'
 import { asksPlayerRating, newRatingRow, ratingPayload, ratingRowsError } from '../lib/playerRatings'
 import PlayerRatingFields from './PlayerRatingFields.vue'
+import { tieFromConfig } from '../lib/teamTie'
 
 const props = defineProps({
   tournament: {
@@ -26,16 +27,22 @@ const emit = defineEmits(['submitted', 'dirty'])
 
 const { t, locale } = useI18n()
 const entryType = computed(() => props.tournament.category)
+// Team tournaments (category 'team'): a team name, its players and the captain's contacts.
+const teamMode = computed(() => entryType.value === 'team')
+const rosterMin = computed(() => tieFromConfig(props.tournament.format_config?.tie).roster_min)
+const rosterMax = computed(() => tieFromConfig(props.tournament.format_config?.tie).roster_max)
+const freshPlayers = () => Array.from({ length: Math.max(2, Math.min(rosterMin.value, 8)) }, () => ({ name: '', gender: '' }))
 const isTeamSport = computed(() => scoringFamily(props.tournament.sport || 'tennis') === 'goals')
 // Americano, Mexicano, King of the Court: one player per entry, the partner changes every round.
 const isIndividual = computed(() => isIndividualFormat(props.tournament.format))
 const memberOneLabel = computed(() => {
   if (isTeamSport.value) return t('registrationForm.teamName')
+  if (teamMode.value) return t('team.registration.teamName')
   return entryType.value === 'doubles' && !isIndividual.value ? t('registrationForm.memberOne') : t('registrationForm.member')
 })
 // «Тип участия» дублирует чипы в шапке для одиночного разряда — показываем
 // только там, где он несёт смысл (пары и командные виды).
-const showEntryType = computed(() => entryType.value === 'doubles' || isTeamSport.value)
+const showEntryType = computed(() => entryType.value === 'doubles' || isTeamSport.value || teamMode.value)
 const entryTypeLabel = computed(() =>
   isTeamSport.value ? t('tournament.team') : t(`tournament.${entryType.value}`),
 )
@@ -53,6 +60,7 @@ const form = reactive({
   memberTwo: '',
   ratingsOne: freshRatings(),
   ratingsTwo: freshRatings(),
+  players: freshPlayers(),
 })
 
 // The organizer may ask each player for a rating (TNL, LTS, padel level…).
@@ -127,6 +135,7 @@ async function submit() {
     return
   }
 
+  if (teamMode.value) return submitTeam()
   const namesError = entryNamesError(entryType.value, form.memberOne, form.memberTwo, form.displayName)
   if (namesError) {
     errorText.value = t(namesError)
@@ -193,13 +202,59 @@ async function submit() {
     loading.value = false
   }
 }
+
+async function submitTeam() {
+  const players = form.players.map(p => ({ name: p.name.trim(), gender: p.gender || null })).filter(p => p.name)
+  if (!form.memberOne.trim()) {
+    errorText.value = t('team.errors.nameRequired')
+    loading.value = false
+    return
+  }
+  if (players.length < rosterMin.value) {
+    errorText.value = t('team.errors.rosterTooSmall')
+    loading.value = false
+    return
+  }
+  try {
+    const { data, error } = await supabase.rpc('register_team', {
+      p_slug: props.tournament.slug,
+      p_team_name: form.memberOne,
+      p_members: players,
+      p_phone: form.phone,
+      p_email: form.email,
+      p_access_token: props.accessToken || null,
+    }).setHeader('x-bracketa-locale', locale.value)
+    if (error) {
+      errorText.value = registrationError(error.message, t, 'registrationForm.error')
+      return
+    }
+    submitted.value = true
+    track('registration_submitted', { sport: props.tournament.sport, status: data?.status || 'pending', team: true })
+    submittedStatus.value = data?.status === 'waitlisted' ? 'waitlisted' : 'pending'
+    form.memberOne = ''
+    form.phone = ''
+    form.email = ''
+    form.players = freshPlayers()
+    phoneTouched.value = false
+    emailTouched.value = false
+    emit('submitted')
+    await nextTick()
+    successCard.value?.scrollIntoView({ block: 'center' })
+    successCard.value?.focus({ preventScroll: true })
+  } catch (error) {
+    errorText.value = registrationError(error?.message, t, 'registrationForm.error')
+  } finally {
+    loading.value = false
+  }
+}
 </script>
 
 <template>
   <form class="card card--elevated stack stack--sm" @submit.prevent="submit">
     <div>
       <h3 class="section-title">{{ t('registrationForm.title') }}</h3>
-      <p v-if="showEntryType" class="muted reg-form__type">{{ isTeamSport ? t('registrationForm.teamNote') : isIndividual ? t('pointsFormat.individualHint') : t(showMemberTwoOptional ? 'registrationForm.doublesRandomNote' : 'registrationForm.doublesNote') }}</p>
+      <p v-if="teamMode" class="muted reg-form__type">{{ t('team.categoryHint') }} {{ t('team.registration.captainNote') }}</p>
+      <p v-else-if="showEntryType" class="muted reg-form__type">{{ isTeamSport ? t('registrationForm.teamNote') : isIndividual ? t('pointsFormat.individualHint') : t(showMemberTwoOptional ? 'registrationForm.doublesRandomNote' : 'registrationForm.doublesNote') }}</p>
       <p class="muted reg-form__legend"><span class="reg-form__req" aria-hidden="true">*</span> {{ t('registrationForm.requiredLegend') }}</p>
     </div>
 
@@ -222,12 +277,31 @@ async function submit() {
           v-model="form.memberOne"
           class="input"
           type="text"
-          maxlength="100"
-          autocomplete="name"
+          :maxlength="teamMode ? 80 : 100"
+          :autocomplete="teamMode ? 'off' : 'name'"
           :disabled="loading"
           required
         />
       </div>
+
+      <fieldset v-if="teamMode" class="reg-team" :disabled="loading">
+        <legend class="reg-team__legend">{{ t('team.registration.players') }} <span class="reg-form__req" aria-hidden="true">*</span></legend>
+        <p class="field-hint">{{ t('team.registration.playersHint', { min: rosterMin }) }} {{ t('team.roster.genderHint') }}</p>
+        <div v-for="(player, index) in form.players" :key="index" class="reg-team__row">
+          <input :id="`reg-player-${index}`" v-model="player.name" class="input" type="text" maxlength="100" autocomplete="off"
+            :aria-label="t('team.roster.player', { n: index + 1 })" :placeholder="t('team.roster.player', { n: index + 1 })" />
+          <select v-model="player.gender" class="input reg-team__gender" :aria-label="`${t('team.roster.gender')} · ${t('team.roster.player', { n: index + 1 })}`">
+            <option value="">{{ t('team.roster.genderUnknown') }}</option>
+            <option value="male">{{ t('team.roster.male') }}</option>
+            <option value="female">{{ t('team.roster.female') }}</option>
+          </select>
+          <button type="button" class="btn btn--ghost btn--sm" :disabled="form.players.length < 2"
+            :aria-label="t('team.roster.removePlayer', { name: player.name || index + 1 })" @click="form.players.splice(index, 1)">×</button>
+        </div>
+        <button type="button" class="btn btn--outline btn--sm" :disabled="form.players.length >= rosterMax" @click="form.players.push({ name: '', gender: '' })">
+          + {{ t('team.roster.addPlayer') }}
+        </button>
+      </fieldset>
 
       <div v-if="showMemberTwo" class="form-field">
         <label for="reg-member-two">{{ t('registrationForm.memberTwo') }} <span class="reg-form__req" aria-hidden="true">*</span></label>
@@ -256,7 +330,7 @@ async function submit() {
         />
       </div>
 
-      <template v-if="asksRating">
+      <template v-if="asksRating && !teamMode">
         <PlayerRatingFields
           :rows="form.ratingsOne"
           :sport="sport"
@@ -277,7 +351,7 @@ async function submit() {
         />
       </template>
 
-      <div class="form-field">
+      <div v-if="!teamMode" class="form-field">
         <label for="reg-display-name">{{ showEntryType ? t('registrationForm.displayName') : t('registrationForm.displayNameSolo') }}</label>
         <input
           id="reg-display-name"
@@ -356,4 +430,8 @@ async function submit() {
 .reg-form__done { display: grid; gap: 8px; justify-items: start; }
 .reg-form__done:focus { outline: none; }
 .reg-form__done-text { margin: 0; }
+.reg-team { border: 0; margin: 0; padding: 0; min-width: 0; display: grid; gap: 8px; }
+.reg-team__legend { font-weight: 600; padding: 0; margin-bottom: 4px; }
+.reg-team__row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(7rem, 9rem) auto; gap: 8px; align-items: center; }
+.reg-team .btn--outline { justify-self: start; }
 </style>

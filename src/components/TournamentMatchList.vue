@@ -23,6 +23,8 @@ const props = defineProps({
   canStream: { type: Boolean, default: false },
   format: { type: String, default: '' },
   groups: { type: Array, default: () => [] },
+  // Team tournaments: every tie opens its window (lines, lineups, score).
+  openTie: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['edit-result', 'view-live', 'edit-stream'])
@@ -224,7 +226,13 @@ const visibleMatches = computed(() => {
           <span>{{ t('mobile.finalScore') }}</span><strong>{{ finalScore(match) }}</strong>
         </div>
 
-        <footer v-if="isLive(match) || matchStreamUrl(match) || canStream || (canEditFinal && match.side_a_entry_id && match.side_b_entry_id) || (canLiveScore && match.status !== 'finished' && match.side_a_entry_id && match.side_b_entry_id)" class="mobile-match__actions">
+        <footer v-if="isLive(match) || matchStreamUrl(match) || canStream || (canEditFinal && match.side_a_entry_id && match.side_b_entry_id) || (canLiveScore && match.status !== 'finished' && match.side_a_entry_id && match.side_b_entry_id) || (openTie && match.side_a_entry_id && match.side_b_entry_id)" class="mobile-match__actions">
+          <button
+            v-if="openTie && !canEditFinal && match.side_a_entry_id && match.side_b_entry_id"
+            type="button"
+            class="btn btn--outline btn--sm"
+            @click="emit('view-live', match)"
+          >{{ t('team.tie.openTie') }}</button>
           <button
             v-if="isLive(match)"
             type="button"

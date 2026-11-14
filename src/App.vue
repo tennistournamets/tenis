@@ -13,6 +13,8 @@ import { siteOrigin } from './lib/siteOrigin'
 import { DEFAULT_LOCALE, isLocale } from './lib/localeRoute'
 import { useOnlineStatus } from './lib/useOnlineStatus'
 import { useAuthStore } from './stores/auth'
+import { supabase } from './lib/supabase'
+import { claimCaptain, takePendingClaim } from './lib/captainClaim'
 import BrandLogo from './components/BrandLogo.vue'
 import MadeWithBracketa from './components/MadeWithBracketa.vue'
 
@@ -72,6 +74,21 @@ watch(
   ([ready]) => { if (ready) void loadAccountContext() },
   { immediate: true },
 )
+// A captain link opened before signing in: Google returns to /admin, so the claim
+// finishes here and the captain goes back to the tournament page.
+watch(() => auth.user?.id, async userId => {
+  if (!userId) return
+  const claim = takePendingClaim()
+  if (!claim) return
+  let claimed = false
+  try {
+    await claimCaptain(supabase, claim.token)
+    claimed = true
+  } catch {
+    // The page shows the error when the link is opened again with the token.
+  }
+  void router.replace({ path: `/tournaments/${encodeURIComponent(claim.slug)}`, query: claimed ? { captain_ok: '1' } : { captain: claim.token } })
+}, { immediate: true })
 
 const layout = computed(() => {
   if (route.name === 'home') {

@@ -26,6 +26,8 @@ import { track } from '../lib/analytics'
 import { errorMessage } from '../lib/errorMessages'
 import { confirmDialog } from '../lib/confirmDialog'
 import { createTournamentFromForm, defaultCreateForm } from '../lib/tournamentCreate'
+import { TEAM_FLAG, TEAM_FORMATS, tieError } from '../lib/teamTie'
+import TieTemplateFields from '../components/TieTemplateFields.vue'
 
 const { t, locale } = useI18n()
 // Example number in the organizer's country format (Latvian +371, otherwise Lithuanian +370).
@@ -73,7 +75,13 @@ watch([form, step], () => {
 }, { deep: true })
 
 const cfg = computed(() => getSportConfig(form.sport))
-const effectiveCategory = computed(() => resolveCategory(form.sport, form.category))
+// Team tournaments: tennis, behind the feature.teams switch, with a format that draws ties.
+const teamsEnabled = computed(() => form.sport === 'tennis' && flags.isEnabled(TEAM_FLAG))
+const teamFormatOk = computed(() => TEAM_FORMATS.includes(form.format))
+const effectiveCategory = computed(() => (
+  form.category === 'team' && !(teamsEnabled.value && teamFormatOk.value) ? 'singles' : resolveCategory(form.sport, form.category)
+))
+const teamCategory = computed(() => effectiveCategory.value === 'team')
 const pointsFormat = computed(() => isPointsFormat(form.format))
 // Americano, Mexicano, King of the Court: players sign up alone, pairs change every round.
 const individualFormat = computed(() => isIndividualFormat(form.format))
@@ -96,7 +104,7 @@ const pairingMode = computed(() => (individualFormat.value || form.doubles_pairi
 const previewMeta = computed(() => {
   const parts = [
     t('sport.' + form.sport),
-    t('tournament.' + effectiveCategory.value),
+    teamCategory.value ? t('team.category') : t('tournament.' + effectiveCategory.value),
     t('tournamentFormat.' + form.format),
   ]
   if (pointsFormat.value) parts.push(t('pointsFormat.target', { n: form.points_per_match }))
@@ -174,6 +182,14 @@ async function nextStep() {
       return
     }
   }
+  if (step.value === 4 && teamCategory.value) {
+    const problem = tieError(form.tie)
+    if (problem) {
+      errorText.value = t(problem)
+      await showCreateError(formError)
+      return
+    }
+  }
   if (step.value === 5) {
     const regError = validateRegistrationForm(pickRegistrationDraft(form))
     if (regError) {
@@ -228,6 +244,13 @@ async function createTournament() {
   if (contactError) {
     step.value = 3
     errorText.value = t(contactError)
+    await showCreateError(formError)
+    return
+  }
+  const tieProblem = teamCategory.value ? tieError(form.tie) : null
+  if (tieProblem) {
+    step.value = 4
+    errorText.value = t(tieProblem)
     await showCreateError(formError)
     return
   }
@@ -464,7 +487,9 @@ watch(step, (next, prev) => { if (draftReady.value && next === prev + 1) track('
               <select id="create-cat" v-model="form.category" class="input">
                 <option value="singles">{{ t('tournament.singles') }}</option>
                 <option value="doubles">{{ t('tournament.doubles') }}</option>
+                <option v-if="teamsEnabled" value="team" :disabled="!teamFormatOk">{{ t('team.category') }}</option>
               </select>
+              <p v-if="teamsEnabled && !teamFormatOk" class="field-hint">{{ t('team.categoryUnavailable') }}</p>
             </div>
 
             <div v-if="pointsFormat" class="form-field">
@@ -490,7 +515,7 @@ watch(step, (next, prev) => { if (draftReady.value && next === prev + 1) track('
               </select>
             </div>
 
-            <div class="form-field">
+            <div v-if="!teamCategory" class="form-field">
               <label for="create-gender">{{ t('admin.divisionLabel') }}</label>
               <select id="create-gender" v-model="gender" class="input">
                 <option value="men">{{ t('admin.genderMen') }}</option>
@@ -503,6 +528,12 @@ watch(step, (next, prev) => { if (draftReady.value && next === prev + 1) track('
             {{ t(form.format === 'king_of_court' ? 'pointsFormat.targetHintKotc' : 'pointsFormat.targetHint') }}
           </p>
 
+        </section>
+
+        <section v-if="teamCategory" class="wizard__group">
+          <p class="wizard__eyebrow">{{ t('team.template.title') }}</p>
+          <p class="muted">{{ t('team.categoryHint') }}</p>
+          <TieTemplateFields v-model="form.tie" id-prefix="create-tie" :disabled="saving" />
         </section>
 
         <section v-if="form.sport === 'tennis'" class="wizard__group">

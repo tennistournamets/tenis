@@ -5,9 +5,17 @@ defineProps({
   rows: { type: Array, default: () => [] },
   // 'goals' (football): full football-style columns; 'sets' (tennis/padel):
   // no draws, sets won:lost instead of scored/conceded/diff.
+  // 'team' (team ties): ties won, drawn and lost, matches won:lost.
   family: { type: String, default: 'goals' },
 })
 const { t } = useI18n()
+const COLUMNS = {
+  goals: ['played', 'won', 'drawn', 'lost', 'for', 'against', 'diff', 'points'],
+  team: ['played', 'won', 'drawn', 'lost', 'lines', 'points'],
+}
+const columnsOf = family => COLUMNS[family] || ['played', 'won', 'lost', 'sets', 'points']
+const columnLabel = column => (column === 'lines' ? t('team.standings.lines') : t(`standings.${column}`))
+const columnTitle = column => (column === 'lines' ? t('team.standings.lines') : t(`a11y.stats.${column}`))
 </script>
 
 <template>
@@ -18,7 +26,7 @@ const { t } = useI18n()
         <tr>
           <th scope="col" class="standings__rank" :aria-label="t('a11y.rank')">#</th>
           <th scope="col" class="standings__team">{{ t('standings.team') }}</th>
-          <th v-for="column in (family === 'goals' ? ['played', 'won', 'drawn', 'lost', 'for', 'against', 'diff', 'points'] : ['played', 'won', 'lost', 'sets', 'points'])" :key="column" scope="col" :title="t(`a11y.stats.${column}`)" :aria-label="t(`a11y.stats.${column}`)">{{ t(`standings.${column}`) }}</th>
+          <th v-for="column in columnsOf(family)" :key="column" scope="col" :title="columnTitle(column)" :aria-label="columnTitle(column)">{{ columnLabel(column) }}</th>
         </tr>
       </thead>
       <tbody>
@@ -27,7 +35,7 @@ const { t } = useI18n()
           <th scope="row" class="standings__team">{{ r.display_name }}</th>
           <td>{{ r.played }}</td>
           <td>{{ r.won }}</td>
-          <td v-if="family === 'goals'">{{ r.drawn }}</td>
+          <td v-if="family === 'goals' || family === 'team'">{{ r.drawn }}</td>
           <td>{{ r.lost }}</td>
           <template v-if="family === 'goals'">
             <td>{{ r.score_for }}</td>

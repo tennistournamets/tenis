@@ -16,7 +16,10 @@ import RegistrationForm from '../components/RegistrationForm.vue'
 import RegistrationConditions from '../components/RegistrationConditions.vue'
 import TournamentUnlock from '../components/TournamentUnlock.vue'
 import TournamentMatchList from '../components/TournamentMatchList.vue'
-import { matchSideLabel } from '../lib/entryDisplay'
+import { entryDisplayNames, matchSideLabel } from '../lib/entryDisplay'
+import { isTeamTournament, labelledLine, lineupsByLine, membersById, splitRubbers, submissionsByTie } from '../lib/teamTie'
+import TieModal from '../components/TieModal.vue'
+import CaptainPanel from '../components/CaptainPanel.vue'
 import { categoryLabelKey, getSportConfig, isIndividualFormat, isPointsFormat, pointsTarget } from '../lib/sportConfig'
 import PointsRoundsBoard from '../components/PointsRoundsBoard.vue'
 import PointsStandingsTable from '../components/PointsStandingsTable.vue'
@@ -78,6 +81,11 @@ const lockup = slot => sponsorship.value.lockup(slot)
 const bannerItems = slot => sponsorship.value.banners(slot)
 const entries = ref([])
 const matches = ref([])
+// Team ties: lines (child matches) by tie, lineups, submitted sides and the viewer's own teams.
+const tieLines = ref({})
+const tieLineupRows = ref([])
+const tieSubmissionRows = ref([])
+const myCaptainEntries = ref([])
 const standings = ref([])
 // Padel points formats (Americano…): get_points_standings rows.
 const pointsStandings = ref([])
@@ -130,6 +138,37 @@ let loadVersion = 0
 const syncFailed = ref(false)
 
 const entriesMap = computed(() => indexEntries(entries.value))
+const teamTournament = computed(() => isTeamTournament(tournament.value))
+const tieLineups = computed(() => lineupsByLine(tieLineupRows.value))
+const tieSubmissions = computed(() => submissionsByTie(tieSubmissionRows.value))
+const rosterMembers = computed(() => membersById(entries.value))
+function lineById(id) {
+  for (const list of Object.values(tieLines.value)) {
+    const line = list.find(m => m.id === id)
+    if (line) return labelledLine(line, tieLineups.value, rosterMembers.value, entryId => entryDisplayNames(entriesMap.value[entryId]).join(' / '))
+  }
+  return null
+}
+// Any stored match by id: a tie or ordinary match, or a tie line carrying its players' names.
+const storedMatch = id => (id ? matches.value.find(row => row.id === id) || lineById(id) : null)
+const tieModalId = ref(null)
+const tieModalMatch = computed(() => matches.value.find(m => m.id === tieModalId.value) || null)
+const tieCaptainSides = computed(() => {
+  const tie = tieModalMatch.value
+  if (!tie) return []
+  return [['A', tie.side_a_entry_id], ['B', tie.side_b_entry_id]].filter(([, id]) => myCaptainEntries.value.includes(id)).map(([side]) => side)
+})
+// Captain links: ?captain=<token> to claim, ?captain_ok=1 after a claim finished on the admin side.
+const captainToken = computed(() => (typeof route.query.captain === 'string' ? route.query.captain : ''))
+const captainJustClaimed = computed(() => route.query.captain_ok === '1')
+const captainClaimedTeam = ref('')
+const showCaptainPanel = computed(() => teamTournament.value && !props.embed
+  && (Boolean(captainToken.value) || Boolean(captainClaimedTeam.value) || myCaptainEntries.value.length > 0))
+function onCaptainClaimed(teamName = '') {
+  captainClaimedTeam.value = teamName
+  const { captain, captain_ok: _ok, ...query } = route.query
+  if (captain !== undefined || _ok !== undefined) void router.replace({ query, hash: route.hash })
+}
 
 const approvedEntries = computed(() => entries.value.filter((entry) => entry.status === 'approved'))
 /** Shown only after organizer approval; register_entry creates `pending` rows in `entries`. */
@@ -141,7 +180,7 @@ const liveScoresByMatch = computed(() => indexLiveScores(liveScores.value))
 const liveMatchCount = computed(() => Object.values(liveScoresByMatch.value || {}).filter(l => l?.status === 'active').length)
 
 const selectedLiveMatch = computed(() => (
-  selectedLiveMatchId.value ? matches.value.find((match) => match.id === selectedLiveMatchId.value) || null : null
+  selectedLiveMatchId.value ? storedMatch(selectedLiveMatchId.value) : null
 ))
 
 const selectedLiveScore = computed(() => (
@@ -162,7 +201,11 @@ function setMobileSurface(surface) {
 }
 
 function openPublicLive(match) {
-  const current = matches.value.find(row => row.id === match?.id)
+  if (teamTournament.value && match && !match.parent_match_id) {
+    tieModalId.value = match.id
+    return
+  }
+  const current = storedMatch(match?.id)
   if (!current || !liveScoresByMatch.value[current.id]) return
   selectedLiveMatchId.value = current.id
   if (queryValue(route.query.live) === current.id) return
@@ -195,7 +238,7 @@ function syncPublicLiveFromRoute() {
     pushedLiveMatchId = null
     return
   }
-  const exists = matches.value.some(match => match.id === matchId)
+  const exists = Boolean(storedMatch(matchId))
   if (exists && liveScoresByMatch.value[matchId]) {
     selectedLiveMatchId.value = matchId
     return
@@ -364,6 +407,7 @@ function resetTournamentData() {
   tournament.value = null
   entries.value = []
   matches.value = []
+  tieLines.value = {}; tieLineupRows.value = []; tieSubmissionRows.value = []; myCaptainEntries.value = []
   matchSets.value = []
   liveScores.value = []
   selectedLiveMatchId.value = null
@@ -390,7 +434,12 @@ function applySnapshot(data) {
   registration.value = data.registration || null
   courts.value = data.courts || []
   schedule.value = data.schedule || []
-  matches.value = data.matches
+  const split = splitRubbers(data.matches)
+  matches.value = split.main
+  tieLines.value = split.linesByTie
+  tieLineupRows.value = data.tie_lineups || []
+  tieSubmissionRows.value = data.tie_submissions || []
+  myCaptainEntries.value = data.my_captain_entries || []
   matchSets.value = data.sets
   liveScores.value = data.live
   groups.value = data.groups
@@ -670,6 +719,21 @@ onBeforeUnmount(() => {
         </dl>
       </details>
 
+      <CaptainPanel
+        v-if="showCaptainPanel && tournament"
+        :tournament="tournament"
+        :entries-map="entriesMap"
+        :ties="matches"
+        :submissions="tieSubmissions"
+        :my-entries="myCaptainEntries"
+        :claim-token="captainToken"
+        :just-claimed="captainJustClaimed"
+        :claimed-team="captainClaimedTeam"
+        @claimed="onCaptainClaimed"
+        @changed="initialLoad"
+        @open-tie="tie => { tieModalId = tie.id }"
+      />
+
       <div v-if="publicTabs.length > 1 && !embed" class="tab-group" role="tablist" :aria-label="t('tournament.tabsLabel')" @keydown="onTabKeydown">
         <template v-for="tab in publicTabs" :key="tab.id">
           <span v-if="tab.disabled" class="tooltip-wrapper" :data-tooltip="tab.tooltip">
@@ -791,6 +855,7 @@ onBeforeUnmount(() => {
             :sets-by-match="setsByMatch"
             :entries-map="entriesMap"
             :live-scores-by-match="liveScoresByMatch"
+            :open-tie="teamTournament"
             @view-live="openPublicLive"
           />
         </div>
@@ -802,22 +867,22 @@ onBeforeUnmount(() => {
         <template v-else-if="isRoundRobin">
           <div v-if="standings.length" class="card">
             <div class="pub-table-head"><h3 class="section-title">{{ t('standings.title') }}</h3><SponsorLockup v-if="lockup('standings')" :lockup="lockup('standings')" :campaign="tournament.slug" /></div>
-            <StandingsTable :rows="standings" :family="sportCfg.scoringFamily" />
+            <StandingsTable :rows="standings" :family="teamTournament ? 'team' : sportCfg.scoringFamily" />
           </div>
           <div v-if="matches.length" class="card rr-cross-card" style="margin-top: var(--space-4)">
             <h3 class="section-title">{{ t('standings.crossTable') }}</h3>
-            <RoundRobinCrossTable :matches="matches" :entries-map="entriesMap" :standings="standings" :family="sportCfg.scoringFamily" :live-scores-by-match="liveScoresByMatch" @view-live="openPublicLive" />
+            <RoundRobinCrossTable :matches="matches" :entries-map="entriesMap" :standings="standings" :family="sportCfg.scoringFamily" :live-scores-by-match="liveScoresByMatch" :clickable="teamTournament" @select-match="openPublicLive" @view-live="openPublicLive" />
           </div>
         </template>
         <template v-else-if="isGroupsPlayoff">
-          <div v-if="groups.length" class="card"><div class="pub-table-head"><h3 class="section-title">{{ t('admin.groupStage') }}</h3><SponsorLockup v-if="lockup('standings')" :lockup="lockup('standings')" :campaign="tournament.slug" /></div><GroupStageBoard :groups="groupsView" :entries-map="entriesMap" :family="sportCfg.scoringFamily"  :sets-by-match="setsByMatch" :live-scores-by-match="liveScoresByMatch" @view-live="openPublicLive" /></div>
-          <div v-if="playoffMatches.length" class="card" style="margin-top: var(--space-4)"><h3 class="section-title">{{ t('admin.playoff') }}</h3><BracketBoard :matches="playoffMatches" :sets-by-match="setsByMatch" :entries-map="entriesMap" :live-scores-by-match="liveScoresByMatch" @view-live="openPublicLive" /></div>
+          <div v-if="groups.length" class="card"><div class="pub-table-head"><h3 class="section-title">{{ t('admin.groupStage') }}</h3><SponsorLockup v-if="lockup('standings')" :lockup="lockup('standings')" :campaign="tournament.slug" /></div><GroupStageBoard :groups="groupsView" :entries-map="entriesMap" :family="teamTournament ? 'team' : sportCfg.scoringFamily"  :sets-by-match="setsByMatch" :live-scores-by-match="liveScoresByMatch" :open-tie="teamTournament" @view-live="openPublicLive" /></div>
+          <div v-if="playoffMatches.length" class="card" style="margin-top: var(--space-4)"><h3 class="section-title">{{ t('admin.playoff') }}</h3><BracketBoard :matches="playoffMatches" :sets-by-match="setsByMatch" :entries-map="entriesMap" :live-scores-by-match="liveScoresByMatch" :open-tie="teamTournament" @view-live="openPublicLive" /></div>
         </template>
         <div v-else-if="isDoubleElim" class="card">
           <DoubleElimBoard :matches="matches" :sets-by-match="setsByMatch" :entries-map="entriesMap" :live-scores-by-match="liveScoresByMatch" @view-live="openPublicLive" />
         </div>
         <div v-else class="card">
-          <BracketBoard :matches="matches" :sets-by-match="setsByMatch" :entries-map="entriesMap" :live-scores-by-match="liveScoresByMatch" @view-live="openPublicLive" />
+          <BracketBoard :matches="matches" :sets-by-match="setsByMatch" :entries-map="entriesMap" :live-scores-by-match="liveScoresByMatch" :open-tie="teamTournament" @view-live="openPublicLive" />
         </div>
         </div>
       </template>
@@ -836,7 +901,7 @@ onBeforeUnmount(() => {
       <template v-else-if="isRoundRobin">
         <div v-if="standings.length" class="card">
           <div class="pub-table-head"><h3 class="section-title">{{ t('standings.title') }}</h3><SponsorLockup v-if="lockup('standings')" :lockup="lockup('standings')" :campaign="tournament.slug" /></div>
-          <StandingsTable :rows="standings" :family="sportCfg.scoringFamily" />
+          <StandingsTable :rows="standings" :family="teamTournament ? 'team' : sportCfg.scoringFamily" />
         </div>
         <div v-if="matches.length" class="card rr-cross-card" style="margin-top: var(--space-4)">
           <h3 class="section-title">{{ t('standings.crossTable') }}</h3>
@@ -846,6 +911,8 @@ onBeforeUnmount(() => {
             :standings="standings"
             :family="sportCfg.scoringFamily"
             :live-scores-by-match="liveScoresByMatch"
+            :clickable="teamTournament"
+            @select-match="openPublicLive"
             @view-live="openPublicLive"
           />
         </div>
@@ -858,6 +925,7 @@ onBeforeUnmount(() => {
             :sets-by-match="setsByMatch"
             :entries-map="entriesMap"
             :live-scores-by-match="liveScoresByMatch"
+            :open-tie="teamTournament"
             @view-live="openPublicLive"
           />
         </div>
@@ -866,11 +934,12 @@ onBeforeUnmount(() => {
       <template v-else-if="isGroupsPlayoff">
         <div v-if="groups.length" class="card">
           <div class="pub-table-head"><h3 class="section-title">{{ t('admin.groupStage') }}</h3><SponsorLockup v-if="lockup('standings')" :lockup="lockup('standings')" :campaign="tournament.slug" /></div>
-          <GroupStageBoard :groups="groupsView" :entries-map="entriesMap" :family="sportCfg.scoringFamily"  :sets-by-match="setsByMatch" :live-scores-by-match="liveScoresByMatch" @view-live="openPublicLive" />
+          <GroupStageBoard :groups="groupsView" :entries-map="entriesMap" :family="teamTournament ? 'team' : sportCfg.scoringFamily"  :sets-by-match="setsByMatch" :live-scores-by-match="liveScoresByMatch" :open-tie="teamTournament" @view-live="openPublicLive" />
         </div>
         <div v-if="playoffMatches.length" class="card" style="margin-top: var(--space-4)">
           <h3 class="section-title">{{ t('admin.playoff') }}</h3>
           <BracketBoard
+            :open-tie="teamTournament"
             :matches="playoffMatches"
             :sets-by-match="setsByMatch"
             :entries-map="entriesMap"
@@ -894,6 +963,7 @@ onBeforeUnmount(() => {
       <div v-else class="card">
         <h3 class="section-title">{{ t('tournament.bracket') }}</h3>
         <BracketBoard
+          :open-tie="teamTournament"
           :matches="matches"
           :sets-by-match="setsByMatch"
           :entries-map="entriesMap"
@@ -911,6 +981,22 @@ onBeforeUnmount(() => {
         <a :href="embedLink" target="_blank" rel="noopener">{{ t('share.embedOpen') }} <span aria-hidden="true">↗</span></a>
       </footer>
 
+      <TieModal
+        v-if="tieModalMatch && tournament"
+        :tournament="tournament"
+        :tie="tieModalMatch"
+        :lines="tieLines[tieModalMatch.id] || []"
+        :entries-map="entriesMap"
+        :members="rosterMembers"
+        :lineups="tieLineups"
+        :submissions="tieSubmissions"
+        :sets-by-match="setsByMatch"
+        :live-scores-by-match="liveScoresByMatch"
+        :captain-sides="tieCaptainSides"
+        @view-live="openPublicLive"
+        @changed="initialLoad"
+        @close="tieModalId = null"
+      />
       <LiveScoreViewerModal
         v-if="selectedLiveMatch && selectedLiveScore"
         :live-score="selectedLiveScore"

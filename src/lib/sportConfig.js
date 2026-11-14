@@ -92,6 +92,7 @@ export function resolveCategory(sport, chosenCategory) {
  * is always one team.
  */
 export function categoryLabelKey(sport, category) {
+  if (category === 'team') return 'team.category'
   const cfg = getSportConfig(sport)
   const shown = cfg.supportsCategory ? category : cfg.forcedCategory === 'doubles' ? 'doubles' : null
   return shown ? `tournament.${shown}` : null
