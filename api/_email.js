@@ -1,4 +1,4 @@
-// Participant emails (lt / ru / en). Every string from the database is escaped; each
+// Participant emails (lt / ru / en / lv). Every string from the database is escaped; each
 // email links to the tournament page and invites the reader to run their own tournament.
 import { DEFAULT_LOCALE, isLocale, landingPath, legalPath } from '../src/lib/localeRoute.js'
 import { SITE_NAME, escapeHtml } from '../src/lib/seo.js'
@@ -49,9 +49,24 @@ const COPY = {
       match_reminder: { subject: t => `Your match starts soon: ${t}`, body: (t, m) => `Your match${m.opponent ? ` against ${m.opponent}` : ''} starts at ${m.time}${m.court}. Tournament: “${t}”.` },
     },
   },
+  lv: {
+    hello: name => `Sveiki, ${name}!`,
+    open: 'Atvērt turnīra lapu',
+    why: t => `Jūs saņēmāt šo e-pastu, jo pieteicāties turnīram „${t}” ${SITE_NAME} platformā.`,
+    growth: 'Rīkojat turnīru? Izveidojiet to bez maksas',
+    privacy: 'Privātuma politika',
+    court: c => `, korts: ${c}`,
+    kinds: {
+      registration_received: { subject: t => `Pieteikums saņemts: ${t}`, body: t => `Esam saņēmuši jūsu pieteikumu turnīram „${t}”. Organizators to izskatīs, un par lēmumu mēs jums paziņosim pa e-pastu.` },
+      registration_waitlisted: { subject: t => `Jūs esat gaidīšanas sarakstā: ${t}`, body: t => `Visas turnīra „${t}” vietas ir aizņemtas, tāpēc iekļāvām jūs gaidīšanas sarakstā. Ja kāda vieta atbrīvosies, mēs jums paziņosim.` },
+      registration_approved: { subject: t => `Pieteikums apstiprināts: ${t}`, body: t => `Jūsu pieteikums turnīram „${t}” ir apstiprināts. Mačus, grafiku un rezultātus atradīsiet turnīra lapā. Veiksmi turnīrā!` },
+      registration_rejected: { subject: t => `Pieteikums nav apstiprināts: ${t}`, body: t => `Diemžēl organizators neapstiprināja jūsu pieteikumu turnīram „${t}”. Ja jums ir jautājumi, sazinieties ar organizatoru.` },
+      match_reminder: { subject: t => `Drīz sāksies jūsu mačs: ${t}`, body: (t, m) => `Jūsu mačs sāksies plkst. ${m.time}${m.court}${m.opponent ? `, pretinieks: ${m.opponent}` : ''}. Turnīrs „${t}”.` },
+    },
+  },
 }
 
-const INTL = { ru: 'ru-RU', en: 'en-GB', lt: 'lt-LT' }
+const INTL = { ru: 'ru-RU', en: 'en-GB', lt: 'lt-LT', lv: 'lv-LV' }
 
 function matchTime(date, locale, timeZone) {
   if (!date) return ''

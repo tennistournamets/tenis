@@ -1,7 +1,7 @@
 // Voice input for organizers: the browser posts a short recording (body = audio, its type in
 // Content-Type) with the user's Supabase token; ai_begin_call('voice') checks the switches,
 // rights and the daily limit as that user, then Groq Whisper turns speech into text.
-// Query: ?lang=lt|ru|en (the speech language picked next to the microphone) and
+// Query: ?lang=lt|lv|ru|en (the speech language picked next to the microphone) and
 // ?tournament=<id> when recorded inside a tournament.
 // Needs VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY and GROQ_API_KEY.
 import { audioExtension, transcribe } from './_ai-groq.js'

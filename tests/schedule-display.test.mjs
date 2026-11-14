@@ -223,13 +223,14 @@ test('realtime events for courts and schedule rows are scoped by tournament like
   }
 })
 
-test('RU, EN and LT schedule messages share the same key set and placeholders', () => {
+test('RU, EN, LT and LV schedule messages share the same key set and placeholders', () => {
   const keys = obj => Object.entries(obj).flatMap(([k, v]) => typeof v === 'object' ? keys(v).map(s => `${k}.${s}`) : [k]).sort()
   const ru = keys(scheduleMessages.ru)
   assert.ok(ru.length > 50)
   assert.deepEqual(keys(scheduleMessages.en), ru)
   assert.deepEqual(keys(scheduleMessages.lt), ru)
-  for (const locale of ['ru', 'en', 'lt']) {
+  assert.deepEqual(keys(scheduleMessages.lv), ru)
+  for (const locale of ['ru', 'en', 'lt', 'lv']) {
     assert.match(scheduleMessages[locale].kinds.rest_short, /\{minutes\}.*\{match\}/)
     assert.match(scheduleMessages[locale].queueLabel, /\{n\}/)
     assert.match(scheduleMessages[locale].notBefore, /\{time\}/)

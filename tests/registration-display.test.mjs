@@ -85,7 +85,8 @@ test('RU, EN and LT registration messages share the same key set', () => {
   assert.ok(ru.length > 40)
   assert.deepEqual(keys(registrationRuleMessages.en), ru)
   assert.deepEqual(keys(registrationRuleMessages.lt), ru)
-  for (const locale of ['ru', 'en', 'lt']) {
+  assert.deepEqual(keys(registrationRuleMessages.lv), ru)
+  for (const locale of ['ru', 'en', 'lt', 'lv']) {
     for (const key of ['occupied', 'adminSummary']) assert.match(registrationRuleMessages[locale][key], /\{occupied\}.*\{capacity\}/)
     assert.match(registrationRuleMessages[locale].approveAllResult, /\{approved\}.*\{skipped\}/)
   }

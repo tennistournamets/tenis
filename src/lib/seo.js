@@ -78,10 +78,32 @@ export const LABELS = {
     siteDescription: 'Nemokama programa teniso ir padelio turnyrams: dalyvių registracija, turnyrų tinkleliai, rezultatai tiesiogiai ir kortų tvarkaraštis. Žiūrovams paskyros nereikia.',
     open: 'Atidaryti turnyrą',
   },
+  lv: {
+    sport: { tennis: 'Teniss', padel: 'Padels', football: 'Futbols' },
+    format: {
+      single_elimination: 'Izslēgšanas sistēma',
+      round_robin: 'Katrs ar katru',
+      groups_playoff: 'Grupas un izslēgšanas spēles',
+      double_elimination: 'Dubultās izslēgšanas sistēma',
+      americano: 'Americano',
+      mexicano: 'Mexicano',
+      team_americano: 'Team Americano',
+      king_of_court: 'King of the Court',
+    },
+    status: {
+      registration_open: 'Notiek reģistrācija',
+      in_progress: 'Turnīrs notiek – rezultāti tiešraidē',
+      completed: 'Turnīrs noslēdzies – rezultāti un tabula',
+    },
+    chip: { registration_open: 'Reģistrācija atvērta', registration_closed: 'Reģistrācija beigusies', in_progress: 'LIVE', completed: 'Noslēdzies' },
+    siteTitle: 'Bracketa – tenisa un padela turnīri',
+    siteDescription: 'Bezmaksas rīks tenisa un padela turnīriem: dalībnieku reģistrācija, turnīra tabulas, rezultāti tiešraidē un kortu grafiks. Skatītājiem konts nav vajadzīgs.',
+    open: 'Atvērt turnīru',
+  },
 }
 
-const OG_LOCALE = { ru: 'ru_RU', en: 'en_US', lt: 'lt_LT' }
-const INTL_LOCALE = { ru: 'ru-RU', en: 'en-GB', lt: 'lt-LT' }
+const OG_LOCALE = { ru: 'ru_RU', en: 'en_US', lt: 'lt_LT', lv: 'lv_LV' }
+const INTL_LOCALE = { ru: 'ru-RU', en: 'en-GB', lt: 'lt-LT', lv: 'lv-LV' }
 // schema.org `sport` values (English names are what search engines match on).
 const SCHEMA_SPORT = { tennis: 'Tennis', padel: 'Padel', football: 'Football' }
 export const LANDING_PATHS = Object.fromEntries(LOCALES.map(locale => [locale, landingPath(locale)]))
@@ -120,7 +142,7 @@ export function siteOrigin(env = {}, request = null) {
 }
 
 /**
- * Preview language: an explicit ?lang=ru|en|lt on the shared link, otherwise lt.
+ * Preview language: an explicit ?lang=ru|en|lt|lv on the shared link, otherwise lt.
  * Not Accept-Language: messenger crawlers (Telegram, Facebook/WhatsApp) send
  * their own `en`, not the language of the people who read the chat.
  */

@@ -2,7 +2,7 @@
  * Bracketa widget for club websites.
  *   <div data-bracketa-tournament="SLUG"><a href="https://…/tournaments/SLUG">…</a></div>
  *   <script src="https://…/embed.js" async></script>
- * Optional attributes on the div: data-lang="ru|en|lt", data-theme="light|dark", data-height="640".
+ * Optional attributes on the div: data-lang="ru|en|lt|lv", data-theme="light|dark", data-height="640".
  * The link stays on the host page (visible under the widget and without JavaScript).
  */
 (function () {
@@ -19,7 +19,7 @@
     var params = []
     var lang = box.getAttribute('data-lang')
     var theme = box.getAttribute('data-theme')
-    if (lang === 'ru' || lang === 'en' || lang === 'lt') params.push('lang=' + lang)
+    if (lang === 'ru' || lang === 'en' || lang === 'lt' || lang === 'lv') params.push('lang=' + lang)
     if (theme === 'light' || theme === 'dark') params.push('theme=' + theme)
     var iframe = document.createElement('iframe')
     iframe.src = origin + '/embed/' + encodeURIComponent(slug) + (params.length ? '?' + params.join('&') : '')

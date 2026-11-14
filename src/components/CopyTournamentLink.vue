@@ -11,10 +11,10 @@ const props = defineProps({
   name: { type: String, default: '' },
   compact: { type: Boolean, default: false },
 })
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const status = ref('idle')
 const inputId = useId()
-const url = computed(() => tournamentShareUrl(props.slug))
+const url = computed(() => tournamentShareUrl(props.slug, { locale: locale.value }))
 const copyLabel = computed(() => (status.value === 'copied' ? t('share.copied') : t('share.copyLink')))
 const canShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function'
 let timer
@@ -33,7 +33,7 @@ async function copy() {
   const current = request
   status.value = 'pending'
   try {
-    await copyTournamentLink(props.slug)
+    await copyTournamentLink(props.slug, { locale: locale.value })
     track('share_link_copied')
     if (current !== request) return
     status.value = 'copied'

@@ -25,7 +25,7 @@ const props = defineProps({
 const emit = defineEmits(['close'])
 const { t, locale } = useI18n()
 
-const LANGUAGES = ['lt', 'ru', 'en']
+const LANGUAGES = ['lt', 'lv', 'ru', 'en']
 const moments = computed(() => postMoments({ tournament: props.tournament, matches: props.matches }, t))
 const moment = ref(moments.value[0]?.key ?? null)
 const language = ref(LANGUAGES.includes(locale.value) ? locale.value : 'lt')
@@ -37,8 +37,8 @@ const working = ref(false)
 const error = ref('')
 const copied = ref('')
 
-const url = tournamentShareUrl(props.tournament.slug)
-const linkFor = channel => (channel === 'instagram' ? '' : taggedUrl(url, channel, 'ai_post'))
+// The link opens the page in the post's language.
+const linkFor = channel => (channel === 'instagram' ? '' : taggedUrl(tournamentShareUrl(props.tournament.slug, { locale: language.value }), channel, 'ai_post'))
 
 async function generate() {
   if (working.value || !moment.value) return

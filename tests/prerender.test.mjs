@@ -7,7 +7,7 @@ const text = html => html.replace(/<!--[\s\S]*?-->/g, '').replace(/<[^>]+>/g, ' 
 
 test('the landing renders to HTML in every language with its own text', { timeout: 60000 }, async () => {
   const pages = await renderLandingPages()
-  for (const locale of ['ru', 'en', 'lt']) {
+  for (const locale of ['ru', 'en', 'lt', 'lv']) {
     const body = text(pages[locale])
     const hero = messages[locale].home.cinematic
     assert.ok(body.includes(hero.title), `${locale}: hero title`)

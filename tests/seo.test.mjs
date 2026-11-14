@@ -20,7 +20,7 @@ test('landing URLs agree between the SEO helpers and the router', () => {
 })
 
 test('preview labels match the app translations', () => {
-  for (const locale of ['ru', 'en', 'lt']) {
+  for (const locale of ['ru', 'en', 'lt', 'lv']) {
     assert.deepEqual(LABELS[locale].sport, messages[locale].sport, locale)
     assert.deepEqual(LABELS[locale].format, messages[locale].tournamentFormat, locale)
   }
@@ -97,10 +97,11 @@ test('sitemap lists only public tournaments', async () => {
   assert.equal(rows.length, 1)
   const xml = sitemapXml('https://bracketa.lt', rows)
   assert.ok(xml.includes('xmlns:xhtml="http://www.w3.org/1999/xhtml"'))
-  for (const path of ['/', '/en', '/ru']) assert.ok(xml.includes(`<loc>https://bracketa.lt${path}</loc>`), path)
-  assert.equal(xml.match(/hreflang="lt" href="https:\/\/bracketa.lt\/"/g).length, 3)
-  assert.equal(xml.match(/hreflang="ru" href="https:\/\/bracketa.lt\/ru"/g).length, 3)
-  assert.equal(xml.match(/hreflang="x-default" href="https:\/\/bracketa.lt\/"/g).length, 3)
+  for (const path of ['/', '/en', '/ru', '/lv']) assert.ok(xml.includes(`<loc>https://bracketa.lt${path}</loc>`), path)
+  assert.equal(xml.match(/hreflang="lt" href="https:\/\/bracketa.lt\/"/g).length, 4)
+  assert.equal(xml.match(/hreflang="ru" href="https:\/\/bracketa.lt\/ru"/g).length, 4)
+  assert.equal(xml.match(/hreflang="lv" href="https:\/\/bracketa.lt\/lv"/g).length, 4)
+  assert.equal(xml.match(/hreflang="x-default" href="https:\/\/bracketa.lt\/"/g).length, 4)
   assert.ok(xml.includes('<loc>https://bracketa.lt/tournaments/a%26b</loc><lastmod>2026-09-20</lastmod>'))
   assert.deepEqual(await fetchSitemapTournaments(env, async () => { throw new Error('down') }), [])
 })
@@ -141,14 +142,17 @@ test('vercel.json sends messenger crawlers to the preview and keeps browsers and
   assert.deepEqual(pages, {
     '/en': '/en.html',
     '/ru': '/ru.html',
+    '/lv': '/lv.html',
     '/blog': '/blog/index.html',
     '/blog/:slug': '/blog/:slug.html',
     '/ru/blog': '/ru/blog/index.html',
     '/ru/blog/:slug': '/ru/blog/:slug.html',
     '/en/blog': '/en/blog/index.html',
     '/en/blog/:slug': '/en/blog/:slug.html',
+    '/lv/blog': '/lv/blog/index.html',
+    '/lv/blog/:slug': '/lv/blog/:slug.html',
     '/:doc(privacy|terms)': '/:doc.html',
-    '/:lang(ru|en)/:doc(privacy|terms)': '/:lang/:doc.html',
+    '/:lang(ru|en|lv)/:doc(privacy|terms)': '/:lang/:doc.html',
     '/admin': '/app.html',
     '/admin/:path*': '/app.html',
     '/tournaments/:slug': '/app.html',
@@ -199,11 +203,11 @@ test('index.html keeps dev defaults inside the block the build rewrites', () => 
 })
 
 test('landing head per language: canonical, full hreflang set, localized title and OG', () => {
-  for (const [locale, path] of [['lt', '/'], ['en', '/en'], ['ru', '/ru']]) {
+  for (const [locale, path] of [['lt', '/'], ['en', '/en'], ['ru', '/ru'], ['lv', '/lv']]) {
     const head = landingHead(locale, 'https://bracketa.lt')
     assert.ok(head.includes(`<title>${LABELS[locale].siteTitle}</title>`), locale)
     assert.ok(head.includes(`<link rel="canonical" href="https://bracketa.lt${path}" data-landing>`), locale)
-    for (const [code, href] of [['lt', '/'], ['en', '/en'], ['ru', '/ru'], ['x-default', '/']]) {
+    for (const [code, href] of [['lt', '/'], ['en', '/en'], ['ru', '/ru'], ['lv', '/lv'], ['x-default', '/']]) {
       assert.ok(head.includes(`<link rel="alternate" hreflang="${code}" href="https://bracketa.lt${href}" data-landing>`), `${locale} ${code}`)
     }
     assert.ok(head.includes(`<meta property="og:url" content="https://bracketa.lt${path}" data-landing>`))
@@ -242,7 +246,7 @@ test('landing head is kept in the live document and removed on other routes', ()
   assert.equal(doc.title, LABELS.lt.siteTitle)
   assert.equal(nodes.filter(n => n.attrs.rel === 'canonical').length, 1)
   assert.equal(nodes.find(n => n.attrs.rel === 'canonical').attrs.href, 'https://bracketa.lt/')
-  assert.equal(nodes.filter(n => n.attrs.hreflang).length, 4)
+  assert.equal(nodes.filter(n => n.attrs.hreflang).length, 5)
   assert.equal(JSON.parse(nodes.find(n => n.tag === 'script').textContent)['@graph'][2].inLanguage, 'lt')
   applyLandingHead(doc, 'en', 'https://bracketa.lt')
   assert.equal(nodes.find(n => n.attrs.rel === 'canonical').attrs.href, 'https://bracketa.lt/en')

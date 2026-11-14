@@ -1,7 +1,7 @@
 <script setup>
 // Microphone inside an AI text field: tap to record, tap again to stop; the transcript is
 // emitted as text. Sits in the field's bottom-right corner (see AiTextSource). The speech
-// language (LT/RU/EN) is picked next to it: Whisper takes Lithuanian for Russian on its own.
+// language (LT/LV/RU/EN) is picked next to it: Whisper takes Lithuanian for Russian on its own.
 import { computed, onBeforeUnmount, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { errorMessage } from '../../lib/errorMessages'

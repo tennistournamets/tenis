@@ -1,5 +1,5 @@
 // Static legal pages: content/legal/<lang>/<doc>.md -> dist/<path>.html, same template as the blog.
-//   lt (default) /privacy, /terms      ru /ru/privacy, /ru/terms      en /en/privacy, /en/terms
+//   lt (default) /privacy, /terms      ru /ru/privacy, /ru/terms      en /en/privacy, /en/terms      lv /lv/…
 // Front matter: title, description, updated (YYYY-MM-DD). Every document exists in every language.
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'

@@ -20,7 +20,7 @@ test('a settings conflict does not claim "no changes" while a draft exists', () 
 test('court rows name the actual problem', () => {
   const source = read('src/components/admin/CourtsEditor.vue')
   assert.match(source, /if \(name\.length > 60\) return 'courtNameTooLong'/)
-  for (const locale of ['ru', 'en', 'lt']) for (const key of ['courtNameEmpty', 'courtNameTooLong', 'courtNameDuplicate']) {
+  for (const locale of ['ru', 'en', 'lt', 'lv']) for (const key of ['courtNameEmpty', 'courtNameTooLong', 'courtNameDuplicate']) {
     assert.equal(typeof lookup(locale, `schedule.errors.${key}`), 'string', `${locale} ${key}`)
   }
 })

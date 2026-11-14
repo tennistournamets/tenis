@@ -39,6 +39,12 @@ test('a registration with an email queues "received" and stores the request lang
 
   const other = await register(t, { email: 'ben@example.test', phone: '+37060054321', name: 'Ben', headers: { 'accept-language': 'en-GB,en;q=0.9' } })
   assert.equal((await ctx.db.query('select notify_locale from entries where id=$1', [other.id])).rows[0].notify_locale, 'en')
+  const latvian = await register(t, { email: 'liga@example.test', phone: '+37120012345', name: 'Līga', headers: { 'x-bracketa-locale': 'lv' } })
+  assert.equal((await ctx.db.query('select notify_locale from entries where id=$1', [latvian.id])).rows[0].notify_locale, 'lv')
+  const browserLatvian = await register(t, { email: 'janis@example.test', phone: '+37120054321', name: 'Jānis', headers: { 'accept-language': 'lv-LV,lv;q=0.9' } })
+  assert.equal((await ctx.db.query('select notify_locale from entries where id=$1', [browserLatvian.id])).rows[0].notify_locale, 'lv')
+  // The replay test below re-runs 20260926200333, whose check knows only ru/en/lt.
+  await ctx.db.query('delete from entries where id = any($1)', [[latvian.id, browserLatvian.id]])
   const plain = await register(t, { email: 'cid@example.test', phone: '+37060011111', name: 'Cid', headers: { 'accept-language': 'de-DE' } })
   assert.equal((await ctx.db.query('select notify_locale from entries where id=$1', [plain.id])).rows[0].notify_locale, null)
 })

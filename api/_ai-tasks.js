@@ -12,7 +12,7 @@ import { AiError } from './_ai-errors.js'
 
 // Named in English and in the language itself: with the English name alone the model kept
 // answering in the list's language.
-const LANGUAGES = { ru: 'Russian (на русском языке)', en: 'English', lt: 'Lithuanian (lietuvių kalba)' }
+const LANGUAGES = { ru: 'Russian (на русском языке)', en: 'English', lt: 'Lithuanian (lietuvių kalba)', lv: 'Latvian (latviešu valodā)' }
 const SHAPES = ['single', 'pair', 'pairOptional']
 const FAMILIES = ['sets', 'goals', 'points']
 const SCORE_MATCHES_MAX = 150
@@ -51,7 +51,7 @@ export function importPrompt(input, context) {
     '- "note": a short remark written next to the name (level, rating, club, "paid", "reserve"), otherwise null.',
     '- Ignore lines that are not participants (titles, dates, rules, chat chatter). Lines that look like participants but cannot be read go to "unparsed" as written.',
     '- Keep the order of the list. Do not merge or drop repeated names, do not invent people.',
-    '- The text may be recognized from a photo or a screenshot: ignore stray symbols around the lines and repair only obvious recognition errors — a space or a lost dot in an email ("gmail com" → "gmail.com", "k klimas@" → "k.klimas@"), "1t"/"It" → "lt" in a domain, é → ė or similar in Lithuanian names. Name each repair in "warnings". Never guess a missing part: leave such a contact null.',
+    '- The text may be recognized from a photo or a screenshot: ignore stray symbols around the lines and repair only obvious recognition errors — a space or a lost dot in an email ("gmail com" → "gmail.com", "k klimas@" → "k.klimas@"), "1t"/"It" → "lt" in a domain, é → ė or similar in Lithuanian and Latvian names (e → ē, n → ņ). Name each repair in "warnings". Never guess a missing part: leave such a contact null.',
     `- "warnings": up to 5 short sentences about doubtful places, or []. Write them in ${language(context)}, whatever the language of the list.`,
   ].join('\n')
   // Repeated after the list: the model otherwise answers in the list's language.
@@ -71,7 +71,7 @@ export function createPrompt(input, context) {
     `- "sport": one of ${JSON.stringify(sports.length ? sports : SPORTS)} (tenisas/теннис = tennis, padelis/падел = padel, futbolas/футбол = football).`,
     '- "format": "single_elimination" (knockout, olimpinė, на выбывание, плей-офф), "round_robin" (league, kiekvienas su kiekvienu, круговая), "groups_playoff" (groups then knockout), "double_elimination", or padel only: "americano", "mexicano", "team_americano" (Americano with fixed pairs), "king_of_court".',
     '- "category": "singles" or "doubles" (pairs, poros, пары) — tennis only. "pairing": "pick_random" when partners are drawn for people who sign up alone, "pre_agreed" when pairs register together.',
-    '- "language": the language the organizer wrote in ("lt", "ru", "en", …). "name" and "description" are written in this language, not in the language of the warnings. Mixed languages are normal (Lithuanian club names and addresses in a Russian or English text): never mention languages in "warnings".',
+    '- "language": the language the organizer wrote in ("lt", "lv", "ru", "en", …). "name" and "description" are written in this language, not in the language of the warnings. Mixed languages are normal (Lithuanian or Latvian club names and addresses in a Russian or English text): never mention languages in "warnings".',
     '- "name": the tournament name if written; otherwise you must compose a short one from the sport, format and date (e.g. "Padelio Americano 11.15", "Парный турнир по теннису 16.11", "Autumn Tennis League") and say so in "warnings". Never a participant\'s name. Null only when the text is just a list of participants.',
     '- "description": only what has no field of its own, for the public page in the organizer\'s language: when it is played (date, time), level, prizes, what is included, other remarks to players. Never repeat what the other fields hold (sport, format, name, club or address, points, set format, gender, places, deadline, fee, waitlist, contacts) and no participant list. A short line is fine; null when nothing is left. Example: "Парный турнир по теннису 15 ноября в 10:00, клуб SEB арена, призы победителям" → "15 ноября, 10:00. Призы победителям." (pairs, sport and club have their own fields).',
     '- "venue_address": club and address as written. "contact_phone"/"contact_email": the organizer\'s contacts for questions or registration.',
@@ -88,7 +88,7 @@ export function createPrompt(input, context) {
     '- "questions": at most 3, only about what matters for the tournament, is missing and cannot be chosen sensibly — usually the date and start time, the number of courts for Americano-style formats when the number of players is unknown, the number of places. Ask only about what applies to the chosen format: never a set format or tiebreak for Americano, Mexicano, Team Americano or King of the Court. Do not ask about anything already answered, in the text or in "suggested"; after the organizer\'s answers, ask again only if something essential is still missing. Never ask about gender, visibility or contacts. Each: {"field":"courts","question":"…","options":["…","…"]} — "field" is the "tournament" key the answer fills, or "date" for the day and start time; 2–4 short options (e.g. "10:00", "3", "16"). Write them in the language of the warnings. [] when nothing important is missing.',
     `- "warnings": up to 5 short sentences about doubtful places, or []. Write them in ${language(context)}, whatever the language of the text. Never a warning about something a question asks (if you ask about the date, do not also warn that it is missing), and do not comment on the language of the text or the name.`,
     '- Americano and Mexicano work with any number of players from 4: each court takes 4 players a round and whoever has no court rests (players − 4 × courts rest each round: 8 players on 2 courts means nobody rests), so a count that is not a multiple of 4 is fine. Never write a warning about resting players or about multiples of 4 for them. Only King of the Court needs a multiple of 4 (at least 8).',
-    '- A court is "kortas" in Lithuanian (never "laukas") and "корт" in Russian; a football pitch is "aikštė" / "поле".',
+    '- A court is "kortas" in Lithuanian (never "laukas"), "korts" in Latvian (never "laukums") and "корт" in Russian; a football pitch is "aikštė" / "laukums" / "поле".',
   ].join('\n')
   // Answers to earlier questions come back with the same text; they count as the organizer's words.
   const answers = (Array.isArray(context.answers) ? context.answers : [])
@@ -137,7 +137,7 @@ export function scorePrompt(input, context) {
     'Reply with json only, in this shape:',
     `{"results":[{"match":"m3","candidates":[],"heard":"Petraitis Kazlauskas šeši keturi šeši trys","winner":"a",${SCORE_SHAPE[family]}}],"unmatched":[],"warnings":[]}`,
     'Rules:',
-    '- "match": the reference ("m1", "m2", …) of the listed match the result belongs to. Players are named by surname, first name or nickname, in any grammatical case (Lithuanian "Petraičio", "Petraičiui" = Petraitis; Russian "Иванова", "Иванову" = Иванов), with recognition slips; match them by sound and spelling. A court or round, when said, narrows the choice. Rounds are played in order: when only a court is said, it is the earliest listed round with that court.',
+    '- "match": the reference ("m1", "m2", …) of the listed match the result belongs to. Players are named by surname, first name or nickname, in any grammatical case (Lithuanian "Petraičio", "Petraičiui" = Petraitis; Latvian "Bērziņa", "Bērziņam" = Bērziņš; Russian "Иванова", "Иванову" = Иванов), with recognition slips; match them by sound and spelling. A court or round, when said, narrows the choice. Rounds are played in order: when only a court is said, it is the earliest listed round with that court.',
     '- If a result fits two or more matches equally, "match": null and "candidates": their references. If it fits none, put that piece of text into "unmatched" instead of a result.',
     '- Numbers are given as seen from side "a" of that match as listed: the first number belongs to "a". When the text names side "b" first ("Kazlauskas beat Petraitis 6:4", with Petraitis listed as "a"), swap so each side keeps its own numbers. "winner": the side the text says won ("a" or "b"), else null.',
     '- Numbers may be words in any language ("šeši keturi", "шесть четыре", "six four") or digits with ":", "-", "/" or spaces.',
@@ -153,7 +153,7 @@ export function scorePrompt(input, context) {
   }
 }
 
-const POST_LANGUAGES = { ru: 'Russian', en: 'English', lt: 'Lithuanian' }
+const POST_LANGUAGES = { ru: 'Russian', en: 'English', lt: 'Lithuanian', lv: 'Latvian' }
 const FACTS_MAX = 12000
 
 // The facts as the browser worked them out; too big a payload is cut to the essentials.
@@ -171,7 +171,7 @@ export function postsPrompt(input, context) {
     'Reply with json only: {"instagram":"…","facebook":"…","whatsapp":"…"}.',
     'Rules:',
     '- Use only the facts given (and the organizer\'s note, if any). Never invent scores, players, dates, prizes, sponsors or places, and do not promise future events ("see you next year") unless the note says so.',
-    '- Participants appear only as tokens P1, P2, … ("P1 / P2" is a pair). Write the tokens exactly as given; the app puts the names in later. Place each token where a name keeps its basic form: after a colon or a dash, in a list, or as the subject of a sentence ("P1 laimėjo finalą", "Чемпион — P1"), never as an object or after a preposition, because Lithuanian and Russian decline names. Wrong: "įveikęs P2", "prieš P2", "su P2", "P1 nugalėjo P2", "у P1", "против P2", "обыграл P2", "поздравляем P1". Right: "P1 — P2 6:3 6:4", "Finalas: P1 — P2", "Čempionas — P1", "Победитель — P1". When a sentence needs the other player, write the result as a dash pair or a colon list instead.',
+    '- Participants appear only as tokens P1, P2, … ("P1 / P2" is a pair). Write the tokens exactly as given; the app puts the names in later. Place each token where a name keeps its basic form: after a colon or a dash, in a list, or as the subject of a sentence ("P1 laimėjo finalą", "Чемпион — P1"), never as an object or after a preposition, because Lithuanian, Latvian and Russian decline names. Wrong: "įveikęs P2", "prieš P2", "su P2", "P1 nugalėjo P2", "pret P2", "uzvarot P2", "apsveicam P1", "у P1", "против P2", "обыграл P2", "поздравляем P1". Right: "P1 — P2 6:3 6:4", "Finalas: P1 — P2", "Čempionas — P1", "Čempions — P1", "Победитель — P1". When a sentence needs the other player, write the result as a dash pair or a colon list instead.',
     '- A result is "winner", "loser" and the score from the winner\'s side ("P3 — P1 6:4 6:2"); "draw" lists both sides. Opponents are joined with " — " or "vs", never with "/" (that means a pair).',
     '- Keep scores exactly as in the facts. "moment": "results" — the champion first, then the final and the highlights; "round" — that round\'s results, then what comes next ("next").',
     '- "instagram": 4–8 short lines, 2–4 fitting emoji, 3–6 hashtags on the last line (sport, city if the venue tells it, a short tag of the tournament). No link.',

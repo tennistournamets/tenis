@@ -20,4 +20,11 @@ export const accessibilityMessages = {
     matchAction: '{action}: {teamA} – {teamB}', rank: 'Vieta', entryAction: '{action}: {name}', darkTheme: 'Tamsi tema',
     stats: { played: 'Sužaisti mačai', won: 'Pergalės', drawn: 'Lygiosios', lost: 'Pralaimėjimai', for: 'Įmušti įvarčiai', against: 'Praleisti įvarčiai', diff: 'Įvarčių skirtumas', sets: 'Laimėti ir pralaimėti setai', points: 'Taškai' },
   },
+  lv: {
+    skipContent: 'Pāriet uz saturu', profileMenu: 'Konta izvēlne',
+    tournamentPage: 'Turnīrs', manageTournament: 'Turnīra pārvaldība',
+    scoreField: '{metric} – {team}, puse {side}', scheduleFor: 'Dalībnieka {name} mači',
+    matchAction: '{action}: {teamA} – {teamB}', rank: 'Vieta', entryAction: '{action}: {name}', darkTheme: 'Tumšā tēma',
+    stats: { played: 'Nospēlētie mači', won: 'Uzvaras', drawn: 'Neizšķirti', lost: 'Zaudējumi', for: 'Gūtie vārti', against: 'Ielaistie vārti', diff: 'Vārtu starpība', sets: 'Uzvarētie un zaudētie seti', points: 'Punkti' },
+  },
 }

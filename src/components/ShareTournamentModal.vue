@@ -17,9 +17,9 @@ const props = defineProps({
   moment: { type: String, default: 'created' },
 })
 const emit = defineEmits(['close', 'qr', 'poster'])
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
-const url = tournamentShareUrl(props.slug)
+const url = tournamentShareUrl(props.slug, { locale: locale.value })
 const text = computed(() => t(`share.moment.${props.moment}Message`, { name: props.name }))
 const links = computed(() => SHARE_CHANNELS.map(channel => ({
   channel,

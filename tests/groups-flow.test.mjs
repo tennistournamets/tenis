@@ -74,5 +74,5 @@ test('B10: a chosen bracket name wins over member names; default names do not', 
 
 test('groupsFlow strings exist in every locale', () => {
   const keys = Object.keys(groupsFlowMessages.ru).sort()
-  for (const locale of ['en', 'lt']) assert.deepEqual(Object.keys(groupsFlowMessages[locale]).sort(), keys, locale)
+  for (const locale of ['en', 'lt', 'lv']) assert.deepEqual(Object.keys(groupsFlowMessages[locale]).sort(), keys, locale)
 })

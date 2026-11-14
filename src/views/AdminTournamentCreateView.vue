@@ -27,7 +27,9 @@ import { errorMessage } from '../lib/errorMessages'
 import { confirmDialog } from '../lib/confirmDialog'
 import { createTournamentFromForm, defaultCreateForm } from '../lib/tournamentCreate'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
+// Example number in the organizer's country format (Latvian +371, otherwise Lithuanian +370).
+const phonePlaceholder = computed(() => (locale.value === 'lv' ? '+371 20 000 000' : '+370 600 00000'))
 const router = useRouter()
 const auth = useAuthStore()
 const flags = useFeatureFlagsStore()
@@ -429,7 +431,7 @@ watch(step, (next, prev) => { if (draftReady.value && next === prev + 1) track('
           <div class="wizard__grid2">
             <div class="form-field">
               <label for="create-phone">{{ t('admin.contactPhone') }}</label>
-              <input id="create-phone" v-model="form.contact_phone" class="input" type="tel" placeholder="+370 600 00000" autocomplete="tel" />
+              <input id="create-phone" v-model="form.contact_phone" class="input" type="tel" :placeholder="phonePlaceholder" autocomplete="tel" />
             </div>
 
             <div class="form-field">

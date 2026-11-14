@@ -28,6 +28,10 @@
       "destination": "/ru.html"
     },
     {
+      "source": "/lv",
+      "destination": "/lv.html"
+    },
+    {
       "source": "/blog",
       "destination": "/blog/index.html"
     },
@@ -52,11 +56,19 @@
       "destination": "/en/blog/:slug.html"
     },
     {
+      "source": "/lv/blog",
+      "destination": "/lv/blog/index.html"
+    },
+    {
+      "source": "/lv/blog/:slug",
+      "destination": "/lv/blog/:slug.html"
+    },
+    {
       "source": "/:doc(privacy|terms)",
       "destination": "/:doc.html"
     },
     {
-      "source": "/:lang(ru|en)/:doc(privacy|terms)",
+      "source": "/:lang(ru|en|lv)/:doc(privacy|terms)",
       "destination": "/:lang/:doc.html"
     },
     {

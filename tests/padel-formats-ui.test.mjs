@@ -115,9 +115,10 @@ test('server codes pointsFormat.* are translated in every locale', async () => {
   assert.ok(codes.length >= 15)
   for (const code of codes) {
     assert.equal(errorKey(`pointsFormat.${code}`), `pointsFormat.errors.${code}`)
-    for (const locale of ['ru', 'en', 'lt']) assert.ok(pointsFormatMessages[locale].errors[code], `${locale}: ${code}`)
+    for (const locale of ['ru', 'en', 'lt', 'lv']) assert.ok(pointsFormatMessages[locale].errors[code], `${locale}: ${code}`)
   }
   const keys = locale => Object.keys(pointsFormatMessages[locale]).sort()
   assert.deepEqual(keys('en'), keys('ru'))
   assert.deepEqual(keys('lt'), keys('ru'))
+  assert.deepEqual(keys('lv'), keys('ru'))
 })
