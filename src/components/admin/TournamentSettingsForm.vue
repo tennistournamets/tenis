@@ -14,6 +14,9 @@ import { useFormDraft, cloneForm, matchVersions } from '../../lib/formDraft'
 import { confirmDialog } from '../../lib/confirmDialog'
 import { useUnsavedChanges, confirmDiscard } from '../../lib/unsavedChanges'
 import { supabase } from '../../lib/supabase'
+import { errorMessage } from '../../lib/errorMessages'
+import { isTeamTournament, tieError, tieFromConfig, tieToConfig } from '../../lib/teamTie'
+import TieTemplateFields from '../TieTemplateFields.vue'
 
 const props = defineProps({
   tournament: { type: Object, required: true },
@@ -100,6 +103,40 @@ const padelTiebreak = computed({
   set: value => { settingsForm.scoring_config = { ...(settingsForm.scoring_config || {}), tiebreak_to: Number(value) } },
 })
 
+// Team tournaments: the tie template has its own save (update_tie_template) and is
+// locked once ties exist or the tournament has started.
+const teamTournament = computed(() => isTeamTournament(props.tournament))
+const tieDraft = ref(tieFromConfig(props.tournament.format_config?.tie))
+const tieSaved = ref(JSON.stringify(tieFromConfig(props.tournament.format_config?.tie)))
+const tieSaving = ref(false)
+const tieMessage = ref('')
+const tieErrorText = ref('')
+watch(() => props.tournament.format_config?.tie, raw => {
+  const next = tieFromConfig(raw)
+  // A server change replaces the draft only while the organizer has not edited it.
+  if (JSON.stringify(tieDraft.value) === tieSaved.value) tieDraft.value = next
+  tieSaved.value = JSON.stringify(next)
+})
+const tieLocked = computed(() => structureDisabled.value || props.matches.length > 0)
+const tieDirty = computed(() => JSON.stringify(tieDraft.value) !== tieSaved.value)
+async function saveTieTemplate() {
+  tieMessage.value = ''
+  tieErrorText.value = ''
+  const problem = tieError(tieDraft.value)
+  if (problem) { tieErrorText.value = t(problem); return }
+  tieSaving.value = true
+  try {
+    const { data, error } = await supabase.rpc('update_tie_template', { p_tournament_id: props.tournament.id, p_tie: tieToConfig(tieDraft.value) })
+    if (error) throw error
+    tieDraft.value = tieFromConfig(data)
+    tieSaved.value = JSON.stringify(tieDraft.value)
+    tieMessage.value = t('team.template.saved')
+    await props.refresh()
+  } catch (error) {
+    tieErrorText.value = errorMessage(error, t)
+  } finally { tieSaving.value = false }
+}
+
 // Секции-аккордеон: по умолчанию раскрыто только «Основное». Состояние живёт в компоненте,
 // свёрнутая секция показывает короткую сводку своих значений.
 const openSections = reactive(new Set(['basics']))
@@ -123,7 +160,7 @@ const sectionMeta = computed(() => {
     ),
     schedule: joinMeta(f.schedule_timezone, f.schedule_min_rest ? `${f.schedule_min_rest} ${t('schedule.minRestUnit')}` : ''),
     game: joinMeta(
-      sportCfg.value.supportsCategory ? t('tournament.' + f.category) : '',
+      sportCfg.value.supportsCategory ? (f.category === 'team' ? t('team.category') : t('tournament.' + f.category)) : '',
       sportCfg.value.supportsSetFormat && f.set_format && !pointsFormat.value ? t('format.' + f.set_format) : '',
       isPadel.value && !pointsFormat.value ? t(padelTiebreak.value === 10 ? 'admin.tiebreakTo10' : 'admin.tiebreakTo7') : '',
       pointsFormat.value ? t('pointsFormat.target', { n: pointsPerMatch.value }) : '',
@@ -362,9 +399,12 @@ async function saveTournamentSettings() {
         <div v-if="sportCfg.supportsCategory || sportCfg.supportsSetFormat" class="grid-2">
           <div v-if="sportCfg.supportsCategory" class="form-field">
             <label for="adm-cat">{{ t('admin.category') }}</label>
-            <select id="adm-cat" v-model="settingsForm.category" class="input" :disabled="structureDisabled">
-              <option value="singles">{{ t('tournament.singles') }}</option>
-              <option value="doubles">{{ t('tournament.doubles') }}</option>
+            <select id="adm-cat" v-model="settingsForm.category" class="input" :disabled="structureDisabled || teamTournament">
+              <option v-if="teamTournament" value="team">{{ t('team.category') }}</option>
+              <template v-else>
+                <option value="singles">{{ t('tournament.singles') }}</option>
+                <option value="doubles">{{ t('tournament.doubles') }}</option>
+              </template>
             </select>
           </div>
           <div v-if="pointsFormat" class="form-field">
@@ -394,6 +434,23 @@ async function saveTournamentSettings() {
           <input v-model="settingsForm.doubles_pairing_mode" type="checkbox" true-value="pick_random" false-value="pre_agreed" :disabled="structureDisabled" />
           {{ t('admin.pickRandomPairs') }}
         </label>
+      </div>
+    </details>
+    <!-- Встреча команд -->
+    <details v-if="teamTournament" class="settings-section" :open="openSections.has('tie')" @toggle="toggleSection('tie', $event)">
+      <summary class="settings-section__head">
+        <svg class="settings-section__chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+        <h3 class="eyebrow">{{ t('team.template.title') }}</h3>
+        <span class="settings-section__meta">{{ t('team.template.summary', { lines: tieDraft.lines.map(type => t(`team.lineTypes.${type}`)).join(', '), rule: t(tieDraft.win_rule === 'games' ? 'team.template.ruleGamesShort' : 'team.template.ruleRubbersShort') }) }}</span>
+      </summary>
+      <div class="settings-section__body">
+        <p v-if="tieLocked && !formDisabled" class="muted">{{ t('team.template.locked') }}</p>
+        <TieTemplateFields v-model="tieDraft" id-prefix="settings-tie" :disabled="tieLocked || tieSaving" />
+        <div v-if="!tieLocked" class="settings-tie__actions">
+          <button type="button" class="btn btn--primary btn--sm" :disabled="!tieDirty || tieSaving" @click="saveTieTemplate">{{ t('team.save') }}</button>
+          <span v-if="tieMessage" class="muted" role="status">{{ tieMessage }}</span>
+        </div>
+        <p v-if="tieErrorText" class="error-text" role="alert">{{ tieErrorText }}</p>
       </div>
     </details>
     <!-- Правила счёта -->
@@ -572,4 +629,5 @@ async function saveTournamentSettings() {
 .page-password__btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .page-password__btn--danger:hover:not(:disabled) { background: var(--danger-bg); color: var(--danger); }
 .page-password__note { flex: 1 1 100%; margin: 0; font-size: 0.82rem; }
+.settings-tie__actions { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
 </style>

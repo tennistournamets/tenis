@@ -23,7 +23,7 @@ const expanded = reactive({})
 
 const model = computed(() => buildRoundRobinModel(props.matches, props.entriesMap, props.rows))
 
-const colCount = computed(() => (props.family === 'goals' ? 10 : 7))
+const colCount = computed(() => (props.family === 'goals' ? 10 : props.family === 'team' ? 8 : 7))
 // Before the first result every row is 0/0/0: ranks would only be the
 // alphabet, so the table shows dashes and quiet zeros instead.
 const anyPlayed = computed(() => props.rows.some(r => Number(r.played) > 0))
@@ -59,6 +59,8 @@ function detailsFor(entryId) {
 
 const columns = computed(() => props.family === 'goals'
   ? ['played', 'won', 'drawn', 'lost', 'for', 'against', 'diff', 'points']
+  : props.family === 'team'
+  ? ['played', 'won', 'drawn', 'lost', 'lines', 'points']
   : ['played', 'won', 'lost', 'sets', 'points'])
 </script>
 
@@ -71,7 +73,7 @@ const columns = computed(() => props.family === 'goals'
         <tr>
           <th scope="col" class="standings__rank" :aria-label="t('a11y.rank')">#</th>
           <th scope="col" class="standings__team">{{ t('standings.team') }}</th>
-          <th v-for="column in columns" :key="column" scope="col" :title="t(`a11y.stats.${column}`)" :aria-label="t(`a11y.stats.${column}`)">{{ t(`standings.${column}`) }}</th>
+          <th v-for="column in columns" :key="column" scope="col" :title="column === 'lines' ? t('team.standings.lines') : t(`a11y.stats.${column}`)" :aria-label="column === 'lines' ? t('team.standings.lines') : t(`a11y.stats.${column}`)">{{ column === 'lines' ? t('team.standings.lines') : t(`standings.${column}`) }}</th>
         </tr>
       </thead>
       <tbody>
@@ -103,7 +105,7 @@ const columns = computed(() => props.family === 'goals'
             </th>
             <td>{{ r.played }}</td>
             <td>{{ r.won }}</td>
-            <td v-if="family === 'goals'">{{ r.drawn }}</td>
+            <td v-if="family === 'goals' || family === 'team'">{{ r.drawn }}</td>
             <td>{{ r.lost }}</td>
             <template v-if="family === 'goals'">
               <td>{{ r.score_for }}</td>

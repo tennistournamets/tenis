@@ -23,6 +23,9 @@ import EmbedCodeModal from '../components/EmbedCodeModal.vue'
 import ShareTournamentModal from '../components/ShareTournamentModal.vue'
 import ScoreEditor from '../components/ScoreEditor.vue'
 import ManualEntryForm from '../components/admin/ManualEntryForm.vue'
+import TeamRosterModal from '../components/admin/TeamRosterModal.vue'
+import { isTeamTournament, labelledLine, lineupsByLine, membersById, splitRubbers, submissionsByTie } from '../lib/teamTie'
+import TieModal from '../components/TieModal.vue'
 import AiImportPanel from '../components/admin/AiImportPanel.vue'
 import AiScorePanel from '../components/admin/AiScorePanel.vue'
 import AiPostModal from '../components/admin/AiPostModal.vue'
@@ -139,6 +142,11 @@ const groupCount = ref(2)
 // The organizer's own pick of "advance per group"; null keeps the wizard value.
 const groupAdvancePicked = ref(null)
 const matchSets = ref([])
+// Team ties: the lines (child matches) of every tie, lineups and submitted sides.
+// `matches` keeps ties and ordinary matches only, so boards, schedule and lists stay as they are.
+const tieLines = ref({})
+const tieLineupRows = ref([])
+const tieSubmissionRows = ref([])
 const liveScores = ref([])
 const admins = ref([])
 const currentUserRole = ref(null)
@@ -258,6 +266,30 @@ const hasPairedEntries = computed(() => {
   if (!isPickRandomDoubles.value) return false
   return approvedEntries.value.some((e) => e.entry_members && e.entry_members.length >= 2)
 })
+
+// Team tie window and the lines it opens in the score and live modals.
+const tieLineups = computed(() => lineupsByLine(tieLineupRows.value))
+const tieSubmissions = computed(() => submissionsByTie(tieSubmissionRows.value))
+const rosterMembers = computed(() => membersById(entries.value))
+const tieModalId = ref(null)
+const tieModalMatch = computed(() => matches.value.find(m => m.id === tieModalId.value) || null)
+function lineById(id) {
+  for (const list of Object.values(tieLines.value)) {
+    const line = list.find(m => m.id === id)
+    if (line) return labelledLine(line, tieLineups.value, rosterMembers.value, entryId => entryDisplayNames(entriesMap.value[entryId]).join(' / '))
+  }
+  return null
+}
+// Any stored match by id: a tie or ordinary match, or a tie line carrying its players' names.
+const storedMatch = id => matches.value.find(row => row.id === id) || lineById(id)
+const isTie = match => teamTournament.value && match && !match.parent_match_id
+function openTie(match) { tieModalId.value = match.id }
+function scoreTieLine(line, mode) { openAdminScoreRoute(lineById(line.id) || line, mode) }
+
+// Team tournaments: a roster modal per team (and for a new team) replaces the player forms.
+const teamTournament = computed(() => isTeamTournament(tournament.value))
+const rosterModal = ref(null) // { entry } — entry null adds a team
+function openTeamRoster(entry = null) { rosterModal.value = { entry } }
 
 function entryLabel(entry) {
   const names = entryMemberNames(entry)
@@ -595,7 +627,11 @@ const snapshotRefresh = createSnapshotRefresh({
     acceptTournament(data.tournament)
     entries.value = data.entries
     registration.value = data.registration || null
-    matches.value = data.matches
+    const split = splitRubbers(data.matches)
+    matches.value = split.main
+    tieLines.value = split.linesByTie
+    tieLineupRows.value = data.tie_lineups || []
+    tieSubmissionRows.value = data.tie_submissions || []
     matchSets.value = data.sets
     liveScores.value = data.live
     if (selectedLiveMatch.value && !data.matches.some(m => m.id === selectedLiveMatch.value.id)) selectedLiveMatch.value = null
@@ -932,14 +968,15 @@ function openMatchStream(match) {
 }
 
 function openRrMatch(match) {
-  const current = matches.value.find(row => row.id === match?.id)
+  if (isTie(match)) return openTie(match)
+  const current = storedMatch(match?.id)
   if (!current || !matchScoringAction(tournament.value, currentUserRole.value, current)) return
   if (!canEditFinalScores.value) return openLiveScoring(current)
   openAdminScoreRoute(current, 'result')
 }
 
 function startLiveFromRrModal(match) {
-  const current = matches.value.find(row => row.id === match?.id)
+  const current = storedMatch(match?.id)
   if (matchScoringAction(tournament.value, currentUserRole.value, current) !== 'live') return
   replaceAdminScoreRoute(current, 'live')
 }
@@ -1659,7 +1696,8 @@ watch(canManageTournament, () => {
 })
 
 function openLiveScoring(match) {
-  const current = matches.value.find(row => row.id === match?.id)
+  if (isTie(match)) return openTie(match)
+  const current = storedMatch(match?.id)
   const action = matchScoringAction(tournament.value, currentUserRole.value, current)
   if (action === 'live' || action === 'result') openAdminScoreRoute(current, action)
 }
@@ -1721,7 +1759,7 @@ function syncAdminScoreFromRoute() {
     pushedScoreRouteKey = null
     return
   }
-  const current = matches.value.find(row => row.id === matchId)
+  const current = storedMatch(matchId)
   const action = current ? matchScoringAction(tournament.value, currentUserRole.value, current) : null
   const modeAllowed = mode === 'live'
     ? action === 'live'
@@ -2043,7 +2081,13 @@ onBeforeUnmount(() => {
             {{ isTournamentActive ? t('admin.participantsList') : `${t('tournament.registration')} — ${t('admin.entriesSection')}` }}
           </h2>
 
+          <div v-if="teamTournament" class="team-entries-head">
+            <p class="muted">{{ t('team.categoryHint') }}</p>
+            <button v-if="canManageTournament && !isTournamentActive && !isTournamentFinished" type="button" class="btn btn--primary btn--sm"
+              :disabled="actionLoading" @click="openTeamRoster(null)">+ {{ t('team.roster.addTeam') }}</button>
+          </div>
           <ManualEntryForm
+            v-if="!teamTournament"
             :tournament="tournament"
             :entries="entries"
             :busy="actionLoading || settingsSaving"
@@ -2054,6 +2098,7 @@ onBeforeUnmount(() => {
           />
 
           <AiImportPanel
+            v-if="!teamTournament"
             :tournament="tournament"
             :entries="entries"
             :busy="actionLoading || settingsSaving"
@@ -2083,7 +2128,7 @@ onBeforeUnmount(() => {
             <div v-if="pendingEntries.length" class="entry-list">
               <div v-for="entry in pendingEntries" :key="entry.id" class="participant-item">
                 <span class="entry-avatar">{{ entryInitials(entry) }}</span>
-                <strong class="entry-name">{{ entryLabel(entry) }}<span v-if="customDisplayName(entry)" class="entry-alias">{{ t('admin.shownAs', { name: customDisplayName(entry) }) }}</span><EntryContact :contact="entryContacts[entry.id]" /><EntryRatings :ratings="entryRatings[entry.id]" :members="entry.entry_members" /></strong>
+                <strong class="entry-name">{{ entryLabel(entry) }}<span v-if="customDisplayName(entry)" class="entry-alias">{{ t('admin.shownAs', { name: customDisplayName(entry) }) }}</span><EntryContact :contact="entryContacts[entry.id]" /><EntryRatings :ratings="entryRatings[entry.id]" :members="entry.entry_members" /><button v-if="teamTournament" type="button" class="btn btn--ghost btn--sm team-roster-chip" :aria-label="`${t('team.roster.edit')}: ${entryLabel(entry)}`" @click="openTeamRoster(entry)">{{ t('team.roster.edit') }} · {{ (entry.entry_members || []).length }}</button></strong>
                 <div class="entry-actions">
                   <button
                     class="entry-icon-btn entry-icon-btn--approve"
@@ -2121,7 +2166,7 @@ onBeforeUnmount(() => {
               <div class="entry-list">
                 <div v-for="(entry, index) in waitlistedEntries" :key="entry.id" class="participant-item">
                   <span class="entry-avatar" :aria-label="String(index + 1)">{{ index + 1 }}</span>
-                  <strong class="entry-name">{{ entryLabel(entry) }}<span v-if="customDisplayName(entry)" class="entry-alias">{{ t('admin.shownAs', { name: customDisplayName(entry) }) }}</span><EntryContact :contact="entryContacts[entry.id]" /><EntryRatings :ratings="entryRatings[entry.id]" :members="entry.entry_members" /></strong>
+                  <strong class="entry-name">{{ entryLabel(entry) }}<span v-if="customDisplayName(entry)" class="entry-alias">{{ t('admin.shownAs', { name: customDisplayName(entry) }) }}</span><EntryContact :contact="entryContacts[entry.id]" /><EntryRatings :ratings="entryRatings[entry.id]" :members="entry.entry_members" /><button v-if="teamTournament" type="button" class="btn btn--ghost btn--sm team-roster-chip" :aria-label="`${t('team.roster.edit')}: ${entryLabel(entry)}`" @click="openTeamRoster(entry)">{{ t('team.roster.edit') }} · {{ (entry.entry_members || []).length }}</button></strong>
                   <div class="entry-actions">
                     <button
                       class="entry-icon-btn entry-icon-btn--approve"
@@ -2156,7 +2201,7 @@ onBeforeUnmount(() => {
               <div class="entry-list rejected-entries__list">
                 <div v-for="entry in rejectedEntries" :key="entry.id" class="participant-item">
                   <span class="entry-avatar">{{ entryInitials(entry) }}</span>
-                  <strong class="entry-name">{{ entryLabel(entry) }}<span v-if="customDisplayName(entry)" class="entry-alias">{{ t('admin.shownAs', { name: customDisplayName(entry) }) }}</span><EntryContact :contact="entryContacts[entry.id]" /><EntryRatings :ratings="entryRatings[entry.id]" :members="entry.entry_members" /></strong>
+                  <strong class="entry-name">{{ entryLabel(entry) }}<span v-if="customDisplayName(entry)" class="entry-alias">{{ t('admin.shownAs', { name: customDisplayName(entry) }) }}</span><EntryContact :contact="entryContacts[entry.id]" /><EntryRatings :ratings="entryRatings[entry.id]" :members="entry.entry_members" /><button v-if="teamTournament" type="button" class="btn btn--ghost btn--sm team-roster-chip" :aria-label="`${t('team.roster.edit')}: ${entryLabel(entry)}`" @click="openTeamRoster(entry)">{{ t('team.roster.edit') }} · {{ (entry.entry_members || []).length }}</button></strong>
                   <button class="btn btn--ghost btn--sm" type="button" :disabled="actionLoading" @click="updateEntryStatus(entry.id, 'pending')">
                     {{ t('mobile.restoreEntry') }}
                   </button>
@@ -2236,7 +2281,7 @@ onBeforeUnmount(() => {
                   <span class="entry-avatars" :class="{ 'entry-avatars--pair': memberInitials(entry).length > 1 }" aria-hidden="true">
                     <span v-for="(initials, i) in memberInitials(entry)" :key="i" class="entry-avatar entry-avatar--ok">{{ initials }}</span>
                   </span>
-                  <strong class="entry-name">{{ entryLabel(entry) }}<span v-if="customDisplayName(entry)" class="entry-alias">{{ t('admin.shownAs', { name: customDisplayName(entry) }) }}</span><EntryContact :contact="entryContacts[entry.id]" /><EntryRatings :ratings="entryRatings[entry.id]" :members="entry.entry_members" /></strong>
+                  <strong class="entry-name">{{ entryLabel(entry) }}<span v-if="customDisplayName(entry)" class="entry-alias">{{ t('admin.shownAs', { name: customDisplayName(entry) }) }}</span><EntryContact :contact="entryContacts[entry.id]" /><EntryRatings :ratings="entryRatings[entry.id]" :members="entry.entry_members" /><button v-if="teamTournament" type="button" class="btn btn--ghost btn--sm team-roster-chip" :aria-label="`${t('team.roster.edit')}: ${entryLabel(entry)}`" @click="openTeamRoster(entry)">{{ t('team.roster.edit') }} · {{ (entry.entry_members || []).length }}</button></strong>
                   <KebabMenu
                     v-if="!isTournamentActive && !isTournamentFinished"
                     :aria-label="t('admin.rowActions', { name: entryLabel(entry) })"
@@ -2646,7 +2691,7 @@ onBeforeUnmount(() => {
               :rows="standings"
               :matches="matches"
               :entries-map="entriesMap"
-              :family="tournamentScoringFamily"
+              :family="teamTournament ? 'team' : tournamentScoringFamily"
               :live-scores-by-match="liveScoresByMatch"
               @view-live="openLiveScoring"
             />
@@ -2734,12 +2779,13 @@ onBeforeUnmount(() => {
 
           <section v-if="hasGroups && showAdminBracketOverview" class="card stack stack--sm mt-4">
             <h2 class="section-title">{{ t('admin.groupStage') }}</h2>
-            <GroupStageBoard :groups="groupsView" :entries-map="entriesMap" :family="tournamentScoringFamily"  :sets-by-match="setsByMatch" :live-scores-by-match="liveScoresByMatch" @view-live="openLiveScoring" />
+            <GroupStageBoard :groups="groupsView" :entries-map="entriesMap" :family="teamTournament ? 'team' : tournamentScoringFamily"  :sets-by-match="setsByMatch" :live-scores-by-match="liveScoresByMatch" :open-tie="teamTournament" @view-live="openLiveScoring" />
           </section>
 
           <section v-if="hasPlayoff && showAdminBracketOverview" class="card stack stack--sm mt-4">
             <h2 class="section-title">{{ t('admin.playoff') }}</h2>
             <BracketBoard
+              :open-tie="teamTournament"
               :matches="playoffMatches"
               :sets-by-match="setsByMatch"
               :entries-map="entriesMap"
@@ -2857,6 +2903,7 @@ onBeforeUnmount(() => {
             @view-live="openLiveScoring"
           />
           <BracketBoard
+            :open-tie="teamTournament"
             v-else
             :matches="displayMatches"
           :sets-by-match="setsByMatch"
@@ -3019,9 +3066,23 @@ onBeforeUnmount(() => {
 
           <section v-if="standings.length" class="card stack stack--sm mt-4">
             <h2 class="section-title">{{ t('standings.title') }}</h2>
-            <StandingsTable :rows="standings" :family="tournamentScoringFamily" />
+            <StandingsTable :rows="standings" :family="teamTournament ? 'team' : tournamentScoringFamily" />
           </section>
         </template>
+        <TournamentMatchList
+          v-else-if="teamTournament"
+          :format="tournament.format"
+          :groups="groups"
+          :matches="matches"
+          :entries-map="entriesMap"
+          :sets-by-match="setsByMatch"
+          :live-scores-by-match="liveScoresByMatch"
+          :can-edit-final="canEditFinalScores"
+          :can-live-score="canUseLiveScoring"
+          :can-stream="false"
+          @edit-result="openRrMatch"
+          @view-live="openLiveScoring"
+        />
         <FootballScoreEditor
           v-else-if="isGoalsSport"
           :matches="matches"
@@ -3183,14 +3244,39 @@ onBeforeUnmount(() => {
         </section>
       </div>
 
+      <TieModal
+        v-if="tieModalMatch && tournament"
+        :tournament="tournament"
+        :tie="tieModalMatch"
+        :lines="tieLines[tieModalMatch.id] || []"
+        :entries-map="entriesMap"
+        :members="rosterMembers"
+        :lineups="tieLineups"
+        :submissions="tieSubmissions"
+        :sets-by-match="setsByMatch"
+        :live-scores-by-match="liveScoresByMatch"
+        :role="currentUserRole"
+        @score="scoreTieLine"
+        @view-live="line => scoreTieLine(line, 'live')"
+        @changed="refreshScoreData"
+        @close="tieModalId = null"
+      />
+      <TeamRosterModal
+        v-if="rosterModal && tournament"
+        :tournament="tournament"
+        :entry="rosterModal.entry"
+        :can-manage="canManageTournament"
+        @saved="refreshScoreData"
+        @close="rosterModal = null"
+      />
       <LiveScoringModal
         v-if="selectedLiveMatch && canUseLiveScoring"
-        :match="matches.find(m => m.id === selectedLiveMatch.id) || selectedLiveMatch"
+        :match="storedMatch(selectedLiveMatch.id) || selectedLiveMatch"
         :can-stop-live="scoreAccess.stopLive"
         :live-score="selectedLiveScore"
         :scoring-config="tournament.scoring_config || {}"
-        :team-a="sideLabel(selectedLiveMatch, 'a')"
-        :team-b="sideLabel(selectedLiveMatch, 'b')"
+        :team-a="sideLabel(storedMatch(selectedLiveMatch.id) || selectedLiveMatch, 'a')"
+        :team-b="sideLabel(storedMatch(selectedLiveMatch.id) || selectedLiveMatch, 'b')"
         :family="tournamentScoringFamily"
         :target="matchTarget"
         @close="closeAdminScoreModal"
@@ -3255,8 +3341,8 @@ onBeforeUnmount(() => {
 
       <MatchScoreModal
         v-if="selectedRrMatch"
-        :exists="matches.some(m => m.id === selectedRrMatch.id)"
-        :match="matches.find(m => m.id === selectedRrMatch.id) || selectedRrMatch"
+        :exists="Boolean(storedMatch(selectedRrMatch.id))"
+        :match="storedMatch(selectedRrMatch.id) || selectedRrMatch"
         :entries-map="entriesMap"
         :family="tournamentScoringFamily"
         :target="matchTarget"
@@ -3401,4 +3487,7 @@ onBeforeUnmount(() => {
 .add-admin-modal__transfer input { margin-top: 3px; }
 .add-admin-modal__transfer-title { display: block; font-weight: 600; }
 .add-admin-modal__transfer-hint { display: block; font-size: 0.82rem; line-height: 1.4; margin-top: 2px; }
+.team-entries-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.team-entries-head .muted { margin: 0; flex: 1 1 260px; }
+.team-roster-chip { margin-left: 8px; vertical-align: middle; }
 </style>

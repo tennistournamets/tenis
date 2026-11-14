@@ -250,6 +250,14 @@
     {
       "path": "supabase/migrations/20261114191057_latvian_locale.sql",
       "sha256": "c4180cae7d6dac61b1bbbe27370048aede63a40a63eb6c5279521f388419db92"
+    },
+    {
+      "path": "supabase/migrations/20261114200046_team_enums.sql",
+      "sha256": "ea5d9e79bda5effd6e51015357199548dddfb1d1f540ad5e3e078a9f29a50934"
+    },
+    {
+      "path": "supabase/migrations/20261114200047_team_ties.sql",
+      "sha256": "3ca7b8ef0c5cfaa40c01518cd5cedce7b976597f00599e687cd91dc6d57e5338"
     }
   ],
   "baseline": {

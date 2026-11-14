@@ -17,6 +17,7 @@ import { playerRatingMessages } from './playerRating'
 import { drawSeedingMessages } from './drawSeeding'
 import { seedEditorMessages } from './seedEditor'
 import { platformUsersMessages } from './platformUsers'
+import { teamFormatMessages } from './teamFormat'
 
 export const messages = {
   ru: {
@@ -359,6 +360,7 @@ export const messages = {
     plural: pluralMessages.ru,
     groupsFlow: groupsFlowMessages.ru,
     pointsFormat: pointsFormatMessages.ru,
+    team: teamFormatMessages.ru,
     ai: aiMessages.ru,
     playerRating: playerRatingMessages.ru,
     drawSeeding: drawSeedingMessages.ru,
@@ -1633,6 +1635,7 @@ export const messages = {
     plural: pluralMessages.en,
     groupsFlow: groupsFlowMessages.en,
     pointsFormat: pointsFormatMessages.en,
+    team: teamFormatMessages.en,
     ai: aiMessages.en,
     playerRating: playerRatingMessages.en,
     drawSeeding: drawSeedingMessages.en,
@@ -2907,6 +2910,7 @@ export const messages = {
     plural: pluralMessages.lt,
     groupsFlow: groupsFlowMessages.lt,
     pointsFormat: pointsFormatMessages.lt,
+    team: teamFormatMessages.lt,
     ai: aiMessages.lt,
     playerRating: playerRatingMessages.lt,
     drawSeeding: drawSeedingMessages.lt,
@@ -4181,6 +4185,7 @@ export const messages = {
     plural: pluralMessages.lv,
     groupsFlow: groupsFlowMessages.lv,
     pointsFormat: pointsFormatMessages.lv,
+    team: teamFormatMessages.lv,
     ai: aiMessages.lv,
     playerRating: playerRatingMessages.lv,
     drawSeeding: drawSeedingMessages.lv,

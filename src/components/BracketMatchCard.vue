@@ -38,6 +38,8 @@ const props = defineProps({
     default: false,
   },
   selectedSlotKey: { type: String, default: '' },
+  // Team tournaments: the card opens its tie (lines, lineups, score).
+  openTie: { type: Boolean, default: false },
   // Organizers attach a YouTube broadcast link (owner, editor, counter).
   canStream: { type: Boolean, default: false },
   // Managers assign a court and time (the schedule tab's modal).
@@ -308,6 +310,12 @@ function selectSlot(event, side) {
         <span class="match-card__score">—</span>
       </template>
       <button
+        v-if="openTie && match.side_a_entry_id && match.side_b_entry_id && !hasLiveScore()"
+        class="match-card__tie"
+        type="button"
+        @click="emit('view-live', match)"
+      >{{ t('team.tie.openTie') }}</button>
+      <button
         v-if="hasLiveScore()"
         class="match-card__live"
         type="button"
@@ -343,5 +351,9 @@ function selectSlot(event, side) {
 .match-card__unfinished {
   color: var(--muted);
   font-size: 0.75rem;
+}
+.match-card__tie {
+  border: 0; background: none; padding: 2px 0; font: inherit; font-size: 0.8rem; font-weight: 600;
+  color: var(--primary); cursor: pointer; text-decoration: underline; text-underline-offset: 2px;
 }
 </style>
