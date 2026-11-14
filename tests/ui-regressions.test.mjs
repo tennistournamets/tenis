@@ -20,6 +20,13 @@ test('copy waits for clipboard confirmation and preserves the encoded public URL
   assert.equal(written, tournamentShareUrl('cup / 2026'))
 })
 
+test('a shared link names a non-default language for messenger previews', () => {
+  assert.equal(tournamentShareUrl('riga-open', { locale: 'lv' }), '/tournaments/riga-open?lang=lv')
+  assert.equal(tournamentShareUrl('riga-open', { locale: 'ru' }), '/tournaments/riga-open?lang=ru')
+  assert.equal(tournamentShareUrl('kaunas-cup', { locale: 'lt' }), '/tournaments/kaunas-cup', 'Lithuanian is the default, no parameter')
+  assert.equal(tournamentShareUrl('kaunas-cup', { locale: 'de' }), '/tournaments/kaunas-cup')
+})
+
 test('missing and rejected clipboard APIs never report successful copying', async t => {
   const original = Object.getOwnPropertyDescriptor(globalThis, 'navigator')
   t.after(() => original ? Object.defineProperty(globalThis, 'navigator', original) : delete globalThis.navigator)

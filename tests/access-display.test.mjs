@@ -88,7 +88,8 @@ test('RU, EN and LT access messages share keys, and the counter label now reads 
   assert.ok(ru.length > 25)
   assert.deepEqual(keys(accessMessages.en), ru)
   assert.deepEqual(keys(accessMessages.lt), ru)
-  for (const locale of ['ru', 'en', 'lt']) {
+  assert.deepEqual(keys(accessMessages.lv), ru)
+  for (const locale of ['ru', 'en', 'lt', 'lv']) {
     assert.ok(messagesSource.includes(`counter: '${accessMessages[locale].roleCounter}',`), locale)
     assert.equal(mobileMessages[locale].finalScoreRole, undefined)
     for (const mode of VISIBILITY_MODES) {

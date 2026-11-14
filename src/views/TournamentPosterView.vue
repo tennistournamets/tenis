@@ -26,8 +26,9 @@ useHeaderTitle(() => tournament.value?.name)
 const sponsorship = useSponsorship(tournament)
 const posterLockup = computed(() => sponsorship.value.lockup('poster'))
 
-const pageUrl = computed(() => tournamentShareUrl(props.slug))
-const printedUrl = computed(() => pageUrl.value.replace(/^https?:\/\//, ''))
+// The QR carries the poster's language (?lang=); the printed address stays short.
+const pageUrl = computed(() => tournamentShareUrl(props.slug, { locale: locale.value }))
+const printedUrl = computed(() => tournamentShareUrl(props.slug).replace(/^https?:\/\//, ''))
 const facts = computed(() => {
   const row = tournament.value
   if (!row) return []

@@ -17,11 +17,12 @@ const props = defineProps({
 
 const emit = defineEmits(['close'])
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 const canvasEl = ref(null)
 
-const url = tournamentShareUrl(props.slug)
+// The QR names the organizer's language, so a first-time scanner sees the page in it.
+const url = tournamentShareUrl(props.slug, { locale: locale.value })
 const posterHref = `/tournaments/${encodeURIComponent(props.slug)}/poster`
 
 // High error correction so the code scans from posters/screens even when partly obscured.

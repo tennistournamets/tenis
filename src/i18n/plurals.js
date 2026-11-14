@@ -1,4 +1,4 @@
-// Counted nouns by Intl.PluralRules category (ru: one/few/many, lt: one/few/other, en: one/other).
+// Counted nouns by Intl.PluralRules category (ru: one/few/many, lt: one/few/other, en: one/other, lv: zero/one/other).
 // Used through src/lib/plural.js; `{n}` is the number.
 export const pluralMessages = {
   ru: {
@@ -24,5 +24,13 @@ export const pluralMessages = {
     rounds: { one: '{n} raundas', few: '{n} raundai', many: '{n} raundo', other: '{n} raundų' },
     groups: { one: '{n} grupė', few: '{n} grupės', many: '{n} grupės', other: '{n} grupių' },
     byes: { one: '{n} dalyvis praeina pirmą raundą be žaidimo', few: '{n} dalyviai praeina pirmą raundą be žaidimo', many: '{n} dalyvio praeina pirmą raundą be žaidimo', other: '{n} dalyvių praeina pirmą raundą be žaidimo' },
+  },
+  lv: {
+    tournaments: { zero: '{n} turnīru', one: '{n} turnīrs', other: '{n} turnīri' },
+    participants: { zero: '{n} dalībnieku', one: '{n} dalībnieks', other: '{n} dalībnieki' },
+    matches: { zero: '{n} maču', one: '{n} mačs', other: '{n} mači' },
+    rounds: { zero: '{n} kārtu', one: '{n} kārta', other: '{n} kārtas' },
+    groups: { zero: '{n} grupu', one: '{n} grupa', other: '{n} grupas' },
+    byes: { zero: '{n} dalībnieku iekļūst otrajā kārtā bez spēles', one: '{n} dalībnieks iekļūst otrajā kārtā bez spēles', other: '{n} dalībnieki iekļūst otrajā kārtā bez spēles' },
   },
 }

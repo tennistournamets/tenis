@@ -5,11 +5,12 @@ import { AiError } from './_ai-errors.js'
 export const GROQ_TRANSCRIBE_URL = 'https://api.groq.com/openai/v1/audio/transcriptions'
 export const DEFAULT_WHISPER_MODEL = 'whisper-large-v3-turbo'
 // Speech languages the organizer can pick next to the microphone.
-export const VOICE_LANGUAGES = ['lt', 'ru', 'en']
+export const VOICE_LANGUAGES = ['lt', 'lv', 'ru', 'en']
 // Words Whisper should spell as the app does, in the spoken language only: a prompt in another
 // script pulls the transcript towards it (Cyrillic words turned Lithuanian speech into Cyrillic).
 const VOCABULARY = {
   lt: 'Padelio ir teniso turnyras: Americano, Mexicano, King of the Court, kortas, poros, registracija, taškai, eurų.',
+  lv: 'Padela un tenisa turnīrs: Americano, Mexicano, King of the Court, korts, pāri, reģistrācija, punkti, eiro.',
   ru: 'Турнир по паделу и теннису: Americano, Mexicano, King of the Court, корт, пары, регистрация, очки, евро.',
   en: 'Padel and tennis tournament: Americano, Mexicano, King of the Court, court, pairs, registration, points, euros.',
 }
@@ -18,7 +19,7 @@ const EXTENSIONS = { 'audio/webm': 'webm', 'audio/ogg': 'ogg', 'audio/mp4': 'm4a
 export const audioExtension = type => EXTENSIONS[String(type ?? '').split(';')[0].trim().toLowerCase()] ?? null
 
 /**
- * { text, seconds } for one recording in `language` (lt/ru/en, chosen by the organizer).
+ * { text, seconds } for one recording in `language` (lt/lv/ru/en, chosen by the organizer).
  * Whisper's own detection takes Lithuanian for Russian and writes it in Cyrillic, so the
  * language is always given when known.
  */

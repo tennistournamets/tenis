@@ -16,7 +16,7 @@ Web-application for organizing tournaments across multiple sports with live scor
 - **Frontend:** Vue 3 (Composition API, `<script setup>`) + Vue Router 4 + Pinia 3 — plain **JavaScript** (no TypeScript)
 - **Backend:** Supabase (PostgreSQL, Auth, Realtime)
 - **Auth:** Google OAuth via Supabase (tournament owners); super-admin via `platform_admins`
-- **i18n:** Vue I18n (ru/en/lt), default locale `lt` (`DEFAULT_LOCALE` in `src/lib/localeRoute.js`), stored in `localStorage` key `champ_locale`
+- **i18n:** Vue I18n (ru/en/lt/lv), default locale `lt` (`DEFAULT_LOCALE` in `src/lib/localeRoute.js`), stored in `localStorage` key `champ_locale`; a first visit without a stored choice takes the browser language (`preferredLocale()`, crawlers stay on `lt`). Adding a language = `LOCALES` + a block in every `src/i18n/*.js` + `seo.js` LABELS + `api/_email.js` + `content/{blog,legal}/<code>/` + `vercel.json` rewrites + the `entries_notify_locale_check`/`request_locale()` lists in SQL
 - **Build:** Vite 7
 - **Styling:** Custom vanilla CSS with design tokens (no Tailwind/SCSS), dark theme support
 
@@ -41,7 +41,7 @@ src/
     LiveScoringModal.vue      # Point-by-point tennis scoring input (admin)
     MatchStreamLink.vue       # "Watch" YouTube link of a match (every board + live viewer); admin/MatchStreamButton + admin/MatchStreamModal set it
     RegistrationForm.vue      # Public registration form (sport-aware labels; PlayerRatingFields rows when the organizer asks for ratings)
-    LanguageSwitcher.vue      # RU/EN/LT locale selector
+    LanguageSwitcher.vue      # RU/EN/LT/LV locale selector
     MadeWithBracketa.vue      # "Made with Bracketa" footer on public pages (growth link with utm)
     EmbedCodeModal.vue        # "Website code" for club sites (snippet from lib/embedCode.js + public/embed.js)
     ShareTournamentModal.vue  # WhatsApp/Telegram/Viber/email share, opened after create (?created=1) and after start
@@ -52,7 +52,7 @@ src/
     admin/SeedOrderEditor.vue # Entries tab seed editor: drag rows (pointer: mouse + touch), "№" place field, arrow keys, reset to registration order, order by rating; seeds marked and a "drawn by lot" line for knockout formats; saves with set_entry_seed_order (logic in lib/seedOrder.js)
   i18n/
     index.js                  # Vue I18n config; loads only the active locale (setAppLocale / loadLocaleMessages)
-    messages.js               # All translation strings (ru/en/lt) — source of truth; the build splits it per locale
+    messages.js               # All translation strings (ru/en/lt/lv) — source of truth; the build splits it per locale
   lib/
     supabase.js               # Supabase client init
     seo.js                    # Head tags, OG, sitemap/robots builders (shared by api/, prerender and client; plain ESM)
@@ -92,7 +92,7 @@ src/
   main.js                     # App entry point
   styles.css                  # Global styles
 api/                          # Vercel functions: preview.js (OG tags for messenger bots), og.js (per-tournament PNG via @vercel/og; _og-card.js layout, _fonts/), robots.js, sitemap.js, notifications.js (email sender; _notifier.js, _email.js), ai.js (DeepSeek AI tasks: import, create; _ai-*.js helpers, tasks in _ai-tasks.js), transcribe.js (voice → text, Groq Whisper; _ai-groq.js); both served locally by the dev plugin in vite.config.js
-content/blog/<lang>/*.md      # Blog articles (front matter: title, description, key, date); every key in all 3 languages
+content/blog/<lang>/*.md      # Blog articles (front matter: title, description, key, date); every key in all 4 languages
 content/legal/<lang>/{privacy,terms}.md  # Privacy policy + terms of use (scripts/legal.mjs -> /privacy, /terms, /ru/…, /en/…; linked from footers, registration form, emails)
 public/embed.js               # Club-site loader: iframe + auto height (postMessage, origin-checked)
 scripts/vite-locale-messages.js  # Vite plugin: virtual:bracketa-locale/<code> = one locale as JSON chunk
@@ -110,12 +110,12 @@ supabase/
 
 | Path | View | Auth |
 |------|------|------|
-| `/` (lt), `/en`, `/ru` | HomeView (one landing URL per language, route `/:lang(ru|en)?`) | No (redirects to `/admin/tournaments` if logged in) |
+| `/` (lt), `/en`, `/ru`, `/lv` | HomeView (one landing URL per language, route `/:lang(ru|en|lv)?`) | No (redirects to `/admin/tournaments` if logged in) |
 | `/tournaments/:slug` | PublicTournamentView | No |
 | `/embed/:slug` | PublicTournamentView `embed` mode (club-site widget, noindex) | No |
 | `/tournaments/:slug/poster` | TournamentPosterView (A4 print, QR with utm_source=poster) | No |
-| `/blog/…`, `/ru/blog/…`, `/en/blog/…` | static pages from `content/blog/<lang>/*.md` (scripts/blog.mjs), not the SPA | No |
-| `/privacy`, `/terms`, `/ru/…`, `/en/…` | static pages from `content/legal/<lang>/*.md` (scripts/legal.mjs), not the SPA | No |
+| `/blog/…`, `/ru/blog/…`, `/en/blog/…`, `/lv/blog/…` | static pages from `content/blog/<lang>/*.md` (scripts/blog.mjs), not the SPA | No |
+| `/privacy`, `/terms`, `/ru/…`, `/en/…`, `/lv/…` | static pages from `content/legal/<lang>/*.md` (scripts/legal.mjs), not the SPA | No |
 | anything else | NotFoundView (HTTP 404 on Vercel via `dist/404.html`) | No |
 | `/admin/tournaments` | AdminTournamentListView | Yes |
 | `/admin/tournaments/new` | AdminTournamentCreateView | Yes |

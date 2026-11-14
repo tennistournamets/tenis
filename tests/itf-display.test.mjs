@@ -37,9 +37,9 @@ test('completed tiebreak keeps its internal changeovers and does not double-coun
   assert.equal(changeoverSwapped(s),true)
   s.winner='a';s.games={a:7,b:6};assert.equal(changeoverSwapped(s),true)
 })
-test('all new labels exist in Russian, English and Lithuanian; No-Ad and tiebreak hints distinguish scoring',()=>{
+test('all new labels exist in Russian, English, Lithuanian and Latvian; No-Ad and tiebreak hints distinguish scoring',()=>{
   const keys=Object.keys(tennisRuleMessages.ru).sort()
-  for(const locale of ['en','lt'])assert.deepEqual(Object.keys(tennisRuleMessages[locale]).sort(),keys)
+  for(const locale of ['en','lt','lv'])assert.deepEqual(Object.keys(tennisRuleMessages[locale]).sort(),keys)
   const t=(key,args)=>({key,args})
   assert.equal(liveRuleHint(state({isTiebreak:false,points:{a:3,b:3},rules:{game_rule:'no_ad'}}),t).key,'tennisRules.decidingPoint')
   assert.equal(liveRuleHint(state({isMatchTiebreak:true,tiebreakTo:10}),t).key,'tennisRules.liveMatchTiebreak')

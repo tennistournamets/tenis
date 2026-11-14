@@ -5,7 +5,7 @@ import { supabase } from './supabase'
 
 export const VOICE_MAX_SECONDS = 120
 // Speech languages Whisper is asked for (it mistakes Lithuanian for Russian when left to guess).
-export const VOICE_LANGUAGES = ['lt', 'ru', 'en']
+export const VOICE_LANGUAGES = ['lt', 'lv', 'ru', 'en']
 const LANGUAGE_KEY = 'bracketa:voice-language'
 
 /** The organizer's last speech language, else the interface language. */

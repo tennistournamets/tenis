@@ -246,6 +246,10 @@
       "sha256": "8f5e3148619b81b0332021bd15129d7a65a47f76f35d5a1a01a4f831bc3f3949",
       "tenisAppliedVersion": "20261109191046",
       "tenisNote": "Applied 2026-11-09 with supabase db push --db-url (session pooler), right after 20261109185411 (same backup); platform_users_overview() adds last_seen_at from auth.sessions."
+    },
+    {
+      "path": "supabase/migrations/20261114191057_latvian_locale.sql",
+      "sha256": "c4180cae7d6dac61b1bbbe27370048aede63a40a63eb6c5279521f388419db92"
     }
   ],
   "baseline": {

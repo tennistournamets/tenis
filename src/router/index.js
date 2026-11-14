@@ -4,7 +4,7 @@ import { beforeUnload, confirmLeaveForms } from '../lib/unsavedChanges'
 import i18n, { setAppLocale } from '../i18n'
 import { authCallbackCleanupLocation, scrubAuthCallbackFromLocation } from '../lib/authCallbackUrl'
 import { trackPageview } from '../lib/analytics'
-import { LANDING_ROUTE_PATH, landingLocaleDecision, readStoredLocale, storeLocale } from '../lib/localeRoute'
+import { LANDING_ROUTE_PATH, landingLocaleDecision, preferredLocale, storeLocale } from '../lib/localeRoute'
 
 const HomeView = () => import('../views/HomeView.vue')
 const PublicTournamentView = () => import('../views/PublicTournamentView.vue')
@@ -23,7 +23,7 @@ const router = createRouter({
   history: createWebHistory(),
   routes: [
     {
-      // /, /en, /lt: one landing per language for search engines (hreflang).
+      // /, /en, /ru, /lv: one landing per language for search engines (hreflang).
       path: LANDING_ROUTE_PATH,
       name: 'home',
       component: HomeView,
@@ -124,7 +124,7 @@ router.beforeEach(async (to, from) => {
   if (cleaned) return cleaned
 
   if (to.name === 'home') {
-    const decision = landingLocaleDecision(to, from, readStoredLocale())
+    const decision = landingLocaleDecision(to, from, preferredLocale(undefined, undefined, to.query.lang))
     if (decision.redirect) return { path: decision.redirect, query: to.query, hash: to.hash, replace: true }
     await setAppLocale(decision.locale)
     storeLocale(decision.locale)

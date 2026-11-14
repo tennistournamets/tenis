@@ -4,7 +4,7 @@ import { lookup, makeT } from './helpers/messages.mjs'
 import { bracketPlan, groupPlan, roundRobinPlan } from '../src/lib/formatPlan.js'
 import { countText, pluralParams } from '../src/lib/plural.js'
 
-const ru = makeT('ru'), en = makeT('en'), lt = makeT('lt')
+const ru = makeT('ru'), en = makeT('en'), lt = makeT('lt'), lv = makeT('lv')
 
 test('russian counts agree with their numbers', () => {
   assert.equal(countText(ru, 'ru', 'participants', 4), '4 участника')
@@ -26,10 +26,14 @@ test('plans read naturally: «4 участника → 3 матча», «1 пр�
   assert.equal(en('admin.bracketPlanByes', pluralParams(bracketPlan(7), en, 'en')), '7 entries → draw of 8: 3 rounds, 1 bye in round one.')
   assert.equal(lt('standings.rrPlan', pluralParams(roundRobinPlan(4), lt, 'lt')), '4 dalyviai → 6 mačai, 3 raundai. Kiekvienas žais su kiekvienu.')
   assert.equal(countText(lt, 'lt', 'participants', 10), '10 dalyvių')
+  assert.equal(lv('standings.rrPlan', pluralParams(roundRobinPlan(4), lv, 'lv')), '4 dalībnieki → 6 mači, 3 kārtas. Katrs spēlē ar katru.')
+  assert.equal(countText(lv, 'lv', 'participants', 10), '10 dalībnieku')
+  assert.equal(countText(lv, 'lv', 'participants', 21), '21 dalībnieks')
+  assert.equal(countText(lv, 'lv', 'matches', 11), '11 maču')
 })
 
 test('every plural noun has the categories its locale uses', () => {
-  const needed = { ru: [1, 2, 5, 1.5], en: [1, 2], lt: [1, 2, 10, 1.5] }
+  const needed = { ru: [1, 2, 5, 1.5], en: [1, 2], lt: [1, 2, 10, 1.5], lv: [0, 1, 2, 10, 21, 1.5] }
   for (const [locale, samples] of Object.entries(needed)) for (const noun of Object.keys(lookup(locale, 'plural'))) {
     for (const n of samples) {
       const cat = new Intl.PluralRules(locale).select(n)

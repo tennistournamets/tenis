@@ -6,7 +6,7 @@ import { groupAdvanceWarning, groupPlan } from '../src/lib/formatPlan.js'
 import { finishConfirmation } from '../src/lib/tournamentChampion.js'
 import { errorMessage } from '../src/lib/errorMessages.js'
 
-const LOCALES = ['ru', 'en', 'lt']
+const LOCALES = ['ru', 'en', 'lt', 'lv']
 const ru = makeT('ru')
 const m = (id, stage, round, extra = {}) => ({ id, stage, round_number: round, match_number: 1, status: 'pending',
   side_a_entry_id: 'a', side_b_entry_id: 'b', winner_entry_id: null, next_match_id: 'x', ...extra })

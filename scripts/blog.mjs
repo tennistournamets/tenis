@@ -1,5 +1,5 @@
 // Static blog: content/blog/<lang>/<slug>.md -> ready HTML pages in dist/ (no JavaScript needed).
-//   lt (default) /blog, /blog/<slug>      ru /ru/blog/...      en /en/blog/...
+//   lt (default) /blog, /blog/<slug>      ru /ru/blog/...      en /en/blog/...      lv /lv/blog/...
 // Front matter: title, description, key (links translations of one article), date (YYYY-MM-DD).
 // Run after `vite build` (see package.json "build"); vercel.json maps the clean URLs to the files.
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
@@ -15,10 +15,11 @@ export const BLOG_LABELS = {
   lt: { blog: 'Straipsniai', blogIntro: 'Patarimai, kaip surengti teniso ir padelio turnyrus.', cta: 'Sukurti turnyrą nemokamai', ctaText: 'Registracija, tinklelis ir rezultatai tiesiogiai vienoje vietoje. Dalyviams paskyros nereikia.', more: 'Kiti straipsniai', read: 'Skaityti', home: 'Pradžia', privacy: 'Privatumo politika', terms: 'Naudojimo sąlygos', updated: 'Atnaujinta' },
   ru: { blog: 'Статьи', blogIntro: 'Советы, как провести турнир по теннису и паделу.', cta: 'Создать турнир бесплатно', ctaText: 'Регистрация, сетка и live-счёт в одном месте. Участникам не нужен аккаунт.', more: 'Другие статьи', read: 'Читать', home: 'Главная', privacy: 'Политика конфиденциальности', terms: 'Условия использования', updated: 'Обновлено' },
   en: { blog: 'Guides', blogIntro: 'Practical advice on running tennis and padel tournaments.', cta: 'Create a tournament for free', ctaText: 'Registration, brackets and live scores in one place. Players need no account.', more: 'More guides', read: 'Read', home: 'Home', privacy: 'Privacy policy', terms: 'Terms of use', updated: 'Updated' },
+  lv: { blog: 'Raksti', blogIntro: 'Padomi, kā sarīkot tenisa un padela turnīrus.', cta: 'Izveidot turnīru bez maksas', ctaText: 'Reģistrācija, turnīra tabula un rezultāti tiešraidē vienuviet. Dalībniekiem konts nav vajadzīgs.', more: 'Citi raksti', read: 'Lasīt', home: 'Sākums', privacy: 'Privātuma politika', terms: 'Lietošanas noteikumi', updated: 'Atjaunināts' },
 }
 
-const INTL = { ru: 'ru-RU', en: 'en-GB', lt: 'lt-LT' }
-const OG_LOCALE = { ru: 'ru_RU', en: 'en_US', lt: 'lt_LT' }
+const INTL = { ru: 'ru-RU', en: 'en-GB', lt: 'lt-LT', lv: 'lv-LV' }
+const OG_LOCALE = { ru: 'ru_RU', en: 'en_US', lt: 'lt_LT', lv: 'lv_LV' }
 
 export function blogPath(locale, slug = '') {
   const base = locale === DEFAULT_LOCALE ? '/blog' : `/${locale}/blog`
@@ -93,7 +94,7 @@ footer a[aria-current] { color: var(--text); font-weight: 600; }
 `
 
 const LOGO = '<svg width="28" height="28" viewBox="0 0 28 28" fill="none" aria-hidden="true"><rect width="28" height="28" rx="8" fill="#0F7B4D"/><path d="M11 8H9.5A1.5 1.5 0 0 0 8 9.5v9A1.5 1.5 0 0 0 9.5 20H11" stroke="#fff" stroke-width="2" stroke-linecap="round"/><path d="M17 8h1.5A1.5 1.5 0 0 1 20 9.5v9a1.5 1.5 0 0 1-1.5 1.5H17" stroke="#fff" stroke-width="2" stroke-linecap="round"/><circle cx="14" cy="14" r="2.2" fill="#C6F24E"/></svg>'
-const LANGUAGE_NAMES = { lt: 'Lietuvių', en: 'English', ru: 'Русский' }
+const LANGUAGE_NAMES = { lt: 'Lietuvių', lv: 'Latviešu', en: 'English', ru: 'Русский' }
 
 // Same theme rule as index.html: saved choice, else the system setting.
 const THEME_SCRIPT = `<script>(function(){var t;try{t=localStorage.getItem('champ_theme')}catch(e){}if(t!=='light'&&t!=='dark'){t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'}document.documentElement.dataset.theme=t})()</script>`

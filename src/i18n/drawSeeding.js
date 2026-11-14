@@ -33,4 +33,15 @@ export const drawSeedingMessages = {
     unseeded: 'Kiti dalyviai ({count}) išdėstomi burtais.',
     editSeeding: 'Keisti skirstymą',
   },
+  lv: {
+    seeds: 'Izliktie ({count}):',
+    byesSeeded: 'Brīvkārtas: {byes}, visas saņems izliktie 1–{seeds}.',
+    byesSeededLot: 'Brīvkārtas: {byes}. Izliktie 1–{seeds} saņems pa vienai, vēl {lot} sadalīs izloze.',
+    byesStrict: 'Brīvkārtas: {byes}, tās saņems izlikšanas numuri 1–{byes}. Izlozes nav.',
+    byesSeededOne: 'Brīvkārtas: 1, to saņems 1. izliktais.',
+    byesStrictOne: 'Brīvkārtas: 1, to saņems 1. izlikšanas numurs. Izlozes nav.',
+    byesRandom: 'Brīvkārtas: {byes}, tās saņems izlozē noteikti dalībnieki.',
+    unseeded: 'Pārējie dalībnieki ({count}) tiek izvietoti ar izlozi.',
+    editSeeding: 'Mainīt izlikšanu',
+  },
 }

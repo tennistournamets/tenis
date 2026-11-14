@@ -7,7 +7,7 @@ import { scoringError } from '../src/lib/tennisRules.js'
 import { registrationError } from '../src/lib/registrationRules.js'
 import { accessError } from '../src/lib/access.js'
 
-const LOCALES = ['ru', 'en', 'lt']
+const LOCALES = ['ru', 'en', 'lt', 'lv']
 const keyT = key => key
 
 test('every mapped server error has a translation in every locale', () => {

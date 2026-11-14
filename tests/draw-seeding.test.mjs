@@ -28,18 +28,19 @@ test('the seeded mode is remembered per tournament like the others', () => {
   assert.equal(readDrawMode('t2', storage), 'auto-random')
 })
 
-test('draw texts exist in RU, EN and LT', () => {
+test('draw texts exist in RU, EN, LT and LV', () => {
   const keys = o => Object.keys(o).sort()
   assert.deepEqual(keys(drawSeedingMessages.en), keys(drawSeedingMessages.ru))
   assert.deepEqual(keys(drawSeedingMessages.lt), keys(drawSeedingMessages.ru))
+  assert.deepEqual(keys(drawSeedingMessages.lv), keys(drawSeedingMessages.ru))
   const source = readFileSync(new URL('../src/i18n/messages.js', import.meta.url), 'utf8')
   for (const key of ['drawSeeded', 'drawSeededHint', 'generateSeeded', 'rebuildSeeded']) {
-    assert.equal(source.match(new RegExp(`^      ${key}: '`, 'gm'))?.length, 3, `admin.${key} in each locale`)
+    assert.equal(source.match(new RegExp(`^      ${key}: '`, 'gm'))?.length, 4, `admin.${key} in each locale`)
   }
 })
 
 test('one BYE has its own wording in every locale', () => {
-  for (const lang of ['ru', 'en', 'lt']) {
+  for (const lang of ['ru', 'en', 'lt', 'lv']) {
     assert.ok(drawSeedingMessages[lang].byesSeededOne && drawSeedingMessages[lang].byesStrictOne, lang)
     assert.ok(!/\{/.test(drawSeedingMessages[lang].byesSeededOne), 'no placeholders left')
   }

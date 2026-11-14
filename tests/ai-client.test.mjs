@@ -4,7 +4,7 @@ import { test } from 'node:test'
 import { lookup, makeT } from './helpers/messages.mjs'
 import { errorKey, errorMessage } from '../src/lib/errorMessages.js'
 
-const LOCALES = ['ru', 'en', 'lt']
+const LOCALES = ['ru', 'en', 'lt', 'lv']
 
 const keysOf = (value, prefix = '') => Object.entries(value).flatMap(([key, child]) =>
   child && typeof child === 'object' ? keysOf(child, `${prefix}${key}.`) : [`${prefix}${key}`])
